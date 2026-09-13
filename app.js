@@ -60,6 +60,63 @@ loginForm.addEventListener("submit", async (e) => {
 
 document.getElementById("logout-btn").addEventListener("click", async () => { await supabase.auth.signOut(); showAuth(); });
 
+// ============ Форматирование текста ============
+const FORMAT_MARKERS = {
+  bold: ["**", "**"],
+  underline: ["__", "__"],
+  italic: ["*", "*"],
+  strike: ["~~", "~~"],
+  mono: ["`", "`"],
+  spoiler: ["||", "||"],
+};
+
+function wrapSelection(el, format) {
+  if (format === "quote") {
+    const s = el.selectionStart, e2 = el.selectionEnd;
+    const before = el.value.slice(0, s);
+    const sel = el.value.slice(s, e2);
+    const after = el.value.slice(e2);
+    if (!sel) {
+      el.value = before + "> " + after;
+      el.selectionStart = el.selectionEnd = s + 2;
+      el.focus();
+      return;
+    }
+    const lines = sel.split("\n").map((l) => "> " + l).join("\n");
+    el.value = before + lines + after;
+    el.selectionStart = s;
+    el.selectionEnd = s + lines.length;
+    el.focus();
+    return;
+  }
+  const [open, close] = FORMAT_MARKERS[format];
+  const s = el.selectionStart, e2 = el.selectionEnd;
+  const before = el.value.slice(0, s);
+  const sel = el.value.slice(s, e2);
+  const after = el.value.slice(e2);
+
+  el.value = before + open + sel + close + after;
+  if (sel) {
+    el.selectionStart = s + open.length;
+    el.selectionEnd = s + open.length + sel.length;
+  } else {
+    el.selectionStart = el.selectionEnd = s + open.length;
+  }
+  el.focus();
+}
+
+function applyFormatting(escaped) {
+  let html = escaped;
+  html = html.replace(/\|\|(.+?)\|\|/g, '<span class="spoiler">$1</span>');
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  html = html.replace(/__([^_]+)__/g, "<u>$1</u>");
+  html = html.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, "$1<i>$2</i>");
+  html = html.replace(/~~([^~]+)~~/g, "<s>$1</s>");
+  html = html.replace(/(^|\n)&gt; (.+?)(?=\n|$)/g, "$1<blockquote>$2</blockquote>");
+  return html;
+}
+
 // ======================= 2. СОСТОЯНИЕ =======================
 let currentUser = null, myProfile = null;
 let currentChatId = null, currentOtherUser = null, pendingOtherUser = null;
@@ -147,7 +204,9 @@ async function initApp() {
 
   // Обновлять мой last_seen
   await updateMyLastSeen();
-  lastSeenInterval = setInterval(updateMyLastSeen, 20000);
+  lastSeenInterval = setInterval(() => {
+    if (document.visibilityState === "visible") updateMyLastSeen();
+  }, 8000);
 
   // Обновлять статус собеседника
   otherUserInterval = setInterval(async () => {
@@ -162,7 +221,7 @@ async function initApp() {
         renderChatSubtitle();
       }
     } catch (e) {}
-  }, 15000);
+  }, 8000);
 
   // Опрос статусов своих сообщений
   statusPollInterval = setInterval(pollMyMessageStatuses, 5000);
@@ -174,6 +233,7 @@ async function initApp() {
       if (currentChatId) markChatRead(currentChatId);
     }
   });
+  window.addEventListener("focus", () => updateMyLastSeen());
 }
 
 async function pollMyMessageStatuses() {
@@ -1090,6 +1150,11 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
 // ======================= 13. ОТКРЫТИЕ ЧАТА =======================
 async function openChatWith(otherUser) {
   currentOtherUser = otherUser; pendingOtherUser = null;
+  const searchInput = document.getElementById("search-input");
+  if (searchInput && searchInput.value.trim()) {
+    searchInput.value = "";
+    setTimeout(() => loadRecentChats(), 50);
+  }
   const itemEl = document.querySelector(`.user-item[data-user-id="${otherUser.id}"]`);
   const customName = itemEl ? itemEl.dataset.customName : null;
   paintAvatar(document.getElementById("chat-avatar"), otherUser);
@@ -1269,7 +1334,7 @@ async function buildMsgHtml(msg) {
       <span class="msg-reply-text">${escapeHtml(preview)}</span>
     </div>`;
   }
-  html += `<div class="msg-text">${escapeHtml(msg.content || "")}</div>`;
+  html += `<div class="msg-text">${applyFormatting(escapeHtml(msg.content || ""))}</div>`;
   html += `<div class="msg-reactions" data-reactions-for="${msg.id}"></div>`;
   html += `<div class="msg-time">${time}${renderMsgStatus(msg)}`;
   if (msg.edited_at) html += `<span class="msg-edited">изменено</span>`;
@@ -1473,6 +1538,9 @@ async function sendMessage(chatId, content) {
   });
   updateChatItemPreview(chatId);
   resortChatsList();
+
+  const inputEl = document.getElementById("message-input");
+  if (inputEl) inputEl.style.height = "auto";
 }
 
 // ======================================================
@@ -1752,6 +1820,21 @@ function closeCurrentChat() {
 // ======================================================
 // 20. ПКМ ПО СООБЩЕНИЮ
 // ======================================================
+function copyMessageText(id) {
+  const msg = msgCache.get(id);
+  if (!msg) return;
+  const text = msg.content || "";
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  } else {
+    const tmp = document.createElement("textarea");
+    tmp.value = text;
+    document.body.appendChild(tmp);
+    tmp.select();
+    document.execCommand("copy");
+    document.body.removeChild(tmp);
+  }
+}
 
 function setupMessageMenu() {
   const menuEl = document.getElementById("msg-context-menu");
@@ -1764,6 +1847,7 @@ function setupMessageMenu() {
     closeMsgContextMenu();
     if (!id) return;
     if (action === "reply") startReply(id);
+    else if (action === "copy") copyMessageText(id);
     else if (action === "edit") startEdit(id);
     else if (action === "react") openPickerForContext(id);
     else if (action === "fwd") await handleForwardOne(id);
@@ -1771,6 +1855,71 @@ function setupMessageMenu() {
     else if (action === "sel") enterSelectionMode(id);
   });
   document.addEventListener("click", () => closeMsgContextMenu());
+
+  // === Textarea и форматирование ===
+  const inputEl = document.getElementById("message-input");
+  if (inputEl && inputEl.tagName === "TEXTAREA") {
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        const k = e.key.toLowerCase();
+        let fmt = null;
+        if (e.shiftKey) {
+          if (k === "x") fmt = "strike";
+          else if (k === "." || k === "ю") fmt = "quote";
+          else if (k === "f" || k === "а") fmt = "mono";
+          else if (k === "p" || k === "з") fmt = "spoiler";
+        } else {
+          if (k === "b" || k === "и") fmt = "bold";
+          else if (k === "u" || k === "г") fmt = "underline";
+          else if (k === "i" || k === "ш") fmt = "italic";
+        }
+        if (fmt) {
+          e.preventDefault();
+          wrapSelection(inputEl, fmt);
+          return;
+        }
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById("composer").dispatchEvent(new Event("submit", { cancelable: true }));
+      }
+      setTimeout(() => {
+        inputEl.style.height = "auto";
+        inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + "px";
+      }, 0);
+    });
+
+    // ПКМ → меню форматирования
+    const fmtMenu = document.getElementById("format-context-menu");
+    if (fmtMenu) {
+      inputEl.addEventListener("contextmenu", (e) => {
+        const s = inputEl.selectionStart, e2 = inputEl.selectionEnd;
+        if (s === e2) return;
+        e.preventDefault();
+        fmtMenu.classList.remove("hidden");
+        fmtMenu.style.left = "0px"; fmtMenu.style.top = "0px";
+        const rect = fmtMenu.getBoundingClientRect();
+        let x = e.clientX, y = e.clientY;
+        if (x + rect.width > window.innerWidth - 8) x = window.innerWidth - rect.width - 8;
+        if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
+        fmtMenu.style.left = x + "px";
+        fmtMenu.style.top = y + "px";
+      });
+      fmtMenu.addEventListener("click", (e) => {
+        const btn = e.target.closest("button"); if (!btn) return;
+        e.stopPropagation();
+        wrapSelection(inputEl, btn.dataset.format);
+        fmtMenu.classList.add("hidden");
+      });
+      document.addEventListener("click", () => fmtMenu.classList.add("hidden"));
+    }
+  }
+
+  // Спойлер раскрывается кликом
+  document.getElementById("messages").addEventListener("click", (e) => {
+    const sp = e.target.closest(".spoiler");
+    if (sp) { sp.classList.toggle("revealed"); e.stopPropagation(); }
+  }, true);
 }
 
 function openMsgContextMenu(e, msgId) {
@@ -1873,7 +2022,10 @@ function startEdit(msgId) {
 function cancelEdit() {
   editingMsgId = null;
   const input = document.getElementById("message-input");
-  if (input) input.value = "";
+  if (input) {
+    input.value = "";
+    input.style.height = "auto";
+  }
   if (!replyToMsg) document.getElementById("reply-bar").classList.add("hidden");
 }
 
@@ -2211,7 +2363,7 @@ function formatLastSeen(profile) {
   const lastSeen = profile.last_seen ? new Date(profile.last_seen).getTime() : 0;
   if (!lastSeen) return "";
   const diffSec = Math.floor((Date.now() - lastSeen) / 1000);
-  if (diffSec < 20) return "в сети";
+  if (diffSec < 45) return "в сети";
   const wasVerb = genderVerb(profile);
   const diffMin = Math.floor(diffSec / 60);
   if (diffMin < 1) return wasVerb + " недавно";
@@ -2233,7 +2385,7 @@ function formatLastSeen(profile) {
 
 function isUserOnline(profile) {
   if (!profile || !profile.last_seen) return false;
-  return (Date.now() - new Date(profile.last_seen).getTime()) < 20000;
+  return (Date.now() - new Date(profile.last_seen).getTime()) < 45000;
 }
 
 async function updateMyLastSeen() {

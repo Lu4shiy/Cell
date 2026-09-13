@@ -1441,9 +1441,8 @@ input:focus { border-color: var(--accent); }
 .msg-system .msg-system-text b { color: var(--text); }
 
 .msg-system.gift-msg {
-  background: transparent;
-  padding: 4px 0;
   max-width: 90%;
+  padding: 10px 14px;
 }
 
 .msg-system .gift-card-inline {
@@ -1478,4 +1477,75 @@ input:focus { border-color: var(--accent); }
 /* Превью в списке чатов не обрезается некорректно */
 .user-item-preview b { color: var(--text); font-weight: 600; }
 
+.msg-system.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Composer — textarea вместо input */
+.composer textarea {
+  flex: 1;
+  border-radius: 22px;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-family: inherit;
+  resize: none;
+  min-height: 44px;
+  max-height: 140px;
+  overflow-y: auto;
+  line-height: 1.35;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.composer textarea:focus { border-color: var(--accent); }
+.composer textarea:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Прижимаем сообщения к низу */
+.messages { justify-content: flex-end; }
+
+/* Форматирование в сообщениях */
+.msg-text b, .msg-text strong { font-weight: 700; }
+.msg-text u { text-decoration: underline; }
+.msg-text i, .msg-text em { font-style: italic; }
+.msg-text s, .msg-text del { text-decoration: line-through; }
+.msg-text code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: rgba(0,0,0,0.25);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.94em;
+}
+.msg.other .msg-text code { background: rgba(0,0,0,0.08); }
+.msg-text blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 10px;
+  margin: 4px 0;
+  color: var(--text-sub);
+}
+.msg-text .spoiler {
+  background: var(--text);
+  color: transparent;
+  border-radius: 4px;
+  padding: 0 4px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  user-select: none;
+}
+.msg-text .spoiler.revealed {
+  background: transparent;
+  color: inherit;
+  user-select: auto;
+}
+
+/* Плавные анимации */
+button, .user-item, .gift-card, .forward-item, .dialog-option,
+.accent-option, .avatar-option, .icon-btn {
+  transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.15s ease,
+              color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+button:not(:disabled):active { transform: scale(0.97); }
+.user-item:hover { transform: translateX(2px); }
+.gift-card:hover, .forward-item:hover { transform: translateX(2px); }
+
+/* Выделенное системное сообщение */
 .msg-system.selected { outline: 2px solid var(--accent); outline-offset: 2px; }

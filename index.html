@@ -106,7 +106,7 @@
         </div>
 
         <form class="composer" id="composer">
-          <input type="text" id="message-input" placeholder="Написать сообщение..." autocomplete="off" maxlength="4000">
+          <textarea id="message-input" placeholder="Написать сообщение..." autocomplete="off" maxlength="4000" rows="1"></textarea>
           <button type="submit" class="send-btn" id="send-btn" title="Отправить">➤</button>
         </form>
 
@@ -251,8 +251,19 @@
     </div>
   </div>
 
+  <div id="format-context-menu" class="context-menu hidden">
+    <button data-format="bold">Жирный</button>
+    <button data-format="underline">Подчёркнутый</button>
+    <button data-format="italic">Курсив</button>
+    <button data-format="strike">Зачёркнутый</button>
+    <button data-format="quote">Цитата</button>
+    <button data-format="mono">Моноширный</button>
+    <button data-format="spoiler">Скрытый</button>
+  </div>
+
   <div id="msg-context-menu" class="context-menu hidden">
     <button data-action="reply">Ответить</button>
+    <button data-action="copy">Копировать</button>
     <button data-action="edit">Изменить</button>
     <button data-action="react">Реакция</button>
     <button data-action="fwd">Переслать</button>
