@@ -76,7 +76,7 @@
 
         <header class="chat-header">
           <div class="avatar" id="chat-avatar">?</div>
-          <div class="chat-header-text">
+          <div class="chat-header-text clickable" id="chat-header-text">
             <div class="chat-title" id="chat-title">Имя</div>
             <div class="chat-subtitle" id="chat-subtitle">@username</div>
           </div>
@@ -84,7 +84,7 @@
           <div id="chat-menu" class="menu hidden">
             <button data-action="clear">Очистить чат</button>
             <button data-action="delete">Удалить чат</button>
-            <button data-action="block" id="menu-block">Заблокировать</button>
+            <button data-action="block" id="menu-block" class="danger">Заблокировать</button>
           </div>
         </header>
 
@@ -154,6 +154,21 @@
       </div>
 
       <div class="profile-section">
+        <div class="profile-label">Имя</div>
+        <input type="text" id="profile-displayname" placeholder="Ваше имя" maxlength="64" autocomplete="off">
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Пол</div>
+        <div class="gender-toggle" id="gender-toggle">
+          <button data-gender="male">Мужской</button>
+          <button data-gender="female">Женский</button>
+          <button data-gender="unset">Не выбрано</button>
+        </div>
+      </div>
+
+
+      <div class="profile-section">
         <div class="profile-label">Имя пользователя</div>
         <div class="username-input-wrap">
           <span class="username-prefix">@</span>
@@ -174,6 +189,34 @@
   </div>
 
   <!-- ПКМ меню -->
+     <!-- Контекстное меню для чата в списке -->
+  <div id="chat-list-context-menu" class="context-menu hidden">
+    <button data-action="profile">Профиль</button>
+    <button data-action="rename">Переименовать</button>
+    <button data-action="clear">Очистить чат</button>
+    <button data-action="delete">Удалить чат</button>
+    <button data-action="block" class="danger">Заблокировать</button>
+  </div>
+
+  <!-- Профиль другого пользователя -->
+  <div id="user-profile-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title">Профиль</div>
+      <div class="avatar-preview">
+        <div class="avatar avatar-large" id="user-profile-avatar">?</div>
+      </div>
+      <div class="user-profile-info">
+        <div class="user-profile-row"><span class="up-label">Имя:</span><span class="up-value" id="user-profile-name">—</span></div>
+        <div class="user-profile-row"><span class="up-label">Юзернейм:</span><span class="up-value" id="user-profile-username">—</span></div>
+        <div class="user-profile-row"><span class="up-label">Аккаунт создан:</span><span class="up-value" id="user-profile-created">—</span></div>
+        <div class="user-profile-row"><span class="up-label">Сообщений в чате:</span><span class="up-value" id="user-profile-msgcount">—</span></div>
+        <div class="user-profile-row"><span class="up-label">Последний вход:</span><span class="up-value" id="user-profile-lastseen">—</span></div>
+      </div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="user-profile-close">Закрыть</button>
+      </div>
+    </div>
+  </div>
   <div id="msg-context-menu" class="context-menu hidden">
     <button data-action="reply">Ответить</button>
     <button data-action="edit">Изменить</button>
@@ -202,6 +245,49 @@
       </div>
     </div>
   </div>
+
+<!-- ПКМ меню чата в списке -->
+<div id="chat-context-menu" class="context-menu hidden">
+  <button data-action="profile">Профиль</button>
+  <button data-action="rename">Переименовать</button>
+  <button data-action="clear">Очистить чат</button>
+  <button data-action="delete">Удалить чат</button>
+  <button data-action="block" class="danger">Заблокировать</button>
+</div>
+
+<!-- Модалка профиля другого пользователя -->
+<div id="user-profile-overlay" class="dialog-overlay hidden">
+  <div class="dialog dialog-profile-view">
+    <div class="profile-view-avatar-wrap">
+      <div class="avatar avatar-large" id="up-avatar">?</div>
+    </div>
+    <div class="profile-view-name" id="up-name">Имя</div>
+    <div class="profile-view-username" id="up-username">@username</div>
+
+    <div class="profile-view-info">
+      <div class="profile-view-row">
+        <span class="profile-view-label">Пол</span>
+        <span class="profile-view-value" id="up-gender">Не выбран</span>
+      </div>
+      <div class="profile-view-row">
+        <span class="profile-view-label">Дата регистрации</span>
+        <span class="profile-view-value" id="up-created">—</span>
+      </div>
+      <div class="profile-view-row">
+        <span class="profile-view-label">Сообщений в чате</span>
+        <span class="profile-view-value" id="up-msgcount">—</span>
+      </div>
+      <div class="profile-view-row">
+        <span class="profile-view-label">Последний вход</span>
+        <span class="profile-view-value" id="up-lastseen">—</span>
+      </div>
+    </div>
+
+    <div class="dialog-actions">
+      <button class="dialog-btn dialog-cancel" id="up-close">Закрыть</button>
+    </div>
+  </div>
+</div>
 
   <script type="module" src="app.js"></script>
 </body>

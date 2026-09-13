@@ -906,3 +906,109 @@ input:focus { border-color: var(--accent); }
   .chat-area { display: none; }
   .msg { max-width: 85%; }
 }
+
+/* ====================================================== */
+/* Красные кнопки (блокировка)                            */
+/* ====================================================== */
+
+.menu button.danger,
+.context-menu button.danger {
+  color: var(--danger);
+}
+.menu button.danger:hover,
+.context-menu button.danger:hover {
+  background: rgba(255,91,91,0.12);
+}
+
+.block-banner button {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.block-banner button:hover { background: rgba(255,91,91,0.15); }
+
+/* ====================================================== */
+/* Смена имени и пола в профиле                           */
+/* ====================================================== */
+
+#profile-displayname {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+#profile-displayname:focus { border-color: var(--accent); }
+
+.gender-toggle {
+  display: flex;
+  gap: 8px;
+  background: var(--bg-input);
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.gender-toggle button {
+  flex: 1;
+  padding: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 7px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.gender-toggle button.active {
+  background: var(--bg-side);
+  color: var(--text);
+}
+
+/* ====================================================== */
+/* Профиль другого пользователя                           */
+/* ====================================================== */
+
+.user-profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.user-profile-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.user-profile-row:last-child { border-bottom: none; }
+
+.up-label { color: var(--text-dim); }
+.up-value { color: var(--text); text-align: right; word-break: break-word; }
+
+/* ====================================================== */
+/* Статус "в сети" в чате                                 */
+/* ====================================================== */
+
+.chat-subtitle.online { color: var(--accent); font-weight: 600; }
+
+/* ====================================================== */
+/* Кликабельный заголовок чата                            */
+/* ====================================================== */
+
+.chat-header-text.clickable {
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  transition: background 0.12s;
+}
+.chat-header-text.clickable:hover { background: var(--bg-hover); }

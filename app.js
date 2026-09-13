@@ -112,6 +112,8 @@ let editingMsgId = null;
 let selectionMode = false;
 let selectedMsgIds = new Set();
 let contextMsgId = null;
+let contextChatUser = null;
+let contextChatCustomName = null;
 let forwardSourceMsgs = [];
 let forwardSelectedChats = new Set();
 let profileCache = new Map();
@@ -119,6 +121,9 @@ let profileCache = new Map();
 // Username-проверка
 let usernameCheckTimeout = null;
 let validatedUsername = null;
+
+// Таймер обновления реакций (debounce)
+let reactionsRefreshTimer = null;
 
 // ======================================================
 // 3. АКЦЕНТ
@@ -168,7 +173,7 @@ function showAuth() {
   hiddenMsgIds = new Set(); msgCache.clear(); reactionsCache.clear();
   selectedMsgIds.clear(); forwardSelectedChats.clear(); profileCache.clear();
   replyToMsg = null; editingMsgId = null; selectionMode = false;
-  validatedUsername = null;
+  validatedUsername = null; contextChatUser = null; contextChatCustomName = null;
   [currentChannel, reactionsChannel, blocksChannel, globalChannel, profilesChannel]
     .forEach((ch) => ch && supabase.removeChannel(ch));
   currentChannel = reactionsChannel = blocksChannel = globalChannel = profilesChannel = null;
@@ -195,12 +200,18 @@ async function initApp() {
   subscribeToGlobalChanges();
   subscribeToProfiles();
   await loadRecentChats();
+
+  await updateMyLastSeen();
+  setInterval(() => {
+    updateMyLastSeen();
+    if (currentOtherUser) renderChatSubtitle();
+  }, 30000);
 }
 
 async function loadMyProfile() {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, username, display_name, avatar_url, accent_color")
+    .select("id, username, display_name, avatar_url, accent_color, gender, last_seen")
     .eq("id", currentUser.id).single();
   if (error) { console.error(error); return; }
   myProfile = data;
@@ -213,10 +224,18 @@ async function loadMyProfile() {
   document.getElementById("me-username").textContent = "@" + data.username;
 }
 
+function renderChatSubtitle() {
+  const el = document.getElementById("chat-subtitle");
+  if (!el) return;
+  if (!currentOtherUser) { el.textContent = ""; return; }
+  el.textContent = formatLastSeen(currentOtherUser);
+  el.classList.toggle("online", isUserOnline(currentOtherUser));
+}
+
 async function getProfile(id) {
   if (profileCache.has(id)) return profileCache.get(id);
   const { data } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, accent_color")
+    .select("id, username, display_name, avatar_url, accent_color, last_seen, gender, created_at")
     .eq("id", id).single();
   if (data) profileCache.set(id, data);
   return data;
@@ -266,6 +285,29 @@ function setupProfilePanel() {
   usernameInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); trySaveUsername(); }
   });
+
+  // Смена имени
+  const dispInput = document.getElementById("profile-displayname");
+  dispInput.addEventListener("blur", async () => {
+    const newName = dispInput.value.trim();
+    if (!newName || newName === myProfile.display_name) return;
+    await saveProfileField({ display_name: newName });
+    document.getElementById("me-name").textContent = newName;
+  });
+  dispInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); dispInput.blur(); }
+  });
+
+  // Пол
+  document.getElementById("gender-toggle").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-gender]");
+    if (!btn) return;
+    const g = btn.dataset.gender;
+    myProfile.gender = g;
+    updateGenderButtons();
+    await saveProfileField({ gender: g });
+    if (currentOtherUser) renderChatSubtitle();
+  });
 }
 
 async function openProfilePanel() {
@@ -275,6 +317,9 @@ async function openProfilePanel() {
   paintAvatar(document.getElementById("profile-avatar-preview"), myProfile);
   updateAccentButtons();
   renderAvatarGrid();
+
+  document.getElementById("profile-displayname").value = myProfile.display_name || "";
+  updateGenderButtons();
 
   const usernameInput = document.getElementById("profile-username");
   usernameInput.value = myProfile.username;
@@ -310,6 +355,13 @@ function updateAccentButtons() {
   const cur = document.documentElement.getAttribute("data-accent") || "orange";
   document.querySelectorAll(".accent-option").forEach((el) => {
     el.classList.toggle("selected", el.dataset.accent === cur);
+  });
+}
+
+function updateGenderButtons() {
+  const cur = (myProfile && myProfile.gender) || "unset";
+  document.querySelectorAll("#gender-toggle button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.gender === cur);
   });
 }
 
@@ -361,7 +413,6 @@ function resizeImage(file, maxSize) {
   });
 }
 
-// Проверка username
 async function checkUsernameLive(value) {
   const hint = document.getElementById("username-hint");
   const username = value.trim();
@@ -392,7 +443,7 @@ async function checkUsernameLive(value) {
     return;
   }
 
-  hint.className = "username-hint wait";
+  hint.className = "username-hint";
   hint.textContent = "Проверяю...";
 
   const { data, error } = await supabase
@@ -402,7 +453,6 @@ async function checkUsernameLive(value) {
     .neq("id", currentUser.id)
     .limit(1);
 
-  // Если пользователь уже поменял поле — игнорируем результат
   if (document.getElementById("profile-username").value.trim() !== username) return;
 
   if (error) {
@@ -453,7 +503,43 @@ async function trySaveUsername() {
 }
 
 // ======================================================
-// 8. БЛОКИРОВКИ
+// 8. ПРОФИЛЬ ДРУГОГО ПОЛЬЗОВАТЕЛЯ
+// ======================================================
+
+async function openUserProfileDialog() {
+  if (!currentOtherUser || !currentChatId) return;
+  const overlay = document.getElementById("user-profile-overlay");
+  const user = currentOtherUser;
+
+  const { data: freshProfile } = await supabase
+    .from("profiles")
+    .select("id, username, display_name, avatar_url, created_at, last_seen, gender")
+    .eq("id", user.id)
+    .single();
+
+  const p = freshProfile || user;
+
+  paintAvatar(document.getElementById("user-profile-avatar"), p);
+  document.getElementById("user-profile-name").textContent = p.display_name || "—";
+  document.getElementById("user-profile-username").textContent = "@" + (p.username || "");
+  document.getElementById("user-profile-created").textContent =
+    p.created_at ? new Date(p.created_at).toLocaleDateString("ru-RU") : "—";
+
+  const { data: msgs } = await supabase
+    .from("messages")
+    .select("id")
+    .eq("chat_id", currentChatId)
+    .eq("sender_id", user.id);
+  const visibleMsgs = (msgs || []).filter((m) => !hiddenMsgIds.has(m.id));
+  document.getElementById("user-profile-msgcount").textContent = String(visibleMsgs.length);
+
+  document.getElementById("user-profile-lastseen").textContent = formatLastSeen(p) || "—";
+
+  overlay.classList.remove("hidden");
+}
+
+// ======================================================
+// 9. БЛОКИРОВКИ
 // ======================================================
 
 async function loadBlocks() {
@@ -489,7 +575,6 @@ function subscribeToBlocks() {
     .on("postgres_changes", { event: "*", schema: "public", table: "blocked_users" }, async () => {
       await loadBlocks();
       if (currentOtherUser) updateBlockUI();
-      // Обновим иконку 🚫 у элементов списка без перезагрузки
       document.querySelectorAll(".user-item").forEach((el) => {
         const uid = el.dataset.userId;
         const nameEl = el.querySelector(".user-item-name");
@@ -507,36 +592,27 @@ function subscribeToGlobalChanges() {
       const id = payload.old && payload.old.id;
       if (!id) return;
       if (currentChatId === id) closeCurrentChat();
-      // Убираем элемент из списка без полной перезагрузки
-      // (для простоты — просто перезагрузим, только если это не текущий поиск)
       if (!document.getElementById("search-input").value.trim()) loadRecentChats();
     }).subscribe();
 }
 
-// Обновление в UI без перезагрузки всего
 function updateUserEverywhere(profile) {
-  // Список людей
   const itemEl = document.querySelector(`.user-item[data-user-id="${profile.id}"]`);
   if (itemEl) {
     paintAvatar(itemEl.querySelector(".avatar"), profile);
     const nameEl = itemEl.querySelector(".user-item-name");
     const unameEl = itemEl.querySelector(".user-item-username");
-    if (nameEl) nameEl.textContent = profile.display_name + (isBlockedByMe(profile.id) ? " 🚫" : "");
+    const custom = itemEl.dataset.customName;
+    if (nameEl) nameEl.textContent = (custom || profile.display_name) + (isBlockedByMe(profile.id) ? " 🚫" : "");
     if (unameEl) unameEl.textContent = "@" + profile.username;
   }
 
-  // Заголовок чата
   if (currentOtherUser && currentOtherUser.id === profile.id) {
     currentOtherUser = { ...currentOtherUser, ...profile };
     paintAvatar(document.getElementById("chat-avatar"), currentOtherUser);
     document.getElementById("chat-title").textContent = profile.display_name;
-    document.getElementById("chat-subtitle").textContent = "@" + profile.username;
+    renderChatSubtitle();
   }
-
-  // Диалог пересылки
-  document.querySelectorAll(".forward-item").forEach((el) => {
-    // Не хранит id юзера — пропускаем, обновится при следующем открытии
-  });
 }
 
 function subscribeToProfiles() {
@@ -551,16 +627,15 @@ function subscribeToProfiles() {
         paintAvatar(document.getElementById("me-avatar"), myProfile);
         document.getElementById("me-name").textContent = p.display_name;
         document.getElementById("me-username").textContent = "@" + p.username;
-        // Обновим заголовок если чат с самим собой (на всякий)
       }
 
-      // Обновляем в списке без перезагрузки
       updateUserEverywhere(p);
+      if (currentOtherUser && currentOtherUser.id === p.id) renderChatSubtitle();
     }).subscribe();
 }
 
 // ======================================================
-// 9. НЕДАВНИЕ ЧАТЫ
+// 10. НЕДАВНИЕ ЧАТЫ
 // ======================================================
 
 async function loadRecentChats() {
@@ -569,7 +644,7 @@ async function loadRecentChats() {
   listEl.innerHTML = '<div class="empty">Загрузка...</div>';
 
   const { data: myChats, error: e1 } = await supabase
-    .from("chat_members").select("chat_id").eq("user_id", currentUser.id);
+    .from("chat_members").select("chat_id, custom_name").eq("user_id", currentUser.id);
   if (e1 || !myChats || myChats.length === 0) {
     listEl.innerHTML = '<div class="empty">Введи @username выше, чтобы найти человека</div>';
     return;
@@ -610,13 +685,26 @@ async function loadRecentChats() {
 
   const userIds = [...new Set(visible.map((o) => o.user_id))];
   const { data: profiles } = await supabase
-    .from("profiles").select("id, username, display_name, avatar_url").in("id", userIds);
+    .from("profiles").select("id, username, display_name, avatar_url, last_seen, gender").in("id", userIds);
   (profiles || []).forEach((p) => profileCache.set(p.id, p));
+
+  // Прикрепляем custom_name из моих chat_members к каждому профилю
+  const customNamesByChatId = new Map();
+  (myChats || []).forEach((c) => {
+    if (c.custom_name) customNamesByChatId.set(c.chat_id, c.custom_name);
+  });
+  const byUser = new Map();
+  others.forEach((o) => {
+    const nm = customNamesByChatId.get(o.chat_id);
+    if (nm) byUser.set(o.user_id, nm);
+  });
+  (profiles || []).forEach((p) => { p._customName = byUser.get(p.id) || null; });
+
   renderUsers(profiles || []);
 }
 
 // ======================================================
-// 10. ПОИСК
+// 11. ПОИСК
 // ======================================================
 
 function setupSearch() {
@@ -637,7 +725,7 @@ async function performSearch(query) {
   listEl.innerHTML = '<div class="empty">Ищу...</div>';
 
   const { data, error } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url")
+    .select("id, username, display_name, avatar_url, last_seen, gender")
     .neq("id", currentUser.id).ilike("username", `%${clean}%`)
     .order("username").limit(20);
   if (error) { listEl.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
@@ -650,19 +738,21 @@ async function performSearch(query) {
 }
 
 // ======================================================
-// 11. СПИСОК ЛЮДЕЙ
+// 12. СПИСОК ЛЮДЕЙ
 // ======================================================
 
 function renderUsers(users) {
   const listEl = document.getElementById("users-list");
   if (!users.length) { listEl.innerHTML = '<div class="empty">Пусто</div>'; return; }
+
   listEl.innerHTML = users.map((u) => {
     const blocked = isBlockedByMe(u.id) ? " 🚫" : "";
+    const name = u._customName || u.display_name;
     return `
-      <div class="user-item" data-user-id="${u.id}">
+      <div class="user-item" data-user-id="${u.id}" data-custom-name="${u._customName ? escapeHtml(u._customName) : ""}">
         <div class="avatar"></div>
         <div class="user-item-info">
-          <div class="user-item-name">${escapeHtml(u.display_name)}${blocked}</div>
+          <div class="user-item-name">${escapeHtml(name)}${blocked}</div>
           <div class="user-item-username">@${escapeHtml(u.username)}</div>
         </div>
       </div>`;
@@ -673,23 +763,130 @@ function renderUsers(users) {
     const user = users.find((u) => u.id === userId);
     if (!user) return;
     paintAvatar(el.querySelector(".avatar"), user);
+
     el.addEventListener("click", () => {
       listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
       el.classList.add("active");
       openChatWith(user);
     });
+
+    el.addEventListener("contextmenu", (ev) => {
+      ev.preventDefault();
+      openChatListContextMenu(ev, user, el);
+    });
   });
 }
 
 // ======================================================
-// 12. ОТКРЫТИЕ ЧАТА
+// 13. ПКМ НА ЧАТ В СПИСКЕ
+// ======================================================
+
+function openChatListContextMenu(ev, user, el) {
+  contextChatUser = user;
+  contextChatCustomName = el.dataset.customName || null;
+
+  const menu = document.getElementById("chat-list-context-menu");
+  const blockBtn = menu.querySelector('button[data-action="block"]');
+  blockBtn.textContent = isBlockedByMe(user.id) ? "Разблокировать" : "Заблокировать";
+
+  menu.classList.remove("hidden");
+  menu.style.left = "0px"; menu.style.top = "0px";
+  const rect = menu.getBoundingClientRect();
+  let x = ev.clientX, y = ev.clientY;
+  if (x + rect.width > window.innerWidth - 8) x = window.innerWidth - rect.width - 8;
+  if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
+  menu.style.left = x + "px"; menu.style.top = y + "px";
+}
+
+document.addEventListener("click", () => {
+  const m = document.getElementById("chat-list-context-menu");
+  if (m) m.classList.add("hidden");
+});
+
+document.getElementById("chat-list-context-menu").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  e.stopPropagation();
+  const action = btn.dataset.action;
+  const user = contextChatUser;
+  document.getElementById("chat-list-context-menu").classList.add("hidden");
+  if (!user) return;
+
+  if (action === "profile") {
+    await openChatWith(user);
+    await loadRecentChats();
+    setTimeout(openUserProfileDialog, 100);
+
+  } else if (action === "rename") {
+    const current = contextChatCustomName || user.display_name;
+    const newName = prompt("Новое имя для этого чата (только у вас):", current);
+    if (newName === null) return;
+    const trimmed = newName.trim();
+    const { data: myMemberships } = await supabase
+      .from("chat_members").select("chat_id").eq("user_id", currentUser.id);
+    const myChatIds = (myMemberships || []).map((m) => m.chat_id);
+    if (!myChatIds.length) return;
+    const { data: sharedRow } = await supabase
+      .from("chat_members").select("chat_id")
+      .eq("user_id", user.id).in("chat_id", myChatIds).limit(1);
+    if (!sharedRow || !sharedRow.length) return;
+    const chatId = sharedRow[0].chat_id;
+    const valueToSave = trimmed === "" || trimmed === user.display_name ? null : trimmed;
+    await supabase.from("chat_members").update({ custom_name: valueToSave })
+      .eq("chat_id", chatId).eq("user_id", currentUser.id);
+    await loadRecentChats();
+
+  } else if (action === "clear") {
+    await openChatWith(user);
+    await loadRecentChats();
+    setTimeout(async () => {
+      const choice = await showChoiceDialog("Очистить чат", "Выбери, что очистить:", [
+        { label: "Только у меня", value: "me" },
+        { label: "У обоих", value: "both" },
+      ], "Очистить");
+      if (choice === "me") await clearChatForMe();
+      else if (choice === "both") await clearChatForBoth();
+    }, 100);
+
+  } else if (action === "delete") {
+    await openChatWith(user);
+    await loadRecentChats();
+    setTimeout(async () => {
+      const choice = await showChoiceDialog("Удалить чат", "Что удалить?", [
+        { label: "У меня (вернётся при новом сообщении)", value: "me" },
+        { label: "У обоих (безвозвратно)", value: "both" },
+      ], "Удалить");
+      if (choice === "me") await hideChatFromList();
+      else if (choice === "both") await deleteChatForBoth();
+    }, 100);
+
+  } else if (action === "block") {
+    if (isBlockedByMe(user.id)) {
+      await unblockUser(user.id);
+    } else {
+      if (!confirm("Заблокировать @" + user.username + "?")) return;
+      await blockUser(user.id);
+    }
+    document.querySelectorAll(".user-item").forEach((el) => {
+      const uid = el.dataset.userId;
+      const nameEl = el.querySelector(".user-item-name");
+      if (!nameEl || !uid) return;
+      const base = nameEl.textContent.replace(/\s*🚫$/, "");
+      nameEl.textContent = base + (isBlockedByMe(uid) ? " 🚫" : "");
+    });
+    if (currentOtherUser && currentOtherUser.id === user.id) updateBlockUI();
+  }
+});
+
+// ======================================================
+// 14. ОТКРЫТИЕ ЧАТА
 // ======================================================
 
 async function openChatWith(otherUser) {
   currentOtherUser = otherUser;
   paintAvatar(document.getElementById("chat-avatar"), otherUser);
   document.getElementById("chat-title").textContent = otherUser.display_name;
-  document.getElementById("chat-subtitle").textContent = "@" + otherUser.username;
+  renderChatSubtitle();
   document.getElementById("chat-placeholder").classList.add("hidden");
   document.getElementById("chat-content").classList.remove("hidden");
   document.getElementById("chat-menu").classList.add("hidden");
@@ -734,7 +931,7 @@ async function getOrCreateChat(otherUserId) {
 }
 
 // ======================================================
-// 13. СООБЩЕНИЯ
+// 15. СООБЩЕНИЯ
 // ======================================================
 
 async function loadMessages(chatId) {
@@ -884,7 +1081,7 @@ async function updateMessageInUI(msg) {
 
 async function openChatByUsername(username) {
   const { data } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url").eq("username", username).single();
+    .select("id, username, display_name, avatar_url, last_seen, gender").eq("username", username).single();
   if (!data) return;
   if (data.id === currentUser.id) return;
   document.getElementById("search-input").value = "";
@@ -938,7 +1135,7 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
 });
 
 // ======================================================
-// 14. REALTIME сообщений
+// 16. REALTIME сообщений
 // ======================================================
 
 function subscribeToChat(chatId) {
@@ -967,17 +1164,15 @@ function subscribeToChat(chatId) {
 }
 
 // ======================================================
-// 15. REALTIME реакций
+// 17. REALTIME реакций
 // ======================================================
 
 function subscribeToReactions() {
   if (reactionsChannel) { supabase.removeChannel(reactionsChannel); reactionsChannel = null; }
   reactionsChannel = supabase.channel("reactions-live")
-    .on("postgres_changes", { event: "*", schema: "public", table: "reactions" }, (payload) => {
-      const row = payload.new || payload.old;
-      const msgId = row && row.message_id;
-      if (!msgId || !msgCache.has(msgId)) return;
-      refreshReactionsFor(msgId);
+    .on("postgres_changes", { event: "*", schema: "public", table: "reactions" }, () => {
+      clearTimeout(reactionsRefreshTimer);
+      reactionsRefreshTimer = setTimeout(() => loadReactionsForVisibleMessages(), 120);
     }).subscribe();
 }
 
@@ -1008,7 +1203,7 @@ function renderReactionsUI(msgId) {
 }
 
 // ======================================================
-// 16. ПИКЕР РЕАКЦИЙ
+// 18. ПИКЕР РЕАКЦИЙ
 // ======================================================
 
 function openReactionPickerFor(anchorEl, msgId) {
@@ -1055,14 +1250,12 @@ async function toggleReaction(msgId, emoji) {
   const mine = list.find((r) => r.user_id === currentUser.id);
 
   if (mine && mine.emoji === emoji) {
-    // Удаляем — оптимистично обновляем локально
     reactionsCache.set(msgId, list.filter((r) => r.user_id !== currentUser.id));
     renderReactionsUI(msgId);
     const { error } = await supabase.from("reactions").delete()
       .eq("message_id", msgId).eq("user_id", currentUser.id);
     if (error) { console.error(error); refreshReactionsFor(msgId); }
   } else if (mine) {
-    // Меняем — оптимистично
     const newList = list.map((r) => r.user_id === currentUser.id ? { ...r, emoji } : r);
     reactionsCache.set(msgId, newList);
     renderReactionsUI(msgId);
@@ -1070,7 +1263,6 @@ async function toggleReaction(msgId, emoji) {
       .eq("message_id", msgId).eq("user_id", currentUser.id);
     if (error) { console.error(error); refreshReactionsFor(msgId); }
   } else {
-    // Добавляем — оптимистично
     const newList = [...list, { user_id: currentUser.id, emoji }];
     reactionsCache.set(msgId, newList);
     renderReactionsUI(msgId);
@@ -1082,7 +1274,7 @@ async function toggleReaction(msgId, emoji) {
 }
 
 // ======================================================
-// 17. ДИАЛОГ ВЫБОРА
+// 19. ДИАЛОГ ВЫБОРА
 // ======================================================
 
 function showChoiceDialog(title, text, options, confirmLabel) {
@@ -1124,12 +1316,28 @@ function showChoiceDialog(title, text, options, confirmLabel) {
 }
 
 // ======================================================
-// 18. МЕНЮ ЧАТА
+// 20. МЕНЮ ЧАТА (⋮)
 // ======================================================
 
 function setupChatMenu() {
   const menuBtn = document.getElementById("chat-menu-btn");
   const menuEl = document.getElementById("chat-menu");
+
+  // Клик по шапке чата → профиль пользователя
+  const headerText = document.getElementById("chat-header-text");
+  if (headerText) {
+    headerText.addEventListener("click", (e) => {
+      if (e.target.closest("#chat-menu-btn")) return;
+      openUserProfileDialog();
+    });
+  }
+
+  const upCloseBtn = document.getElementById("user-profile-close");
+  if (upCloseBtn) {
+    upCloseBtn.addEventListener("click", () => {
+      document.getElementById("user-profile-overlay").classList.add("hidden");
+    });
+  }
 
   menuBtn.addEventListener("click", (e) => { e.stopPropagation(); menuEl.classList.toggle("hidden"); });
   document.addEventListener("click", (e) => {
@@ -1205,7 +1413,7 @@ function updateBlockUI() {
 }
 
 // ======================================================
-// 19. ОЧИСТКА / УДАЛЕНИЕ ЧАТА
+// 21. ОЧИСТКА / УДАЛЕНИЕ ЧАТА
 // ======================================================
 
 async function clearChatForMe() {
@@ -1254,7 +1462,7 @@ function closeCurrentChat() {
 }
 
 // ======================================================
-// 20. ПКМ МЕНЮ
+// 22. ПКМ ПО СООБЩЕНИЮ
 // ======================================================
 
 function setupMessageMenu() {
@@ -1313,7 +1521,7 @@ function openPickerForContext(msgId) {
 }
 
 // ======================================================
-// 21. ОТВЕТ / РЕДАКТИРОВАНИЕ
+// 23. ОТВЕТ / РЕДАКТИРОВАНИЕ
 // ======================================================
 
 function setupReplyBar() {
@@ -1368,7 +1576,7 @@ function cancelEdit() {
 }
 
 // ======================================================
-// 22. УДАЛЕНИЕ ОДНОГО
+// 24. УДАЛЕНИЕ ОДНОГО СООБЩЕНИЯ
 // ======================================================
 
 async function handleDeleteOne(msgId) {
@@ -1401,7 +1609,7 @@ async function deleteMessageForBoth(msgId) {
 }
 
 // ======================================================
-// 23. РЕЖИМ ВЫБОРА
+// 25. РЕЖИМ ВЫБОРА
 // ======================================================
 
 function setupSelectionToolbar() {
@@ -1491,7 +1699,7 @@ async function handleForwardSelected() {
 }
 
 // ======================================================
-// 24. ПЕРЕСЫЛКА
+// 26. ПЕРЕСЫЛКА
 // ======================================================
 
 async function handleForwardOne(msgId) {
@@ -1602,7 +1810,76 @@ async function sendForward() {
 }
 
 // ======================================================
-// 25. XSS + автопроверка сессии
+// 27. ПОЛ, ПАДЕЖИ, "ПОСЛЕДНИЙ ВХОД"
+// ======================================================
+
+function pluralRu(n, one, few, many) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
+function genderVerb(profile) {
+  const g = profile && profile.gender;
+  if (g === "female") return "была";
+  if (g === "male") return "был";
+  return "был(-а)";
+}
+
+function formatLastSeen(profile) {
+  if (!profile) return "";
+  const now = Date.now();
+  const lastSeen = profile.last_seen ? new Date(profile.last_seen).getTime() : 0;
+  if (!lastSeen) return "";
+
+  const diffSec = Math.floor((now - lastSeen) / 1000);
+
+  if (diffSec < 45) return "в сети";
+
+  const wasVerb = genderVerb(profile);
+  const diffMin = Math.floor(diffSec / 60);
+
+  if (diffMin < 1) return wasVerb + " недавно";
+  if (diffMin < 60) {
+    return wasVerb + " " + diffMin + " " + pluralRu(diffMin, "минуту", "минуты", "минут") + " назад";
+  }
+
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 13) {
+    return wasVerb + " " + diffHours + " " + pluralRu(diffHours, "час", "часа", "часов") + " назад";
+  }
+
+  const d = new Date(lastSeen);
+  const nowDate = new Date();
+  const todayStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime();
+  const yesterdayStart = todayStart - 86400000;
+  const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+
+  if (d.getTime() >= todayStart) return wasVerb + " сегодня в " + time;
+  if (d.getTime() >= yesterdayStart) return wasVerb + " вчера в " + time;
+
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = String(d.getFullYear()).slice(-2);
+  return wasVerb + " " + day + "/" + month + "/" + year + " в " + time;
+}
+
+function isUserOnline(profile) {
+  if (!profile || !profile.last_seen) return false;
+  return (Date.now() - new Date(profile.last_seen).getTime()) < 45000;
+}
+
+async function updateMyLastSeen() {
+  if (!currentUser) return;
+  await supabase.from("profiles")
+    .update({ last_seen: new Date().toISOString() })
+    .eq("id", currentUser.id);
+}
+
+// ======================================================
+// 28. XSS + автопроверка сессии
 // ======================================================
 
 function escapeHtml(str) {
