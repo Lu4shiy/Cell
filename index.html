@@ -38,15 +38,44 @@
     </div>
   </div>
 
-  <!-- ГЛАВНОЙ ЭКРАН (появится позже) -->
-  <div id="app-screen" class="screen hidden">
-    <div class="placeholder">
-      <h1>Imaginer</h1>
-      <p>Ты вошёл! 🎉</p>
-      <p class="small">Следующий шаг — сделать чаты.</p>
-      <button id="logout-btn" class="btn-secondary">Выйти</button>
+<!-- ГЛАВНЫЙ ЭКРАН -->
+<div id="app-screen" class="app hidden">
+
+  <!-- ЛЕВАЯ ПАНЕЛЬ: список чатов и людей -->
+  <aside class="sidebar">
+    <header class="sidebar-header">
+      <div class="me-info">
+        <div class="avatar" id="me-avatar">?</div>
+        <div class="me-text">
+          <div class="me-name" id="me-name">Загрузка...</div>
+          <div class="me-username" id="me-username">@...</div>
+        </div>
+      </div>
+      <button id="logout-btn" class="icon-btn" title="Выйти">⎋</button>
+    </header>
+
+    <div class="search-wrap">
+      <input type="text" id="search-input" placeholder="Поиск людей...">
     </div>
-  </div>
+
+    <div class="section-title">Пользователи Imaginer</div>
+    <div id="users-list" class="users-list">
+      <div class="empty">Загрузка...</div>
+    </div>
+  </aside>
+
+  <!-- ПРАВАЯ ЧАСТЬ: окно чата -->
+  <main class="chat-area" id="chat-area">
+    <div class="chat-placeholder">
+      <div class="chat-placeholder-icon">💬</div>
+      <p>Выбери человека слева, чтобы начать переписку</p>
+    </div>
+
+    <!-- Сюда будет вставляться настоящий чат в следующем шаге -->
+    <div id="chat-content" class="hidden"></div>
+  </main>
+
+</div>
 
   <script type="module" src="app.js"></script>
 </body>
