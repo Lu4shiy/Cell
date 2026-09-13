@@ -5,7 +5,7 @@
 const SUPABASE_URL = "https://uiktqkxfsoewjpgjpizf.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpa3Rxa3hmc29ld2pwZ2pwaXpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyODY5MjksImV4cCI6MjEwNDg2MjkyOX0.2OC3vrfusHK6Lqv1Yh5KfZ42Ypm02sE1XAloTSUxo2k";
 
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const ACCENTS = ["orange", "blue", "green", "red", "purple", "pink", "teal", "gray"];
@@ -875,6 +875,23 @@ async function performSearch(query) {
   const { data: allProfiles } = await supabase.from("profiles")
     .select("id, username, display_name, avatar_url, last_seen, gender, birthday").in("id", [...resultIds]);
   (allProfiles || []).forEach((p) => profileCache.set(p.id, p));
+
+  // Подтягиваем custom_name для ВСЕХ найденных, даже если нашли по оригинальному имени
+  const { data: myMemberships } = await supabase.from("chat_members")
+    .select("chat_id, custom_name").eq("user_id", currentUser.id).not("custom_name", "is", null);
+  const customByChatId = new Map((myMemberships || []).map((m) => [m.chat_id, m.custom_name]));
+  if (customByChatId.size) {
+    const chatIds = [...customByChatId.keys()];
+    const { data: othersInChats } = await supabase.from("chat_members")
+      .select("chat_id, user_id").in("chat_id", chatIds).neq("user_id", currentUser.id);
+    (othersInChats || []).forEach((o) => {
+      if (resultIds.has(o.user_id)) {
+        const cname = customByChatId.get(o.chat_id);
+        if (cname) customNameByUserId.set(o.user_id, cname);
+      }
+    });
+  }
+
   allProfiles.forEach((p) => { p._customName = customNameByUserId.get(p.id) || null; });
   renderSearchResults(allProfiles);
 }
@@ -1031,11 +1048,22 @@ async function openChatWith(otherUser) {
 
 async function createChatWith(otherUserId) {
   const { data: newChat, error: chatErr } = await supabase.from("chats").insert({}).select().single();
-  if (chatErr) { console.error(chatErr); return null; }
+  if (chatErr) {
+    console.error("Ошибка создания chat:", chatErr);
+    await showAlertDialog("Ошибка", "Не удалось создать чат: " + (chatErr.message || ""));
+    return null;
+  }
   const { error: membersErr } = await supabase.from("chat_members").insert([
-    { chat_id: newChat.id, user_id: currentUser.id }, { chat_id: newChat.id, user_id: otherUserId },
+    { chat_id: newChat.id, user_id: currentUser.id },
+    { chat_id: newChat.id, user_id: otherUserId },
   ]);
-  if (membersErr) { console.error(membersErr); return null; }
+  if (membersErr) {
+    console.error("Ошибка добавления участников:", membersErr);
+    await showAlertDialog("Ошибка", "Не удалось добавить участников: " + (membersErr.message || ""));
+    // Убираем созданный чат, чтобы не было мусора
+    await supabase.from("chats").delete().eq("id", newChat.id);
+    return null;
+  }
   chatIdByUser.set(otherUserId, newChat.id);
   return newChat.id;
 }
@@ -1103,9 +1131,17 @@ async function renderSystemMessage(msg) {
   if (msg.message_type === "tokens") {
     const sender = await getProfile(msg.sender_id);
     const senderName = msg.sender_id === currentUser.id ? "Вы" : (sender ? sender.display_name : "Кто-то");
-    const text = msg.sender_id === currentUser.id
-      ? `<b>Вы</b> отправили <b>${msg.tokens_amount}</b> 🧩`
-      : `<b>${escapeHtml(senderName)}</b> отправил(а) вам <b>${msg.tokens_amount}</b> 🧩 ImagiTokens`;
+    let text;
+    if (msg.sender_id === currentUser.id) {
+      text = `<b>Вы</b> отправили <b>${msg.tokens_amount}</b> 🧩`;
+    } else {
+      const g = sender ? sender.gender : null;
+      let v;
+      if (g === "female") v = "отправила вам";
+      else if (g === "male") v = "отправил вам";
+      else v = "отправил(а) вам";
+      text = `<b>${escapeHtml(senderName)}</b> ${v} <b>${msg.tokens_amount}</b> 🧩 ImagiTokens`;
+    }
     return `<span class="msg-system-text">${text}</span>`;
   }
   if (msg.message_type === "gift") {
@@ -1192,8 +1228,15 @@ function updateMessageStatusInUI(msg) {
   if (newHtml !== html) el.innerHTML = newHtml;
 }
 
-function onMsgClick(e) {
-  const replyEl = e.target.closest(".msg-reply");
+  const giftEl = e.target.closest(".msg-system.gift-msg");
+  if (giftEl) {
+    const msgId = giftEl.dataset.id;
+    const m = msgCache.get(msgId);
+    if (m && m.gift_ref_id) {
+      openGiftDetailById(m.gift_ref_id);
+    }
+    return;
+  }
   if (replyEl) { e.stopPropagation(); jumpToMessage(replyEl.dataset.scrollTo); return; }
   const fwdEl = e.target.closest(".msg-fwd-link");
   if (fwdEl) {
@@ -1352,7 +1395,8 @@ function subscribeToChat(chatId) {
       async (payload) => {
         const m = payload.new;
         if (!m || m.chat_id !== currentChatId) return;
-        if (m.sender_id === currentUser.id) return; // своё уже показано
+        // свои текстовые уже показаны локально, но системные (tokens/gift) — тоже свои, их надо показать
+        if (m.sender_id === currentUser.id && m.message_type !== "tokens" && m.message_type !== "gift") return;
         if (document.querySelector(`[data-id="${m.id}"]`)) return;
         await appendMessage(m);
         scrollToBottom();
@@ -1644,16 +1688,23 @@ function openMsgContextMenu(e, msgId) {
   const msg = msgCache.get(msgId);
   const editBtn = document.querySelector('#msg-context-menu button[data-action="edit"]');
   const replyBtn = document.querySelector('#msg-context-menu button[data-action="reply"]');
-  const isSystem = msg && (msg.message_type === "tokens" || msg.message_type === "gift");
-  if (isSystem) {
-    if (editBtn) editBtn.classList.add("hidden");
-    if (replyBtn) replyBtn.classList.add("hidden");
-  } else {
-    if (editBtn) {
-      if (msg && msg.sender_id === currentUser.id && !msg.forwarded_from_name) editBtn.classList.remove("hidden");
-      else editBtn.classList.add("hidden");
-    }
+  const fwdBtn = document.querySelector('#msg-context-menu button[data-action="fwd"]');
+  const isGift = msg && msg.message_type === "gift";
+  const isTokens = msg && msg.message_type === "tokens";
+  const isSystem = isGift || isTokens;
+
+  if (editBtn) editBtn.classList.add("hidden"); // системные и пересланные нельзя редактировать
+
+  if (isGift) {
     if (replyBtn) replyBtn.classList.remove("hidden");
+    if (fwdBtn) fwdBtn.classList.add("hidden");
+  } else if (isTokens) {
+    if (replyBtn) replyBtn.classList.add("hidden");
+    if (fwdBtn) fwdBtn.classList.add("hidden");
+  } else {
+    if (replyBtn) replyBtn.classList.remove("hidden");
+    if (fwdBtn) fwdBtn.classList.remove("hidden");
+    if (editBtn && msg && msg.sender_id === currentUser.id && !msg.forwarded_from_name) editBtn.classList.remove("hidden");
   }
   const menu = document.getElementById("msg-context-menu");
   menu.classList.remove("hidden");
@@ -1668,6 +1719,14 @@ function openMsgContextMenu(e, msgId) {
 function closeMsgContextMenu() {
   const m = document.getElementById("msg-context-menu");
   if (m) m.classList.add("hidden");
+}
+
+async function openGiftDetailById(ugId) {
+  const { data: ug } = await supabase.from("user_gifts").select("*").eq("id", ugId).maybeSingle();
+  if (!ug) { await showAlertDialog("Подарок", "Подарок не найден"); return; }
+  document.getElementById("gifts-overlay").classList.remove("hidden");
+  await refreshBalance();
+  await renderGiftDetail(ug.owner_id, ug);
 }
 
 function openPickerForContext(msgId) {
