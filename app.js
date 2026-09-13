@@ -85,11 +85,14 @@ let myBlockedIds = new Set();
 let blockedMeIds = new Set();
 let hiddenMsgIds = new Set();
 let msgCache = new Map();
+let replyToMsg = null;
+let editingMsgId = null;
 let selectionMode = false;
 let selectedMsgIds = new Set();
 let contextMsgId = null;
 let forwardSourceMsgs = [];
 let forwardSelectedChats = new Set();
+let profileCache = new Map();
 
 function showApp(user) {
   currentUser = user;
@@ -99,17 +102,13 @@ function showApp(user) {
 }
 
 function showAuth() {
-  currentUser = null;
-  myProfile = null;
-  currentChatId = null;
-  currentOtherUser = null;
-  myBlockedIds = new Set();
-  blockedMeIds = new Set();
-  hiddenMsgIds = new Set();
-  msgCache.clear();
-  selectedMsgIds.clear();
-  forwardSelectedChats.clear();
-  selectionMode = false;
+  currentUser = null; myProfile = null;
+  currentChatId = null; currentOtherUser = null;
+  myBlockedIds = new Set(); blockedMeIds = new Set();
+  hiddenMsgIds = new Set(); msgCache.clear();
+  selectedMsgIds.clear(); forwardSelectedChats.clear();
+  replyToMsg = null; editingMsgId = null; selectionMode = false;
+  profileCache.clear();
   [currentChannel, blocksChannel, globalChannel].forEach((ch) => ch && supabase.removeChannel(ch));
   currentChannel = blocksChannel = globalChannel = null;
   document.getElementById("auth-screen").classList.remove("hidden");
@@ -128,6 +127,7 @@ async function initApp() {
   setupMessageMenu();
   setupSelectionToolbar();
   setupForwardDialog();
+  setupReplyBar();
   subscribeToBlocks();
   subscribeToGlobalChanges();
   await loadRecentChats();
@@ -139,9 +139,18 @@ async function loadMyProfile() {
     .eq("id", currentUser.id).single();
   if (error) { console.error(error); return; }
   myProfile = data;
+  profileCache.set(currentUser.id, data);
   document.getElementById("me-name").textContent = data.display_name;
   document.getElementById("me-username").textContent = "@" + data.username;
   document.getElementById("me-avatar").textContent = (data.display_name || "?")[0].toUpperCase();
+}
+
+async function getProfile(id) {
+  if (profileCache.has(id)) return profileCache.get(id);
+  const { data } = await supabase.from("profiles")
+    .select("username, display_name").eq("id", id).single();
+  if (data) profileCache.set(id, data);
+  return data;
 }
 
 // ======================================================
@@ -149,10 +158,8 @@ async function loadMyProfile() {
 // ======================================================
 
 async function loadBlocks() {
-  myBlockedIds = new Set();
-  blockedMeIds = new Set();
-  const { data, error } = await supabase
-    .from("blocked_users").select("blocker_id, blocked_id");
+  myBlockedIds = new Set(); blockedMeIds = new Set();
+  const { data, error } = await supabase.from("blocked_users").select("blocker_id, blocked_id");
   if (error) { console.error(error); return; }
   (data || []).forEach((b) => {
     if (b.blocker_id === currentUser.id) myBlockedIds.add(b.blocked_id);
@@ -179,28 +186,23 @@ function hasBlockedMe(id) { return blockedMeIds.has(id); }
 
 function subscribeToBlocks() {
   if (blocksChannel) return;
-  blocksChannel = supabase
-    .channel("blocks-changes")
+  blocksChannel = supabase.channel("blocks-changes")
     .on("postgres_changes", { event: "*", schema: "public", table: "blocked_users" }, async () => {
       await loadBlocks();
       if (currentOtherUser) updateBlockUI();
       if (!document.getElementById("search-input").value.trim()) await loadRecentChats();
-    })
-    .subscribe();
+    }).subscribe();
 }
 
-// Глобальные события: удаление чата
 function subscribeToGlobalChanges() {
   if (globalChannel) return;
-  globalChannel = supabase
-    .channel("global-changes")
+  globalChannel = supabase.channel("global-changes")
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "chats" }, (payload) => {
       const id = payload.old && payload.old.id;
       if (!id) return;
       if (currentChatId === id) closeCurrentChat();
       if (!document.getElementById("search-input").value.trim()) loadRecentChats();
-    })
-    .subscribe();
+    }).subscribe();
 }
 
 // ======================================================
@@ -214,7 +216,6 @@ async function loadRecentChats() {
 
   const { data: myChats, error: e1 } = await supabase
     .from("chat_members").select("chat_id").eq("user_id", currentUser.id);
-
   if (e1 || !myChats || myChats.length === 0) {
     listEl.innerHTML = '<div class="empty">Введи @username выше, чтобы найти человека</div>';
     return;
@@ -237,7 +238,6 @@ async function loadRecentChats() {
   const { data: others, error: e2 } = await supabase
     .from("chat_members").select("chat_id, user_id")
     .in("chat_id", chatIds).neq("user_id", currentUser.id);
-
   if (e2 || !others || others.length === 0) {
     listEl.innerHTML = '<div class="empty">Введи @username выше, чтобы найти человека</div>';
     return;
@@ -257,7 +257,7 @@ async function loadRecentChats() {
   const userIds = [...new Set(visible.map((o) => o.user_id))];
   const { data: profiles } = await supabase
     .from("profiles").select("id, username, display_name").in("id", userIds);
-
+  (profiles || []).forEach((p) => profileCache.set(p.id, p));
   renderUsers(profiles || []);
 }
 
@@ -276,19 +276,16 @@ function setupSearch() {
 async function performSearch(query) {
   const listEl = document.getElementById("users-list");
   const titleEl = document.getElementById("section-title");
-
   if (!query) { await loadRecentChats(); return; }
-
   titleEl.textContent = "Поиск";
   const clean = query.replace(/^@+/, "").trim().toLowerCase();
   if (!clean) { listEl.innerHTML = '<div class="empty">Начни вводить @username</div>'; return; }
   listEl.innerHTML = '<div class="empty">Ищу...</div>';
 
-  const { data, error } = await supabase
-    .from("profiles").select("id, username, display_name")
+  const { data, error } = await supabase.from("profiles")
+    .select("id, username, display_name")
     .neq("id", currentUser.id).ilike("username", `%${clean}%`)
     .order("username").limit(20);
-
   if (error) { listEl.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
   if (!data || data.length === 0) {
     listEl.innerHTML = `<div class="empty">Никого не найдено по «${escapeHtml(query)}»</div>`;
@@ -304,7 +301,6 @@ async function performSearch(query) {
 function renderUsers(users) {
   const listEl = document.getElementById("users-list");
   if (!users.length) { listEl.innerHTML = '<div class="empty">Пусто</div>'; return; }
-
   listEl.innerHTML = users.map((u) => {
     const initial = (u.display_name || "?")[0].toUpperCase();
     const blocked = isBlockedByMe(u.id) ? " 🚫" : "";
@@ -344,6 +340,8 @@ async function openChatWith(otherUser) {
   document.getElementById("chat-menu").classList.add("hidden");
 
   exitSelectionMode();
+  cancelReply();
+  cancelEdit();
   updateBlockUI();
 
   const chatId = await getOrCreateChat(otherUser.id);
@@ -351,7 +349,6 @@ async function openChatWith(otherUser) {
     document.getElementById("messages").innerHTML = '<div class="empty">Не удалось открыть чат</div>';
     return;
   }
-
   currentChatId = chatId;
   await loadMessages(chatId);
   subscribeToChat(chatId);
@@ -361,19 +358,15 @@ async function getOrCreateChat(otherUserId) {
   const { data: myMemberships, error: err1 } = await supabase
     .from("chat_members").select("chat_id").eq("user_id", currentUser.id);
   if (err1) { console.error(err1); return null; }
-
   const myChatIds = (myMemberships || []).map((m) => m.chat_id);
   if (myChatIds.length > 0) {
-    const { data: shared } = await supabase
-      .from("chat_members").select("chat_id")
-      .eq("user_id", otherUserId).in("chat_id", myChatIds);
+    const { data: shared } = await supabase.from("chat_members")
+      .select("chat_id").eq("user_id", otherUserId).in("chat_id", myChatIds);
     if (shared && shared.length > 0) return shared[0].chat_id;
   }
-
   const { data: newChat, error: chatErr } = await supabase
     .from("chats").insert({}).select().single();
   if (chatErr) { console.error(chatErr); return null; }
-
   const { error: membersErr } = await supabase.from("chat_members").insert([
     { chat_id: newChat.id, user_id: currentUser.id },
     { chat_id: newChat.id, user_id: otherUserId },
@@ -400,8 +393,7 @@ async function loadMessages(chatId) {
     .from("chat_clears").select("cleared_at")
     .eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle();
 
-  let query = supabase
-    .from("messages").select("*")
+  let query = supabase.from("messages").select("*")
     .eq("chat_id", chatId).order("created_at", { ascending: true });
   if (clearRow && clearRow.cleared_at) query = query.gt("created_at", clearRow.cleared_at);
 
@@ -409,7 +401,9 @@ async function loadMessages(chatId) {
   if (error) { box.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
 
   box.innerHTML = "";
-  const visible = (data || []).filter((m) => !hiddenMsgIds.has(m.id));
+  const all = data || [];
+  all.forEach((m) => msgCache.set(m.id, m));
+  const visible = all.filter((m) => !hiddenMsgIds.has(m.id));
 
   if (visible.length === 0) {
     box.innerHTML = '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
@@ -419,31 +413,89 @@ async function loadMessages(chatId) {
   scrollToBottom();
 }
 
-function appendMessage(msg) {
+async function buildMsgHtml(msg) {
+  const time = new Date(msg.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+
+  let html = "";
+
+  if (msg.forwarded_from_name) {
+    html += `<div class="msg-fwd-link" data-fwd-username="${escapeHtml(msg.forwarded_from_username || "")}">Переслано от ${escapeHtml(msg.forwarded_from_name)}</div>`;
+  }
+
+  if (msg.reply_to_id && msgCache.has(msg.reply_to_id)) {
+    const orig = msgCache.get(msg.reply_to_id);
+    const origProfile = await getProfile(orig.sender_id);
+    const origName = orig.sender_id === currentUser.id ? "Ты" : (origProfile ? origProfile.display_name : "?");
+    const preview = (orig.content || "").slice(0, 60);
+    html += `<div class="msg-reply" data-scroll-to="${msg.reply_to_id}">
+      <span class="msg-reply-name">В ответ ${escapeHtml(origName)}</span>
+      <span class="msg-reply-text">${escapeHtml(preview)}</span>
+    </div>`;
+  }
+
+  html += `<div class="msg-text">${escapeHtml(msg.content || "")}</div>`;
+  html += `<div class="msg-time">${time}`;
+  if (msg.edited_at) html += `<span class="msg-edited">изменено</span>`;
+  html += `</div>`;
+
+  return html;
+}
+
+async function appendMessage(msg) {
   const box = document.getElementById("messages");
+  if (document.querySelector(`.msg[data-id="${msg.id}"]`)) return;
   const empty = box.querySelector(".empty");
   if (empty) empty.remove();
-
-  if (document.querySelector(`.msg[data-id="${msg.id}"]`)) return;
 
   const mine = msg.sender_id === currentUser.id;
   const el = document.createElement("div");
   el.className = "msg " + (mine ? "mine" : "other");
   el.dataset.id = msg.id;
 
-  const time = new Date(msg.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-
-  let fwdHtml = "";
-  if (msg.forwarded_from_name) {
-    fwdHtml = `<div class="msg-fwd">Переслано от ${escapeHtml(msg.forwarded_from_name)}</div>`;
-  }
-
-  el.innerHTML = `${fwdHtml}<div class="msg-text">${escapeHtml(msg.content || "")}</div><div class="msg-time">${time}</div>`;
-
+  el.innerHTML = await buildMsgHtml(msg);
   el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
+  el.addEventListener("click", (e) => {
+    const replyEl = e.target.closest(".msg-reply");
+    if (replyEl) {
+      e.stopPropagation();
+      const targetId = replyEl.dataset.scrollTo;
+      const target = document.querySelector(`.msg[data-id="${targetId}"]`);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        target.style.transition = "background 0.4s";
+        const oldBg = target.style.background;
+        target.style.background = "rgba(255,140,66,0.3)";
+        setTimeout(() => { target.style.background = oldBg; }, 700);
+      }
+      return;
+    }
+    const fwdEl = e.target.closest(".msg-fwd-link");
+    if (fwdEl) {
+      e.stopPropagation();
+      const uname = fwdEl.dataset.fwdUsername;
+      if (uname) openChatByUsername(uname);
+    }
+  });
 
   box.appendChild(el);
   msgCache.set(msg.id, msg);
+}
+
+async function updateMessageInUI(msg) {
+  const el = document.querySelector(`.msg[data-id="${msg.id}"]`);
+  if (!el) return;
+  msgCache.set(msg.id, msg);
+  el.innerHTML = await buildMsgHtml(msg);
+}
+
+async function openChatByUsername(username) {
+  const { data } = await supabase.from("profiles")
+    .select("id, username, display_name").eq("username", username).single();
+  if (!data) return;
+  if (data.id === currentUser.id) return;
+  document.getElementById("search-input").value = "";
+  await openChatWith(data);
+  await loadRecentChats();
 }
 
 function scrollToBottom() {
@@ -458,6 +510,7 @@ function checkEmptyChat() {
   }
 }
 
+// Composer: отправка / сохранение изменений
 document.getElementById("composer").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!currentChatId) return;
@@ -470,30 +523,50 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
   const input = document.getElementById("message-input");
   const content = input.value.trim();
   if (!content) return;
-  input.value = "";
 
-  const { error } = await supabase.from("messages").insert({
-    chat_id: currentChatId, sender_id: currentUser.id, content: content,
-  });
+  // Режим редактирования
+  if (editingMsgId) {
+    const { error } = await supabase.from("messages")
+      .update({ content, edited_at: new Date().toISOString() })
+      .eq("id", editingMsgId);
+    if (error) { alert(error.message); return; }
+    input.value = "";
+    cancelEdit();
+    return;
+  }
+
+  // Обычная отправка (с reply, если есть)
+  const payload = {
+    chat_id: currentChatId,
+    sender_id: currentUser.id,
+    content: content,
+  };
+  if (replyToMsg) payload.reply_to_id = replyToMsg.id;
+
+  input.value = "";
+  cancelReply();
+
+  const { error } = await supabase.from("messages").insert(payload);
   if (error) { console.error(error); alert("Не удалось отправить: " + error.message); }
 });
 
 // ======================================================
-// 10. REALTIME ЧАТА
+// 10. REALTIME
 // ======================================================
 
 function subscribeToChat(chatId) {
   if (currentChannel) { supabase.removeChannel(currentChannel); currentChannel = null; }
-
-  currentChannel = supabase
-    .channel("chat-" + chatId)
+  currentChannel = supabase.channel("chat-" + chatId)
     .on("postgres_changes",
       { event: "INSERT", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
       (payload) => {
         if (payload.new.chat_id !== currentChatId) return;
-        appendMessage(payload.new);
-        scrollToBottom();
+        appendMessage(payload.new).then(scrollToBottom);
       }
+    )
+    .on("postgres_changes",
+      { event: "UPDATE", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
+      (payload) => { updateMessageInUI(payload.new); }
     )
     .on("postgres_changes",
       { event: "DELETE", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
@@ -510,49 +583,59 @@ function subscribeToChat(chatId) {
 }
 
 // ======================================================
-// 11. ДИАЛОГ ВЫБОРА (У СЕБЯ / У ОБОИХ)
+// 11. ДИАЛОГ ВЫБОРА (с подтверждением)
 // ======================================================
 
-function showDialog(title, text, opt1Label, opt2Label) {
+function showChoiceDialog(title, text, options, confirmLabel) {
   return new Promise((resolve) => {
     const overlay = document.getElementById("dialog-overlay");
-    const btn1 = document.getElementById("dialog-opt1");
-    const btn2 = document.getElementById("dialog-opt2");
-    const btnCancel = document.getElementById("dialog-cancel");
+    const optionsEl = document.getElementById("dialog-options");
+    const confirmBtn = document.getElementById("dialog-confirm");
+    const cancelBtn = document.getElementById("dialog-cancel");
 
     document.getElementById("dialog-title").textContent = title;
     document.getElementById("dialog-text").textContent = text;
-    btn1.textContent = opt1Label;
-    btn2.textContent = opt2Label;
+    confirmBtn.textContent = confirmLabel || "Подтвердить";
+    confirmBtn.disabled = true;
+
+    let selected = null;
+    optionsEl.innerHTML = "";
+    options.forEach((opt) => {
+      const b = document.createElement("button");
+      b.className = "dialog-option";
+      b.textContent = opt.label;
+      b.addEventListener("click", () => {
+        optionsEl.querySelectorAll(".dialog-option").forEach((x) => x.classList.remove("selected"));
+        b.classList.add("selected");
+        selected = opt.value;
+        confirmBtn.disabled = false;
+      });
+      optionsEl.appendChild(b);
+    });
+
     overlay.classList.remove("hidden");
 
     function cleanup() {
       overlay.classList.add("hidden");
-      btn1.onclick = null; btn2.onclick = null; btnCancel.onclick = null;
+      confirmBtn.onclick = null;
+      cancelBtn.onclick = null;
     }
-    btn1.onclick = () => { cleanup(); resolve("opt1"); };
-    btn2.onclick = () => { cleanup(); resolve("opt2"); };
-    btnCancel.onclick = () => { cleanup(); resolve(null); };
+    confirmBtn.onclick = () => { if (selected === null) return; cleanup(); resolve(selected); };
+    cancelBtn.onclick = () => { cleanup(); resolve(null); };
   });
 }
 
 // ======================================================
-// 12. МЕНЮ ЧАТА (⋮ в шапке)
+// 12. МЕНЮ ЧАТА
 // ======================================================
 
 function setupChatMenu() {
   const menuBtn = document.getElementById("chat-menu-btn");
   const menuEl = document.getElementById("chat-menu");
 
-  menuBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    menuEl.classList.toggle("hidden");
-  });
-
+  menuBtn.addEventListener("click", (e) => { e.stopPropagation(); menuEl.classList.toggle("hidden"); });
   document.addEventListener("click", (e) => {
-    if (!menuEl.classList.contains("hidden") && !menuEl.contains(e.target)) {
-      menuEl.classList.add("hidden");
-    }
+    if (!menuEl.classList.contains("hidden") && !menuEl.contains(e.target)) menuEl.classList.add("hidden");
   });
 
   menuEl.addEventListener("click", async (e) => {
@@ -561,16 +644,20 @@ function setupChatMenu() {
     menuEl.classList.add("hidden");
 
     if (action === "clear") {
-      const choice = await showDialog("Очистить чат", "Сообщения будут удалены. У кого?",
-        "Только у меня", "У обоих");
-      if (choice === "opt1") await clearChatForMe();
-      else if (choice === "opt2") await clearChatForBoth();
+      const choice = await showChoiceDialog("Очистить чат", "Выбери, что очистить:", [
+        { label: "Только у меня", value: "me" },
+        { label: "У обоих", value: "both" },
+      ], "Очистить");
+      if (choice === "me") await clearChatForMe();
+      else if (choice === "both") await clearChatForBoth();
 
     } else if (action === "delete") {
-      const choice = await showDialog("Удалить чат", "Что удалить?",
-        "У меня (вернётся при новом сообщении)", "У обоих (безвозвратно)");
-      if (choice === "opt1") await hideChatFromList();
-      else if (choice === "opt2") await deleteChatForBoth();
+      const choice = await showChoiceDialog("Удалить чат", "Что удалить?", [
+        { label: "У меня (вернётся при новом сообщении)", value: "me" },
+        { label: "У обоих (безвозвратно)", value: "both" },
+      ], "Удалить");
+      if (choice === "me") await hideChatFromList();
+      else if (choice === "both") await deleteChatForBoth();
 
     } else if (action === "block") {
       if (!currentOtherUser) return;
@@ -599,21 +686,19 @@ function updateBlockUI() {
   const btn = document.getElementById("unblock-btn");
   const menuBlockBtn = document.getElementById("menu-block");
   const composerInput = document.getElementById("message-input");
-  const composerBtn = document.querySelector(".send-btn");
+  const composerBtn = document.getElementById("send-btn");
 
   const iBlocked = isBlockedByMe(currentOtherUser.id);
   const theyBlocked = hasBlockedMe(currentOtherUser.id);
 
   if (iBlocked) {
     text.textContent = "Ты заблокировал(а) @" + currentOtherUser.username + ".";
-    btn.classList.remove("hidden");
-    banner.classList.remove("hidden");
+    btn.classList.remove("hidden"); banner.classList.remove("hidden");
     composerInput.disabled = true; composerBtn.disabled = true;
     menuBlockBtn.textContent = "Разблокировать";
   } else if (theyBlocked) {
     text.textContent = "@" + currentOtherUser.username + " заблокировал(а) тебя. Сообщения не отправляются.";
-    btn.classList.add("hidden");
-    banner.classList.remove("hidden");
+    btn.classList.add("hidden"); banner.classList.remove("hidden");
     composerInput.disabled = true; composerBtn.disabled = true;
     menuBlockBtn.textContent = "Заблокировать";
   } else {
@@ -662,9 +747,9 @@ async function deleteChatForBoth() {
 }
 
 function closeCurrentChat() {
-  currentChatId = null;
-  currentOtherUser = null;
+  currentChatId = null; currentOtherUser = null;
   if (currentChannel) { supabase.removeChannel(currentChannel); currentChannel = null; }
+  cancelReply(); cancelEdit(); exitSelectionMode();
   document.getElementById("chat-content").classList.add("hidden");
   document.getElementById("chat-placeholder").classList.remove("hidden");
 }
@@ -683,9 +768,12 @@ function setupMessageMenu() {
     const action = btn.dataset.action;
     const id = contextMsgId;
     closeMsgContextMenu();
+    if (!id) return;
 
-    if (action === "del") await handleDeleteOne(id);
+    if (action === "reply") startReply(id);
+    else if (action === "edit") startEdit(id);
     else if (action === "fwd") await handleForwardOne(id);
+    else if (action === "del") await handleDeleteOne(id);
     else if (action === "sel") enterSelectionMode(id);
   });
 
@@ -694,9 +782,17 @@ function setupMessageMenu() {
 
 function openMsgContextMenu(e, msgId) {
   if (selectionMode) return;
-  e.preventDefault();
-  e.stopPropagation();
+  e.preventDefault(); e.stopPropagation();
   contextMsgId = msgId;
+
+  // Кнопка "Изменить" только для своих непересланных сообщений
+  const msg = msgCache.get(msgId);
+  const editBtn = document.querySelector('#msg-context-menu button[data-action="edit"]');
+  if (msg && msg.sender_id === currentUser.id && !msg.forwarded_from_name) {
+    editBtn.classList.remove("hidden");
+  } else {
+    editBtn.classList.add("hidden");
+  }
 
   const menu = document.getElementById("msg-context-menu");
   menu.classList.remove("hidden");
@@ -705,8 +801,7 @@ function openMsgContextMenu(e, msgId) {
   let x = e.clientX, y = e.clientY;
   if (x + rect.width > window.innerWidth - 8) x = window.innerWidth - rect.width - 8;
   if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
-  menu.style.left = x + "px";
-  menu.style.top = y + "px";
+  menu.style.left = x + "px"; menu.style.top = y + "px";
 }
 
 function closeMsgContextMenu() {
@@ -714,23 +809,79 @@ function closeMsgContextMenu() {
 }
 
 // ======================================================
-// 15. УДАЛЕНИЕ ОДНОГО СООБЩЕНИЯ
+// 15. ОТВЕТ / РЕДАКТИРОВАНИЕ
+// ======================================================
+
+function setupReplyBar() {
+  document.getElementById("reply-bar-close").addEventListener("click", () => {
+    cancelReply(); cancelEdit();
+  });
+}
+
+async function startReply(msgId) {
+  const msg = msgCache.get(msgId);
+  if (!msg) return;
+  cancelEdit();
+  replyToMsg = msg;
+
+  const profile = await getProfile(msg.sender_id);
+  const name = msg.sender_id === currentUser.id ? "Ты" : (profile ? profile.display_name : "?");
+
+  document.getElementById("reply-bar-title").textContent = "Ответ " + name;
+  document.getElementById("reply-bar-text").textContent = (msg.content || "").slice(0, 80);
+  document.getElementById("reply-bar-icon").textContent = "↩";
+  document.getElementById("reply-bar").classList.remove("hidden");
+  document.getElementById("message-input").focus();
+}
+
+function cancelReply() {
+  replyToMsg = null;
+  if (!editingMsgId) document.getElementById("reply-bar").classList.add("hidden");
+}
+
+function startEdit(msgId) {
+  const msg = msgCache.get(msgId);
+  if (!msg) return;
+  if (msg.sender_id !== currentUser.id) return;
+  if (msg.forwarded_from_name) return;
+  cancelReply();
+  editingMsgId = msgId;
+
+  document.getElementById("reply-bar-title").textContent = "Редактирование";
+  document.getElementById("reply-bar-text").textContent = (msg.content || "").slice(0, 80);
+  document.getElementById("reply-bar-icon").textContent = "✎";
+  document.getElementById("reply-bar").classList.remove("hidden");
+
+  const input = document.getElementById("message-input");
+  input.value = msg.content || "";
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+function cancelEdit() {
+  editingMsgId = null;
+  document.getElementById("message-input").value = "";
+  if (!replyToMsg) document.getElementById("reply-bar").classList.add("hidden");
+}
+
+// ======================================================
+// 16. УДАЛЕНИЕ ОДНОГО СООБЩЕНИЯ
 // ======================================================
 
 async function handleDeleteOne(msgId) {
-  const choice = await showDialog("Удалить сообщение", "У кого удалить?",
-    "У меня", "У обоих");
-  if (choice === "opt1") await hideMessageForMe(msgId);
-  else if (choice === "opt2") await deleteMessageForBoth(msgId);
+  const choice = await showChoiceDialog("Удалить сообщение", "У кого удалить?", [
+    { label: "У меня", value: "me" },
+    { label: "У обоих", value: "both" },
+  ], "Удалить");
+  if (choice === "me") await hideMessageForMe(msgId);
+  else if (choice === "both") await deleteMessageForBoth(msgId);
 }
 
 async function hideMessageForMe(msgId) {
   const { error } = await supabase.from("message_hides").insert({
     message_id: msgId, user_id: currentUser.id,
   });
-  if (error && !String(error.message).toLowerCase().includes("duplicate")) {
-    alert(error.message); return;
-  }
+  if (error && !String(error.message).toLowerCase().includes("duplicate")) { alert(error.message); return; }
   hiddenMsgIds.add(msgId);
   msgCache.delete(msgId);
   const el = document.querySelector(`.msg[data-id="${msgId}"]`);
@@ -748,7 +899,7 @@ async function deleteMessageForBoth(msgId) {
 }
 
 // ======================================================
-// 16. РЕЖИМ ВЫБОРА СООБЩЕНИЙ
+// 17. РЕЖИМ ВЫБОРА
 // ======================================================
 
 function setupSelectionToolbar() {
@@ -760,7 +911,7 @@ function setupSelectionToolbar() {
     if (!selectionMode) return;
     const el = e.target.closest(".msg");
     if (!el) return;
-    e.stopPropagation();
+    e.stopPropagation(); e.preventDefault();
     const id = el.dataset.id;
     if (selectedMsgIds.has(id)) {
       selectedMsgIds.delete(id);
@@ -778,7 +929,11 @@ function enterSelectionMode(initialId) {
   selectionMode = true;
   selectedMsgIds.clear();
   if (initialId) selectedMsgIds.add(initialId);
+
+  document.getElementById("composer").classList.add("hidden");
+  document.getElementById("reply-bar").classList.add("hidden");
   document.getElementById("selection-toolbar").classList.remove("hidden");
+
   document.querySelectorAll(".msg").forEach((el) => {
     if (selectedMsgIds.has(el.dataset.id)) el.classList.add("selected");
   });
@@ -789,6 +944,7 @@ function exitSelectionMode() {
   selectionMode = false;
   selectedMsgIds.clear();
   document.getElementById("selection-toolbar").classList.add("hidden");
+  document.getElementById("composer").classList.remove("hidden");
   document.querySelectorAll(".msg.selected").forEach((el) => el.classList.remove("selected"));
 }
 
@@ -799,13 +955,15 @@ function updateSelectionUI() {
 async function handleDeleteSelected() {
   const count = selectedMsgIds.size;
   if (!count) return;
-  const choice = await showDialog("Удалить сообщения",
-    `Будет удалено: ${count}. У кого?`, "У меня", "У обоих");
+  const choice = await showChoiceDialog("Удалить сообщения",
+    `Будет удалено: ${count}`, [
+      { label: "У меня", value: "me" },
+      { label: "У обоих", value: "both" },
+    ], "Удалить");
   if (!choice) return;
 
   const ids = [...selectedMsgIds];
-
-  if (choice === "opt1") {
+  if (choice === "me") {
     for (const id of ids) {
       await supabase.from("message_hides").insert({ message_id: id, user_id: currentUser.id });
       hiddenMsgIds.add(id);
@@ -813,7 +971,7 @@ async function handleDeleteSelected() {
       const el = document.querySelector(`.msg[data-id="${id}"]`);
       if (el) el.remove();
     }
-  } else if (choice === "opt2") {
+  } else if (choice === "both") {
     const { error } = await supabase.from("messages").delete().in("id", ids);
     if (error) { alert(error.message); return; }
     ids.forEach((id) => {
@@ -833,7 +991,7 @@ async function handleForwardSelected() {
 }
 
 // ======================================================
-// 17. ПЕРЕСЫЛКА
+// 18. ПЕРЕСЫЛКА
 // ======================================================
 
 async function handleForwardOne(msgId) {
@@ -845,6 +1003,7 @@ async function handleForwardOne(msgId) {
 async function openForwardDialog(msgs) {
   forwardSourceMsgs = msgs;
   forwardSelectedChats.clear();
+  document.getElementById("forward-hide-sender").checked = false;
   document.getElementById("forward-overlay").classList.remove("hidden");
   document.getElementById("forward-list").innerHTML = '<div class="empty">Загрузка...</div>';
   await populateForwardList();
@@ -853,18 +1012,16 @@ async function openForwardDialog(msgs) {
 
 async function populateForwardList() {
   const listEl = document.getElementById("forward-list");
-  const { data: myChats } = await supabase
-    .from("chat_members").select("chat_id").eq("user_id", currentUser.id);
+  const { data: myChats } = await supabase.from("chat_members")
+    .select("chat_id").eq("user_id", currentUser.id);
   const chatIds = (myChats || []).map((c) => c.chat_id);
   if (!chatIds.length) { listEl.innerHTML = '<div class="empty">Нет чатов</div>'; return; }
 
-  const { data: others } = await supabase
-    .from("chat_members").select("chat_id, user_id")
-    .in("chat_id", chatIds).neq("user_id", currentUser.id);
-
+  const { data: others } = await supabase.from("chat_members")
+    .select("chat_id, user_id").in("chat_id", chatIds).neq("user_id", currentUser.id);
   const userIds = [...new Set((others || []).map((o) => o.user_id))];
-  const { data: profiles } = await supabase
-    .from("profiles").select("id, username, display_name").in("id", userIds);
+  const { data: profiles } = await supabase.from("profiles")
+    .select("id, username, display_name").in("id", userIds);
   const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
 
   const items = (others || []).map((o) => ({
@@ -902,8 +1059,7 @@ async function populateForwardList() {
 }
 
 function updateForwardInfo() {
-  document.getElementById("forward-info").textContent =
-    `Выбрано чатов: ${forwardSelectedChats.size} / 10`;
+  document.getElementById("forward-info").textContent = `Выбрано чатов: ${forwardSelectedChats.size} / 10`;
 }
 
 function setupForwardDialog() {
@@ -918,31 +1074,30 @@ async function sendForward() {
   if (!forwardSelectedChats.size) return;
   if (!forwardSourceMsgs.length) return;
 
-  // Собираем имена отправителей один раз
+  const hideSender = document.getElementById("forward-hide-sender").checked;
+
   const senderMap = new Map();
-  for (const m of forwardSourceMsgs) {
-    if (senderMap.has(m.sender_id)) continue;
-    if (myProfile && m.sender_id === currentUser.id) {
-      senderMap.set(m.sender_id, { name: myProfile.display_name, username: myProfile.username });
-    } else if (currentOtherUser && m.sender_id === currentOtherUser.id) {
-      senderMap.set(m.sender_id, { name: currentOtherUser.display_name, username: currentOtherUser.username });
-    } else {
-      const { data } = await supabase.from("profiles")
-        .select("display_name, username").eq("id", m.sender_id).single();
-      if (data) senderMap.set(m.sender_id, { name: data.display_name, username: data.username });
+  if (!hideSender) {
+    for (const m of forwardSourceMsgs) {
+      if (senderMap.has(m.sender_id)) continue;
+      const p = await getProfile(m.sender_id);
+      senderMap.set(m.sender_id, p || { display_name: "?", username: "?" });
     }
   }
 
   for (const chatId of forwardSelectedChats) {
     for (const m of forwardSourceMsgs) {
-      const sender = senderMap.get(m.sender_id) || { name: "?", username: "?" };
-      await supabase.from("messages").insert({
+      const payload = {
         chat_id: chatId,
         sender_id: currentUser.id,
         content: m.content,
-        forwarded_from_name: sender.name,
-        forwarded_from_username: sender.username,
-      });
+      };
+      if (!hideSender) {
+        const s = senderMap.get(m.sender_id) || { display_name: "?", username: "?" };
+        payload.forwarded_from_name = s.display_name;
+        payload.forwarded_from_username = s.username;
+      }
+      await supabase.from("messages").insert(payload);
     }
   }
 
@@ -951,7 +1106,7 @@ async function sendForward() {
 }
 
 // ======================================================
-// 18. XSS + автопроверка сессии
+// 19. XSS + автопроверка сессии
 // ======================================================
 
 function escapeHtml(str) {

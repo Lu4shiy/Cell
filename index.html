@@ -38,110 +38,127 @@
     </div>
   </div>
 
-<!-- ГЛАВНЫЙ ЭКРАН -->
-<div id="app-screen" class="app hidden">
+  <!-- ГЛАВНЫЙ ЭКРАН -->
+  <div id="app-screen" class="app hidden">
 
-  <!-- ЛЕВАЯ ПАНЕЛЬ: список чатов и людей -->
-  <aside class="sidebar">
-    <header class="sidebar-header">
-      <div class="me-info">
-        <div class="avatar" id="me-avatar">?</div>
-        <div class="me-text">
-          <div class="me-name" id="me-name">Загрузка...</div>
-          <div class="me-username" id="me-username">@...</div>
+    <!-- ЛЕВАЯ ПАНЕЛЬ: список чатов и людей -->
+    <aside class="sidebar">
+      <header class="sidebar-header">
+        <div class="me-info">
+          <div class="avatar" id="me-avatar">?</div>
+          <div class="me-text">
+            <div class="me-name" id="me-name">Загрузка...</div>
+            <div class="me-username" id="me-username">@...</div>
+          </div>
         </div>
+        <button id="logout-btn" class="icon-btn" title="Выйти">⎋</button>
+      </header>
+
+      <div class="search-wrap">
+        <input type="text" id="search-input" placeholder="Поиск людей...">
       </div>
-      <button id="logout-btn" class="icon-btn" title="Выйти">⎋</button>
-    </header>
 
-    <div class="search-wrap">
-      <input type="text" id="search-input" placeholder="Поиск людей...">
-    </div>
+      <div class="section-title" id="section-title">Недавние чаты</div>
+      <div id="users-list" class="users-list">
+        <div class="empty">Загрузка...</div>
+      </div>
+    </aside>
 
-    <div class="section-title" id="section-title">Недавние чаты</div>
-    <div id="users-list" class="users-list">
-      <div class="empty">Загрузка...</div>
-    </div>
-  </aside>
+    <!-- ПРАВАЯ ЧАСТЬ: окно чата -->
+    <main class="chat-area" id="chat-area">
 
-  <!-- ПРАВАЯ ЧАСТЬ: окно чата -->
-<main class="chat-area" id="chat-area">
-  <div class="chat-placeholder" id="chat-placeholder">
-    <div class="chat-placeholder-icon">💬</div>
-    <p>Выбери человека слева, чтобы начать переписку</p>
+      <div class="chat-placeholder" id="chat-placeholder">
+        <div class="chat-placeholder-icon">💬</div>
+        <p>Выбери человека слева, чтобы начать переписку</p>
+      </div>
+
+      <div id="chat-content" class="chat-content hidden">
+
+        <header class="chat-header">
+          <div class="avatar" id="chat-avatar">?</div>
+          <div class="chat-header-text">
+            <div class="chat-title" id="chat-title">Имя</div>
+            <div class="chat-subtitle" id="chat-subtitle">@username</div>
+          </div>
+          <button id="chat-menu-btn" class="icon-btn" title="Меню">⋮</button>
+          <div id="chat-menu" class="menu hidden">
+            <button data-action="clear">Очистить чат</button>
+            <button data-action="delete">Удалить чат</button>
+            <button data-action="block" id="menu-block">Заблокировать</button>
+          </div>
+        </header>
+
+        <div id="block-banner" class="block-banner hidden">
+          <span id="block-banner-text"></span>
+          <button id="unblock-btn" class="hidden">Разблокировать</button>
+        </div>
+
+        <div class="messages" id="messages"></div>
+
+        <div id="reply-bar" class="reply-bar hidden">
+          <div class="reply-bar-icon" id="reply-bar-icon">↩</div>
+          <div class="reply-bar-content">
+            <div class="reply-bar-title" id="reply-bar-title">Ответ</div>
+            <div class="reply-bar-text" id="reply-bar-text"></div>
+          </div>
+          <button id="reply-bar-close" class="reply-bar-close" title="Отмена">✕</button>
+        </div>
+
+        <form class="composer" id="composer">
+          <input type="text" id="message-input" placeholder="Написать сообщение..." autocomplete="off" maxlength="4000">
+          <button type="submit" class="send-btn" id="send-btn" title="Отправить">➤</button>
+        </form>
+
+        <div id="selection-toolbar" class="selection-toolbar hidden">
+          <span id="selection-count">Выбрано: 0</span>
+          <button id="sel-delete">Удалить</button>
+          <button id="sel-forward">Переслать</button>
+          <button id="sel-cancel">Отмена</button>
+        </div>
+
+      </div>
+    </main>
+
   </div>
 
-<div id="chat-content" class="chat-content hidden">
-<header class="chat-header">
-  <div class="avatar" id="chat-avatar">?</div>
-  <div class="chat-header-text">
-    <div class="chat-title" id="chat-title">Имя</div>
-    <div class="chat-subtitle" id="chat-subtitle">@username</div>
-  </div>
-  <button id="chat-menu-btn" class="icon-btn" title="Меню">⋮</button>
-  <div id="chat-menu" class="menu hidden">
-    <button data-action="clear">Очистить чат</button>
-    <button data-action="delete">Удалить чат</button>
-    <button data-action="block" id="menu-block">Заблокировать</button>
-  </div>
-</header>
-
-  <div id="block-banner" class="block-banner hidden">
-    <span id="block-banner-text"></span>
-    <button id="unblock-btn" class="hidden">Разблокировать</button>
-  </div>
-
-  <div class="messages" id="messages"></div>
-
-  <form class="composer" id="composer">
-    <input type="text" id="message-input" placeholder="Написать сообщение..." autocomplete="off" maxlength="4000">
-    <button type="submit" class="send-btn" title="Отправить">➤</button>
-  </form>
-</div>
-</main>
-
-</div>
-
-<!-- Универсальный диалог с выбором -->
-<div id="dialog-overlay" class="dialog-overlay hidden">
-  <div class="dialog">
-    <div class="dialog-title" id="dialog-title"></div>
-    <div class="dialog-text" id="dialog-text"></div>
-    <div class="dialog-actions">
-      <button class="dialog-btn" id="dialog-opt1"></button>
-      <button class="dialog-btn" id="dialog-opt2"></button>
-      <button class="dialog-btn dialog-cancel" id="dialog-cancel">Отмена</button>
-    </div>
-  </div>
-</div>
-
-<!-- Контекстное меню сообщения (ПКМ) -->
-<div id="msg-context-menu" class="context-menu hidden">
-  <button data-action="del">Удалить</button>
-  <button data-action="fwd">Переслать</button>
-  <button data-action="sel">Выбрать</button>
-</div>
-
-<!-- Панель режима выбора -->
-<div id="selection-toolbar" class="selection-toolbar hidden">
-  <span id="selection-count">Выбрано: 0</span>
-  <button id="sel-delete">Удалить</button>
-  <button id="sel-forward">Переслать</button>
-  <button id="sel-cancel">Отмена</button>
-</div>
-
-<!-- Диалог пересылки -->
-<div id="forward-overlay" class="dialog-overlay hidden">
-  <div class="dialog">
-    <div class="dialog-title">Переслать</div>
-    <div class="dialog-text" id="forward-info">Выбери чаты</div>
-    <div id="forward-list" class="forward-list"></div>
-    <div class="dialog-actions">
-      <button class="dialog-btn" id="forward-send">Переслать</button>
-      <button class="dialog-btn dialog-cancel" id="forward-cancel">Отмена</button>
+  <!-- Универсальный диалог с выбором -->
+  <div id="dialog-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" id="dialog-title"></div>
+      <div class="dialog-text" id="dialog-text"></div>
+      <div id="dialog-options" class="dialog-options"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="dialog-confirm" disabled>Подтвердить</button>
+        <button class="dialog-btn dialog-cancel" id="dialog-cancel">Отмена</button>
+      </div>
     </div>
   </div>
-</div>
+
+  <!-- Контекстное меню сообщения (ПКМ) -->
+  <div id="msg-context-menu" class="context-menu hidden">
+    <button data-action="reply">Ответить</button>
+    <button data-action="edit">Изменить</button>
+    <button data-action="fwd">Переслать</button>
+    <button data-action="del">Удалить</button>
+    <button data-action="sel">Выбрать</button>
+  </div>
+
+  <!-- Диалог пересылки -->
+  <div id="forward-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title">Переслать</div>
+      <div class="dialog-text" id="forward-info">Выбери чаты</div>
+      <div id="forward-list" class="forward-list"></div>
+      <label class="toggle-row">
+        <input type="checkbox" id="forward-hide-sender">
+        <span>Скрыть отправителя</span>
+      </label>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="forward-send">Переслать</button>
+        <button class="dialog-btn dialog-cancel" id="forward-cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="app.js"></script>
 </body>
