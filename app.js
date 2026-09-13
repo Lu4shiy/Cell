@@ -4,7 +4,7 @@
 
 // --- 1. Ключи от Supabase ---
 // ВСТАВЬ СЮДА свои значения из блокнота
-const SUPABASE_URL = "https://uiktqkxfsoewjpgjpizf.supabase.co/rest/v1/";
+const SUPABASE_URL = "https://uiktqkxfsoewjpgjpizf.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpa3Rxa3hmc29ld2pwZ2pwaXpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyODY5MjksImV4cCI6MjEwNDg2MjkyOX0.2OC3vrfusHK6Lqv1Yh5KfZ42Ypm02sE1XAloTSUxo2k";
 
 // --- 2. Подключаем Supabase ---
