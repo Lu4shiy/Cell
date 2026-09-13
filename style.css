@@ -1477,3 +1477,5 @@ input:focus { border-color: var(--accent); }
 
 /* Превью в списке чатов не обрезается некорректно */
 .user-item-preview b { color: var(--text); font-weight: 600; }
+
+.msg-system.selected { outline: 2px solid var(--accent); outline-offset: 2px; }

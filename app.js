@@ -568,9 +568,17 @@ function subscribeToGlobalChanges() {
 function subscribeToMemberships() {
   if (membershipChannel) return;
   membershipChannel = supabase.channel("membership-changes")
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_members" }, (payload) => {
-      if (payload.new.user_id === currentUser.id && !document.getElementById("search-input").value.trim()) {
-        loadRecentChats();
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_members" }, async (payload) => {
+      if (payload.new.user_id === currentUser.id) {
+        const chatId = payload.new.chat_id;
+        // Уже в списке?
+        if (document.querySelector(`.user-item[data-chat-id="${chatId}"]`)) return;
+        // Узнать второго участника
+        const { data: others } = await supabase.from("chat_members")
+          .select("user_id").eq("chat_id", chatId).neq("user_id", currentUser.id);
+        if (others && others.length) {
+          await addOrUpdateChatInList(chatId, others[0].user_id);
+        }
       }
     })
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_members" }, (payload) => {
@@ -739,6 +747,42 @@ async function loadRecentChats() {
   renderBirthdayBanner();
 }
 
+function renderChatItem(it, user) {
+  const blocked = isBlockedByMe(user.id) ? " 🚫" : "";
+  const name = it.customName || user.display_name;
+  const time = it.lastTime ? formatChatTime(it.lastTime) : "";
+  const preview = it.lastMsg
+    ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
+      : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
+      : ((it.lastMsg.sender_id === currentUser.id ? "Вы: " : "") + (it.lastMsg.content || "")))
+    : "Нет сообщений";
+  const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
+  return `
+    <div class="user-item" data-user-id="${user.id}" data-chat-id="${it.chat_id}" data-custom-name="${it.customName ? escapeHtml(it.customName) : ""}">
+      <div class="avatar"></div>
+      <div class="user-item-body">
+        <div class="user-item-row1">
+          <div class="user-item-name">${escapeHtml(name)}${blocked}</div>
+          <div class="user-item-time">${time}</div>
+        </div>
+        <div class="user-item-row2">
+          <div class="user-item-preview ${it.unread > 0 ? "unread" : ""}">${escapeHtml(preview.slice(0, 60))}</div>
+          ${unreadHtml}
+        </div>
+      </div>
+    </div>`;
+}
+
+function bindChatItemEvents(el, user) {
+  const listEl = document.getElementById("users-list");
+  el.addEventListener("click", () => {
+    listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
+    el.classList.add("active");
+    openChatWith(user);
+  });
+  el.addEventListener("contextmenu", (ev) => { ev.preventDefault(); openChatListContextMenu(ev, user, el); });
+}
+
 function renderChatList(items, profileMap) {
   const listEl = document.getElementById("users-list");
   if (!items.length) { listEl.innerHTML = '<div class="empty">У вас пока нет чатов.</div>'; return; }
@@ -774,12 +818,7 @@ function renderChatList(items, profileMap) {
     const user = profileMap.get(userId) || profileCache.get(userId);
     if (!user) return;
     paintAvatar(el.querySelector(".avatar"), user);
-    el.addEventListener("click", () => {
-      listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
-      el.classList.add("active");
-      openChatWith(user);
-    });
-    el.addEventListener("contextmenu", (ev) => { ev.preventDefault(); openChatListContextMenu(ev, user, el); });
+    bindChatItemEvents(el, user);
   });
 }
 
@@ -813,6 +852,46 @@ function resortChatsList() {
     return bt - at;
   });
   items.forEach((it) => listEl.appendChild(it));
+}
+
+async function addOrUpdateChatInList(chatId, otherUserId) {
+  // Если пользователь сейчас ищет — не мешаем
+  if (document.getElementById("search-input").value.trim()) return;
+  // Уже есть в списке?
+  if (document.querySelector(`.user-item[data-chat-id="${chatId}"]`)) return;
+
+  const { data: profile } = await supabase.from("profiles")
+    .select("id, username, display_name, avatar_url, last_seen, gender, birthday")
+    .eq("id", otherUserId).single();
+  if (!profile) return;
+  profileCache.set(profile.id, profile);
+  chatIdByUser.set(otherUserId, chatId);
+
+  // Custom name для этого чата
+  const { data: myMembership } = await supabase.from("chat_members")
+    .select("custom_name").eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle();
+  const customName = myMembership ? myMembership.custom_name : null;
+
+  const item = {
+    chat_id: chatId,
+    user_id: otherUserId,
+    lastMsg: null,
+    lastTime: Date.now(),
+    unread: 0,
+    customName,
+  };
+  chatLastMsg.set(chatId, { text: "", time: Date.now(), senderId: null, unread: 0 });
+
+  const listEl = document.getElementById("users-list");
+  const empty = listEl.querySelector(".empty");
+  if (empty) empty.remove();
+
+  const temp = document.createElement("div");
+  temp.innerHTML = renderChatItem(item, profile);
+  const itemEl = temp.firstElementChild;
+  paintAvatar(itemEl.querySelector(".avatar"), profile);
+  bindChatItemEvents(itemEl, profile);
+  listEl.insertBefore(itemEl, listEl.firstChild);
 }
 
 function removeChatFromList(chatId) {
@@ -1065,6 +1144,7 @@ async function createChatWith(otherUserId) {
     return null;
   }
   chatIdByUser.set(otherUserId, newChat.id);
+  await addOrUpdateChatInList(newChat.id, otherUserId);
   return newChat.id;
 }
 
@@ -1152,7 +1232,15 @@ async function renderSystemMessage(msg) {
     if (!cat) return `<span class="msg-system-text">🎁 Подарок</span>`;
     const sender = await getProfile(msg.sender_id);
     const senderName = msg.sender_id === currentUser.id ? "Вы" : (sender ? sender.display_name : "Кто-то");
-    const verb = msg.sender_id === currentUser.id ? "отправили" : "отправил(а) вам";
+    let verb;
+    if (msg.sender_id === currentUser.id) {
+      verb = "отправили";
+    } else {
+      const g = sender ? sender.gender : null;
+      if (g === "female") verb = "отправила вам";
+      else if (g === "male") verb = "отправил вам";
+      else verb = "отправил(а) вам";
+    }
     const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
     return `
       <span class="msg-system-text">${senderName} ${verb} подарок за <b>${cat.price}</b> 🧩</span>
@@ -1202,6 +1290,8 @@ async function appendMessage(msg) {
     el.className = "msg-system" + (msg.message_type === "gift" ? " gift-msg" : "");
     el.dataset.id = msg.id;
     el.innerHTML = await renderSystemMessage(msg);
+    el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
+    el.addEventListener("click", onMsgClick);
     box.appendChild(el);
     msgCache.set(msg.id, msg);
     return;
@@ -1747,7 +1837,7 @@ function setupReplyBar() {
 async function startReply(msgId) {
   const msg = msgCache.get(msgId);
   if (!msg) return;
-  if (msg.message_type === "tokens" || msg.message_type === "gift") return;
+  if (msg.message_type === "tokens") return;
   cancelEdit();
   replyToMsg = msg;
   const profile = await getProfile(msg.sender_id);
@@ -1832,7 +1922,7 @@ function setupSelectionToolbar() {
   document.getElementById("sel-forward").addEventListener("click", handleForwardSelected);
   document.getElementById("messages").addEventListener("click", (e) => {
     if (!selectionMode) return;
-    const el = e.target.closest(".msg");
+    const el = e.target.closest(".msg, .msg-system");
     if (!el) return;
     e.stopPropagation(); e.preventDefault();
     const id = el.dataset.id;
@@ -1853,7 +1943,7 @@ function enterSelectionMode(initialId) {
   document.getElementById("composer").classList.add("hidden");
   document.getElementById("reply-bar").classList.add("hidden");
   document.getElementById("selection-toolbar").classList.remove("hidden");
-  document.querySelectorAll(".msg").forEach((el) => {
+  document.querySelectorAll(".msg, .msg-system").forEach((el) => {
     if (selectedMsgIds.has(el.dataset.id)) el.classList.add("selected");
   });
   updateSelectionUI();
@@ -1864,7 +1954,7 @@ function exitSelectionMode() {
   selectedMsgIds.clear();
   document.getElementById("selection-toolbar").classList.add("hidden");
   document.getElementById("composer").classList.remove("hidden");
-  document.querySelectorAll(".msg.selected").forEach((el) => el.classList.remove("selected"));
+  document.querySelectorAll(".msg.selected, .msg-system.selected").forEach((el) => el.classList.remove("selected"));
 }
 
 function updateSelectionUI() {
