@@ -686,9 +686,16 @@ function subscribeToMemberships() {
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_members" }, async (payload) => {
       if (payload.new.user_id === currentUser.id) {
         const chatId = payload.new.chat_id;
-        // Уже в списке?
         if (document.querySelector(`.user-item[data-chat-id="${chatId}"]`)) return;
-        // Узнать второго участника
+
+        // Канал?
+        const { data: ch } = await supabase.from("channels").select("*").eq("id", chatId).maybeSingle();
+        if (ch) {
+          await addOrUpdateChannelInList(chatId, ch);
+          return;
+        }
+
+        // Обычный DM
         const { data: others } = await supabase.from("chat_members")
           .select("user_id").eq("chat_id", chatId).neq("user_id", currentUser.id);
         if (others && others.length) {
@@ -701,6 +708,7 @@ function subscribeToMemberships() {
         const chatId = payload.old.chat_id;
         if (currentChatId === chatId) closeCurrentChat();
         removeChatFromList(chatId);
+        channelCache.delete(chatId);
       }
     }).subscribe();
 }
@@ -1107,6 +1115,40 @@ async function addOrUpdateChatInList(chatId, otherUserId) {
   } finally {
     pendingChatAdds.delete(chatId);
   }
+}
+
+async function addOrUpdateChannelInList(chatId, channel) {
+  if (document.getElementById("search-input").value.trim()) return;
+  if (document.querySelector(`.user-item[data-chat-id="${chatId}"][data-chat-type="channel"]`)) return;
+
+  if (!channel) {
+    const { data } = await supabase.from("channels").select("*").eq("id", chatId).maybeSingle();
+    if (!data) return;
+    channel = data;
+  }
+  channelCache.set(chatId, channel);
+
+  const listEl = document.getElementById("users-list");
+  const empty = listEl.querySelector(".empty");
+  if (empty) empty.remove();
+
+  const lastTime = channel.created_at ? new Date(channel.created_at).getTime() : Date.now();
+  const item = {
+    type: "channel",
+    chat_id: chatId,
+    channel,
+    lastMsg: null,
+    lastTime,
+    unread: 0,
+  };
+  chatLastMsg.set(chatId, { text: "", time: lastTime, senderId: null, unread: 0 });
+
+  const temp = document.createElement("div");
+  temp.innerHTML = renderChannelItemHtml(item);
+  const itemEl = temp.firstElementChild;
+  paintAvatar(itemEl.querySelector(".avatar"), { id: channel.id, display_name: channel.name, avatar_url: channel.avatar_url });
+  bindChannelItemEvents(itemEl, channel);
+  listEl.insertBefore(itemEl, listEl.firstChild);
 }
 
 function removeChatFromList(chatId) {
@@ -3180,7 +3222,14 @@ async function createChannel() {
     closeChannelCreateDialog();
     btn.disabled = false; btn.textContent = "Создать канал";
 
-    await loadRecentChats();
+    await addOrUpdateChannelInList(newChat.id, {
+      id: newChat.id,
+      username,
+      name,
+      avatar_url: channelCreateAvatarUrl,
+      owner_id: currentUser.id,
+      created_at: new Date().toISOString(),
+    });
   } catch (ex) {
     console.error(ex);
     await showAlertDialog("Ошибка", ex.message || String(ex));
