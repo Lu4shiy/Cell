@@ -310,6 +310,520 @@ function showChoiceDialog(title, text, options, confirmLabel) {
   });
 }
 
+// ======================= 7. ПРОФИЛЬ (свой) =======================
+let draftProfile = {};
+
+function setupProfilePanel() {
+  document.getElementById("me-info-btn").addEventListener("click", openProfilePanel);
+  document.getElementById("profile-close").addEventListener("click", () => document.getElementById("profile-overlay").classList.add("hidden"));
+  document.getElementById("avatar-upload").addEventListener("change", handleAvatarUpload);
+
+  const grid = document.getElementById("accent-grid");
+  grid.innerHTML = "";
+  ACCENTS.forEach((a) => {
+    const d = document.createElement("div");
+    d.className = "accent-option"; d.dataset.accent = a;
+    d.style.background = ACCENT_COLORS[a]; d.title = a; grid.appendChild(d);
+  });
+  grid.addEventListener("click", async (e) => {
+    const el = e.target.closest(".accent-option"); if (!el) return;
+    applyAccent(el.dataset.accent); updateAccentButtons();
+    await saveProfileField({ accent_color: el.dataset.accent });
+  });
+
+  document.getElementById("profile-username").addEventListener("input", (e) => {
+    clearTimeout(usernameCheckTimeout); validatedUsername = null;
+    const value = e.target.value;
+    usernameCheckTimeout = setTimeout(() => checkUsernameLive(value), 350);
+  });
+  document.getElementById("profile-displayname").addEventListener("input", (e) => {
+    draftProfile.display_name = e.target.value.trim(); markProfileDirty();
+  });
+  document.getElementById("gender-toggle").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-gender]"); if (!btn) return;
+    draftProfile.gender = btn.dataset.gender; myProfile.gender = btn.dataset.gender;
+    updateGenderButtons(); markProfileDirty();
+  });
+  document.getElementById("profile-birthday").addEventListener("input", (e) => {
+    draftProfile.birthday = e.target.value.trim() || null; markProfileDirty();
+  });
+  document.getElementById("profile-apply").addEventListener("click", applyProfileChanges);
+  document.getElementById("profile-gifts-btn").addEventListener("click", () => openGiftsOverlay(currentUser.id));
+}
+
+function markProfileDirty() { const btn = document.getElementById("profile-apply"); if (btn) btn.disabled = false; }
+
+async function applyProfileChanges() {
+  const unameInput = document.getElementById("profile-username");
+  const unameVal = unameInput.value.trim();
+  if (unameVal && unameVal !== myProfile.username && unameVal !== validatedUsername) {
+    const hint = document.getElementById("username-hint");
+    hint.className = "username-hint err"; hint.textContent = "Проверьте юзернейм"; return;
+  }
+  if (draftProfile.birthday && !/^\d{2}\.\d{2}(\.\d{2,4})?$/.test(draftProfile.birthday)) {
+    await showAlertDialog("Ошибка", "Дата рождения в формате ДД.ММ или ДД.ММ.ГГГГ"); return;
+  }
+  if (unameVal && unameVal !== myProfile.username) {
+    const { error } = await supabase.from("profiles").update({ username: unameVal }).eq("id", currentUser.id);
+    if (error) { await showAlertDialog("Ошибка", "Не удалось сохранить юзернейм"); return; }
+    myProfile.username = unameVal; document.getElementById("me-username").textContent = "@" + unameVal;
+  }
+  const payload = {};
+  if (draftProfile.display_name) payload.display_name = draftProfile.display_name;
+  if (draftProfile.gender !== undefined) payload.gender = draftProfile.gender;
+  if (draftProfile.birthday !== undefined) payload.birthday = draftProfile.birthday;
+  if (Object.keys(payload).length) {
+    const { error } = await supabase.from("profiles").update(payload).eq("id", currentUser.id);
+    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    Object.assign(myProfile, payload);
+    if (payload.display_name) document.getElementById("me-name").textContent = payload.display_name;
+    if (currentOtherUser) renderChatSubtitle();
+  }
+  draftProfile = {};
+  document.getElementById("profile-apply").disabled = true;
+  const hint = document.getElementById("username-hint");
+  hint.className = "username-hint ok"; hint.textContent = "Сохранено";
+}
+
+async function openProfilePanel() {
+  if (!myProfile) return;
+  document.getElementById("profile-overlay").classList.remove("hidden");
+  paintAvatar(document.getElementById("profile-avatar-preview"), myProfile);
+  updateAccentButtons(); renderAvatarGrid();
+  document.getElementById("profile-displayname").value = myProfile.display_name || "";
+  document.getElementById("profile-birthday").value = myProfile.birthday || "";
+  updateGenderButtons();
+  const ui = document.getElementById("profile-username");
+  ui.value = myProfile.username; validatedUsername = myProfile.username;
+  const hint = document.getElementById("username-hint"); hint.className = "username-hint"; hint.textContent = "";
+  draftProfile = {}; document.getElementById("profile-apply").disabled = true;
+  await refreshMyGiftsCount();
+}
+
+function renderAvatarGrid() {
+  const grid = document.getElementById("avatar-grid"); grid.innerHTML = "";
+  BASE_AVATARS.forEach((pair, idx) => {
+    const el = document.createElement("div");
+    el.className = "avatar-option"; el.dataset.idx = idx;
+    el.style.background = `linear-gradient(135deg, ${pair[0]}, ${pair[1]})`;
+    el.textContent = ((myProfile.display_name || "?")[0] || "?").toUpperCase();
+    if (myProfile.avatar_url === "color:" + idx) el.classList.add("selected");
+    el.addEventListener("click", async () => {
+      const url = "color:" + idx;
+      myProfile.avatar_url = url;
+      paintAvatar(document.getElementById("profile-avatar-preview"), myProfile);
+      paintAvatar(document.getElementById("me-avatar"), myProfile);
+      renderAvatarGrid();
+      await saveProfileField({ avatar_url: url });
+    });
+    grid.appendChild(el);
+  });
+}
+
+function updateAccentButtons() {
+  const cur = document.documentElement.getAttribute("data-accent") || "orange";
+  document.querySelectorAll(".accent-option").forEach((el) => el.classList.toggle("selected", el.dataset.accent === cur));
+}
+
+function updateGenderButtons() {
+  const cur = (myProfile && myProfile.gender) || "unset";
+  document.querySelectorAll("#gender-toggle button").forEach((b) => b.classList.toggle("active", b.dataset.gender === cur));
+}
+
+async function saveProfileField(fields) {
+  Object.assign(myProfile, fields);
+  const { error } = await supabase.from("profiles").update(fields).eq("id", currentUser.id);
+  if (error) console.error(error);
+}
+
+async function handleAvatarUpload(e) {
+  const file = e.target.files && e.target.files[0]; e.target.value = "";
+  if (!file) return;
+  const dataUrl = await resizeImage(file, 200); if (!dataUrl) return;
+  myProfile.avatar_url = dataUrl;
+  paintAvatar(document.getElementById("profile-avatar-preview"), myProfile);
+  paintAvatar(document.getElementById("me-avatar"), myProfile);
+  renderAvatarGrid();
+  await saveProfileField({ avatar_url: dataUrl });
+}
+
+function resizeImage(file, maxSize) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        if (width > height) { if (width > maxSize) { height = Math.round(height * maxSize / width); width = maxSize; } }
+        else { if (height > maxSize) { width = Math.round(width * maxSize / height); height = maxSize; } }
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.onerror = () => resolve(null);
+      img.src = reader.result;
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function checkUsernameLive(value) {
+  const hint = document.getElementById("username-hint");
+  const username = value.trim(); validatedUsername = null;
+  if (!username) { hint.className = "username-hint"; hint.textContent = ""; return; }
+  if (!/^[a-zA-Z0-9_-]+$/.test(username)) { hint.className = "username-hint err"; hint.textContent = "Только английские буквы, цифры, _ и -"; return; }
+  if (username.length < 3) { hint.className = "username-hint err"; hint.textContent = "Минимум 3 символа"; return; }
+  if (myProfile && username.toLowerCase() === myProfile.username.toLowerCase()) {
+    hint.className = "username-hint ok"; hint.textContent = "Это ваш текущий юзернейм"; validatedUsername = username; return;
+  }
+  hint.className = "username-hint"; hint.textContent = "Проверяю...";
+  const { data, error } = await supabase.from("profiles").select("id").ilike("username", username).neq("id", currentUser.id).limit(1);
+  if (document.getElementById("profile-username").value.trim() !== username) return;
+  if (error) { hint.className = "username-hint err"; hint.textContent = "Ошибка проверки"; return; }
+  if (data && data.length > 0) { hint.className = "username-hint err"; hint.textContent = `@${username} уже занят`; validatedUsername = null; }
+  else { hint.className = "username-hint ok"; hint.textContent = `@${username} свободен`; validatedUsername = username; }
+}
+
+// ======================= 8. ПРОФИЛЬ СОБЕСЕДНИКА =======================
+async function openUserProfileDialog() {
+  const user = currentOtherUser || pendingOtherUser;
+  if (!user) return;
+  const overlay = document.getElementById("user-profile-overlay");
+  const { data: freshProfile } = await supabase.from("profiles")
+    .select("id, username, display_name, avatar_url, created_at, last_seen, gender, birthday")
+    .eq("id", user.id).single();
+  const p = freshProfile || user;
+  profileCache.set(user.id, { ...profileCache.get(user.id), ...p });
+  paintAvatar(document.getElementById("user-profile-avatar"), p);
+  document.getElementById("user-profile-name").textContent = p.display_name || "—";
+  const statusEl = document.getElementById("user-profile-status");
+  statusEl.textContent = formatLastSeen(p);
+  statusEl.classList.toggle("online", isUserOnline(p));
+  document.getElementById("user-profile-username").textContent = "@" + (p.username || "");
+  const bdStr = formatBirthday(p.birthday);
+  const todayMD = (new Date().getMonth() + 1) * 100 + new Date().getDate();
+  const bdMD = parseBirthdayMD(p.birthday);
+  const isBd = bdMD && bdMD === todayMD;
+  document.getElementById("user-profile-birthday").innerHTML = escapeHtml(bdStr) + (isBd && bdStr !== "—" ? '<span class="bd-party">🎉</span>' : "");
+  document.getElementById("user-profile-created").textContent = p.created_at ? new Date(p.created_at).toLocaleDateString("ru-RU") : "—";
+  let msgCount = 0;
+  if (currentChatId) {
+    const { data: msgs } = await supabase.from("messages").select("id").eq("chat_id", currentChatId);
+    msgCount = (msgs || []).filter((m) => !hiddenMsgIds.has(m.id)).length;
+  }
+  document.getElementById("user-profile-msgcount").textContent = String(msgCount);
+  const { count: totalGifts } = await supabase.from("user_gifts")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", user.id).eq("in_profile", true);
+  document.getElementById("user-profile-gifts-count").textContent = String(totalGifts || 0);
+  document.getElementById("user-profile-gifts-btn").onclick = () => openGiftsOverlay(user.id);
+  overlay.classList.remove("hidden");
+}
+
+// ======================= 9. БЛОКИРОВКИ =======================
+async function loadBlocks() {
+  myBlockedIds = new Set(); blockedMeIds = new Set();
+  const { data, error } = await supabase.from("blocked_users").select("blocker_id, blocked_id");
+  if (error) { console.error(error); return; }
+  (data || []).forEach((b) => {
+    if (b.blocker_id === currentUser.id) myBlockedIds.add(b.blocked_id);
+    if (b.blocked_id === currentUser.id) blockedMeIds.add(b.blocker_id);
+  });
+}
+async function blockUser(userId) {
+  const { error } = await supabase.from("blocked_users").insert({ blocker_id: currentUser.id, blocked_id: userId });
+  if (error) { await showAlertDialog("Ошибка", "Не удалось: " + error.message); return; }
+  await loadBlocks();
+}
+async function unblockUser(userId) {
+  const { error } = await supabase.from("blocked_users").delete().eq("blocker_id", currentUser.id).eq("blocked_id", userId);
+  if (error) { await showAlertDialog("Ошибка", "Не удалось: " + error.message); return; }
+  await loadBlocks();
+}
+function isBlockedByMe(id) { return myBlockedIds.has(id); }
+function hasBlockedMe(id) { return blockedMeIds.has(id); }
+
+function subscribeToBlocks() {
+  if (blocksChannel) return;
+  blocksChannel = supabase.channel("blocks-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "blocked_users" }, async () => {
+      await loadBlocks();
+      if (currentOtherUser) updateBlockUI();
+    }).subscribe();
+}
+
+function subscribeToGlobalChanges() {
+  if (globalChannel) return;
+  globalChannel = supabase.channel("global-changes")
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "chats" }, (payload) => {
+      const id = payload.old && payload.old.id; if (!id) return;
+      if (currentChatId === id) closeCurrentChat();
+      removeChatFromList(id);
+    }).subscribe();
+}
+
+function subscribeToMemberships() {
+  if (membershipChannel) return;
+  membershipChannel = supabase.channel("membership-changes")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_members" }, (payload) => {
+      if (payload.new.user_id === currentUser.id && !document.getElementById("search-input").value.trim()) {
+        loadRecentChats();
+      }
+    })
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_members" }, (payload) => {
+      if (payload.old && payload.old.user_id === currentUser.id) {
+        const chatId = payload.old.chat_id;
+        if (currentChatId === chatId) closeCurrentChat();
+        removeChatFromList(chatId);
+      }
+    }).subscribe();
+}
+
+function subscribeToReads() {
+  if (readsChannel) return;
+  readsChannel = supabase.channel("reads-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "chat_reads" }, (payload) => {
+      const r = payload.new || payload.old; if (!r) return;
+      if (r.user_id === currentUser.id) {
+        chatReads.set(r.chat_id, new Date(r.last_read_at).getTime());
+        if (r.chat_id === currentChatId) {
+          const data = chatLastMsg.get(r.chat_id); if (data) { data.unread = 0; chatLastMsg.set(r.chat_id, data); }
+          updateChatItemPreview(r.chat_id);
+        }
+      }
+    }).subscribe();
+}
+
+function subscribeToGlobalMessages() {
+  if (globalMsgsChannel) return;
+  globalMsgsChannel = supabase.channel("global-msgs")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+      const m = payload.new; if (!m) return;
+      const time = new Date(m.created_at).getTime();
+      const prev = chatLastMsg.get(m.chat_id) || {};
+      const isMine = m.sender_id === currentUser.id;
+      chatLastMsg.set(m.chat_id, {
+        text: m.message_type === "tokens" ? `🧩 +${m.tokens_amount}`
+             : m.message_type === "gift" ? "🎁 Подарок"
+             : (m.content || ""),
+        time, senderId: m.sender_id,
+        unread: isMine ? (prev.unread || 0) : (prev.unread || 0) + 1,
+      });
+      if (!document.getElementById("search-input").value.trim()) {
+        updateChatItemPreview(m.chat_id);
+        resortChatsList();
+      }
+      if (currentChatId === m.chat_id && !isMine) {
+        setTimeout(() => markChatRead(m.chat_id), 300);
+      }
+    }).subscribe();
+}
+
+function updateUserEverywhere(profile) {
+  const itemEl = document.querySelector(`.user-item[data-user-id="${profile.id}"]`);
+  if (itemEl) {
+    paintAvatar(itemEl.querySelector(".avatar"), profile);
+    const nameEl = itemEl.querySelector(".user-item-name");
+    if (nameEl) {
+      const custom = itemEl.dataset.customName;
+      nameEl.textContent = (custom || profile.display_name) + (isBlockedByMe(profile.id) ? " 🚫" : "");
+    }
+  }
+  if (currentOtherUser && currentOtherUser.id === profile.id) {
+    Object.assign(currentOtherUser, profile);
+    paintAvatar(document.getElementById("chat-avatar"), currentOtherUser);
+    const custom = document.querySelector(`.user-item[data-user-id="${profile.id}"]`)?.dataset.customName;
+    document.getElementById("chat-title").textContent = custom || profile.display_name;
+    renderChatSubtitle();
+  }
+}
+
+function subscribeToProfiles() {
+  if (profilesChannel) return;
+  profilesChannel = supabase.channel("profiles-changes")
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, (payload) => {
+      const p = payload.new; profileCache.set(p.id, p);
+      if (p.id === currentUser.id) {
+        myProfile = { ...myProfile, ...p };
+        paintAvatar(document.getElementById("me-avatar"), myProfile);
+        document.getElementById("me-name").textContent = p.display_name;
+        document.getElementById("me-username").textContent = "@" + p.username;
+      }
+      updateUserEverywhere(p);
+      if (currentOtherUser && currentOtherUser.id === p.id) renderChatSubtitle();
+      const i = cachedProfilesForBirthday.findIndex((x) => x.id === p.id);
+      if (i !== -1) cachedProfilesForBirthday[i] = { ...cachedProfilesForBirthday[i], ...p };
+      renderBirthdayBanner();
+    }).subscribe();
+}
+
+// ======================= 10. СПИСОК ЧАТОВ =======================
+async function loadRecentChats() {
+  const listEl = document.getElementById("users-list");
+  document.getElementById("section-title").textContent = "Чаты";
+  listEl.innerHTML = '<div class="empty">Загрузка...</div>';
+
+  const { data: myChats, error: e1 } = await supabase.from("chat_members").select("chat_id, custom_name").eq("user_id", currentUser.id);
+  if (e1 || !myChats || myChats.length === 0) {
+    listEl.innerHTML = '<div class="empty">У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.</div>';
+    chatIdByUser.clear(); return;
+  }
+  const chatIds = myChats.map((c) => c.chat_id);
+
+  const [msgsRes, othersRes, readsRes, hidesRes] = await Promise.all([
+    supabase.from("messages").select("id, chat_id, sender_id, content, created_at, message_type, tokens_amount, delivered_at, read_at")
+      .in("chat_id", chatIds).order("created_at", { ascending: false }).limit(1000),
+    supabase.from("chat_members").select("chat_id, user_id").in("chat_id", chatIds).neq("user_id", currentUser.id),
+    supabase.from("chat_reads").select("chat_id, last_read_at").eq("user_id", currentUser.id),
+    supabase.from("chat_hides").select("chat_id, hidden_at").eq("user_id", currentUser.id),
+  ]);
+  const msgs = msgsRes.data || [], others = othersRes.data || [], reads = readsRes.data || [], hides = hidesRes.data || [];
+  const hideMap = new Map((hides || []).map((h) => [h.chat_id, new Date(h.hidden_at).getTime()]));
+  const readMap = new Map((reads || []).map((r) => [r.chat_id, new Date(r.last_read_at).getTime()]));
+  chatReads = readMap;
+
+  const lastMsgPerChat = new Map();
+  const unreadCountPerChat = new Map();
+  msgs.forEach((m) => {
+    if (!lastMsgPerChat.has(m.chat_id)) lastMsgPerChat.set(m.chat_id, m);
+    const readAt = readMap.get(m.chat_id) || 0;
+    const msgTime = new Date(m.created_at).getTime();
+    if (m.sender_id !== currentUser.id && msgTime > readAt) {
+      unreadCountPerChat.set(m.chat_id, (unreadCountPerChat.get(m.chat_id) || 0) + 1);
+    }
+  });
+
+  chatLastMsg = new Map();
+  const items = []; const userIds = [];
+  const customNameByChatId = new Map();
+  myChats.forEach((c) => { if (c.custom_name) customNameByChatId.set(c.chat_id, c.custom_name); });
+
+  others.forEach((o) => {
+    const lastMsg = lastMsgPerChat.get(o.chat_id);
+    const hiddenAt = hideMap.get(o.chat_id);
+    const lastTime = lastMsg ? new Date(lastMsg.created_at).getTime() : 0;
+    if (hiddenAt && hiddenAt > lastTime) return;
+    items.push({
+      chat_id: o.chat_id, user_id: o.user_id, lastMsg, lastTime,
+      unread: unreadCountPerChat.get(o.chat_id) || 0,
+      customName: customNameByChatId.get(o.chat_id) || null,
+    });
+    userIds.push(o.user_id);
+  });
+
+  if (!items.length) {
+    listEl.innerHTML = '<div class="empty">У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.</div>';
+    chatIdByUser.clear(); return;
+  }
+  const uniqueUserIds = [...new Set(userIds)];
+  const { data: profiles } = await supabase.from("profiles")
+    .select("id, username, display_name, avatar_url, last_seen, gender, birthday").in("id", uniqueUserIds);
+  (profiles || []).forEach((p) => profileCache.set(p.id, p));
+  const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+  items.sort((a, b) => b.lastTime - a.lastTime);
+  chatIdByUser.clear();
+  items.forEach((it) => {
+    chatIdByUser.set(it.user_id, it.chat_id);
+    const preview = it.lastMsg
+      ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
+        : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
+        : (it.lastMsg.content || ""))
+      : "";
+    chatLastMsg.set(it.chat_id, { text: preview, time: it.lastTime, senderId: it.lastMsg ? it.lastMsg.sender_id : null, unread: it.unread });
+  });
+  renderChatList(items, profileMap);
+  cachedProfilesForBirthday = profiles || [];
+  renderBirthdayBanner();
+}
+
+function renderChatList(items, profileMap) {
+  const listEl = document.getElementById("users-list");
+  if (!items.length) { listEl.innerHTML = '<div class="empty">У вас пока нет чатов.</div>'; return; }
+  listEl.innerHTML = items.map((it) => {
+    const user = profileMap.get(it.user_id); if (!user) return "";
+    const blocked = isBlockedByMe(user.id) ? " 🚫" : "";
+    const name = it.customName || user.display_name;
+    const time = it.lastTime ? formatChatTime(it.lastTime) : "";
+    const preview = it.lastMsg
+      ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
+        : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
+        : ((it.lastMsg.sender_id === currentUser.id ? "Вы: " : "") + (it.lastMsg.content || "")))
+      : "Нет сообщений";
+    const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
+    return `
+      <div class="user-item" data-user-id="${user.id}" data-chat-id="${it.chat_id}" data-custom-name="${it.customName ? escapeHtml(it.customName) : ""}">
+        <div class="avatar"></div>
+        <div class="user-item-body">
+          <div class="user-item-row1">
+            <div class="user-item-name">${escapeHtml(name)}${blocked}</div>
+            <div class="user-item-time">${time}</div>
+          </div>
+          <div class="user-item-row2">
+            <div class="user-item-preview ${it.unread > 0 ? "unread" : ""}">${escapeHtml(preview.slice(0, 60))}</div>
+            ${unreadHtml}
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+
+  listEl.querySelectorAll(".user-item").forEach((el) => {
+    const userId = el.dataset.userId;
+    const user = profileMap.get(userId) || profileCache.get(userId);
+    if (!user) return;
+    paintAvatar(el.querySelector(".avatar"), user);
+    el.addEventListener("click", () => {
+      listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
+      el.classList.add("active");
+      openChatWith(user);
+    });
+    el.addEventListener("contextmenu", (ev) => { ev.preventDefault(); openChatListContextMenu(ev, user, el); });
+  });
+}
+
+function updateChatItemPreview(chatId) {
+  const el = document.querySelector(`.user-item[data-chat-id="${chatId}"]`); if (!el) return;
+  const data = chatLastMsg.get(chatId); if (!data) return;
+  const previewEl = el.querySelector(".user-item-preview");
+  const timeEl = el.querySelector(".user-item-time");
+  let preview = data.text || "Нет сообщений";
+  if (preview && !preview.startsWith("🧩") && !preview.startsWith("🎁") && data.senderId === currentUser.id) preview = "Вы: " + preview;
+  if (previewEl) { previewEl.textContent = preview.slice(0, 60); previewEl.classList.toggle("unread", data.unread > 0); }
+  if (timeEl) timeEl.textContent = data.time ? formatChatTime(data.time) : "";
+  const row2 = el.querySelector(".user-item-row2");
+  if (row2) {
+    let badge = row2.querySelector(".unread-badge");
+    if (data.unread > 0) {
+      if (!badge) { badge = document.createElement("span"); badge.className = "unread-badge"; row2.appendChild(badge); }
+      badge.textContent = String(data.unread);
+    } else if (badge) badge.remove();
+  }
+}
+
+function resortChatsList() {
+  const listEl = document.getElementById("users-list");
+  const items = [...listEl.querySelectorAll(".user-item")];
+  if (!items.length) return;
+  items.sort((a, b) => {
+    const aChat = a.dataset.chatId, bChat = b.dataset.chatId;
+    const at = (chatLastMsg.get(aChat) || {}).time || 0;
+    const bt = (chatLastMsg.get(bChat) || {}).time || 0;
+    return bt - at;
+  });
+  items.forEach((it) => listEl.appendChild(it));
+}
+
+function removeChatFromList(chatId) {
+  const el = document.querySelector(`.user-item[data-chat-id="${chatId}"]`);
+  if (el) el.remove();
+  chatLastMsg.delete(chatId);
+  for (const [uid, cid] of chatIdByUser.entries()) if (cid === chatId) chatIdByUser.delete(uid);
+  const listEl = document.getElementById("users-list");
+  if (listEl.querySelectorAll(".user-item").length === 0) listEl.innerHTML = '<div class="empty">У вас пока нет чатов.</div>';
+}
+
 // ======================= 11. ПОИСК =======================
 function setupSearch() {
   const input = document.getElementById("search-input");
