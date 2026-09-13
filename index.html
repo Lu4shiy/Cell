@@ -65,15 +65,29 @@
   </aside>
 
   <!-- ПРАВАЯ ЧАСТЬ: окно чата -->
-  <main class="chat-area" id="chat-area">
-    <div class="chat-placeholder">
-      <div class="chat-placeholder-icon">💬</div>
-      <p>Выбери человека слева, чтобы начать переписку</p>
-    </div>
+<main class="chat-area" id="chat-area">
+  <div class="chat-placeholder" id="chat-placeholder">
+    <div class="chat-placeholder-icon">💬</div>
+    <p>Выбери человека слева, чтобы начать переписку</p>
+  </div>
 
-    <!-- Сюда будет вставляться настоящий чат в следующем шаге -->
-    <div id="chat-content" class="hidden"></div>
-  </main>
+  <div id="chat-content" class="chat-content hidden">
+    <header class="chat-header">
+      <div class="avatar" id="chat-avatar">?</div>
+      <div class="chat-header-text">
+        <div class="chat-title" id="chat-title">Имя</div>
+        <div class="chat-subtitle" id="chat-subtitle">@username</div>
+      </div>
+    </header>
+
+    <div class="messages" id="messages"></div>
+
+    <form class="composer" id="composer">
+      <input type="text" id="message-input" placeholder="Написать сообщение..." autocomplete="off" maxlength="4000">
+      <button type="submit" class="send-btn" title="Отправить">➤</button>
+    </form>
+  </div>
+</main>
 
 </div>
 
