@@ -28,7 +28,7 @@
       </form>
 
       <form id="register-form" class="form hidden">
-        <input type="text" id="reg-username" placeholder="Логин (например, ivan)" required>
+        <input type="text" id="reg-username" placeholder="Юзернейм (например, ivan)" required>
         <input type="text" id="reg-displayname" placeholder="Имя (например, Иван)" required>
         <input type="email" id="reg-email" placeholder="Email" required>
         <input type="password" id="reg-password" placeholder="Пароль (мин. 6 символов)" required minlength="6">
@@ -60,7 +60,8 @@
 
       <div id="birthday-banner" class="birthday-banner hidden">
         <span class="birthday-icon">🎂</span>
-        <span id="birthday-banner-text"></span>
+        <span id="birthday-banner-text" style="flex:1;"></span>
+        <button class="birthday-close" id="birthday-close" title="Скрыть">✕</button>
       </div>
 
       <div class="section-title" id="section-title">Недавние чаты</div>

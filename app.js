@@ -60,6 +60,11 @@ registerForm.addEventListener("submit", async (e) => {
   const email = document.getElementById("reg-email").value.trim();
   const password = document.getElementById("reg-password").value;
 
+  if (!/^[a-zA-Z0-9_-]{3,32}$/.test(username)) {
+    errEl.textContent = "Юзернейм: 3-32 символа, только a-z, 0-9, _ и -";
+    return;
+  }
+
   const { data, error } = await supabase.auth.signUp({
     email, password,
     options: { data: { username, display_name: displayName } },
@@ -118,10 +123,12 @@ let forwardSourceMsgs = [];
 let forwardSelectedChats = new Set();
 let profileCache = new Map();
 let cachedProfilesForBirthday = [];
+let birthdayBannerDismissed = false;
 
 let usernameCheckTimeout = null;
 let validatedUsername = null;
 let reactionsRefreshTimer = null;
+let giftCatalogCache = [];
 
 // ======================================================
 // 3. АКЦЕНТ / АВАТАРКИ
@@ -153,7 +160,6 @@ function paintAvatar(el, user) {
     el.textContent = ((user.display_name || "?")[0] || "?").toUpperCase();
     return;
   }
-  // Нет аватара — берём стабильный цвет по id, чтобы не зависел от акцента
   const seed = user && user.id ? user.id : (user && user.username) || "anon";
   const idx = hashCode(seed) % BASE_AVATARS.length;
   const [c1, c2] = BASE_AVATARS[idx];
@@ -181,6 +187,7 @@ function showAuth() {
   cachedProfilesForBirthday = [];
   replyToMsg = null; editingMsgId = null; selectionMode = false;
   validatedUsername = null; contextChatUser = null; contextChatCustomName = null;
+  birthdayBannerDismissed = false;
   [currentChannel, reactionsChannel, blocksChannel, globalChannel, profilesChannel]
     .forEach((ch) => ch && supabase.removeChannel(ch));
   currentChannel = reactionsChannel = blocksChannel = globalChannel = profilesChannel = null;
@@ -203,6 +210,8 @@ async function initApp() {
   setupForwardDialog();
   setupReplyBar();
   setupProfilePanel();
+  setupGiftsUI();
+  setupBirthdayClose();
   subscribeToBlocks();
   subscribeToGlobalChanges();
   subscribeToProfiles();
@@ -212,21 +221,41 @@ async function initApp() {
   await updateMyLastSeen();
   setInterval(() => {
     updateMyLastSeen();
-    if (currentOtherUser) renderChatSubtitle();
   }, 8000);
+
+  // Отдельный таймер: каждые 6 секунд подтягиваем last_seen собеседника
+  setInterval(async () => {
+    if (!currentOtherUser) return;
+    const { data } = await supabase.from("profiles")
+      .select("last_seen, gender, display_name, username, avatar_url, birthday")
+      .eq("id", currentOtherUser.id).single();
+    if (data) {
+      Object.assign(currentOtherUser, data);
+      profileCache.set(currentOtherUser.id, { ...profileCache.get(currentOtherUser.id), ...data });
+      renderChatSubtitle();
+      const itemEl = document.querySelector(`.user-item[data-user-id="${currentOtherUser.id}"]`);
+      if (itemEl) {
+        paintAvatar(itemEl.querySelector(".avatar"), currentOtherUser);
+        const nameEl = itemEl.querySelector(".user-item-name");
+        const unameEl = itemEl.querySelector(".user-item-username");
+        const custom = itemEl.dataset.customName;
+        if (nameEl) nameEl.textContent = (custom || currentOtherUser.display_name) + (isBlockedByMe(currentOtherUser.id) ? " 🚫" : "");
+        if (unameEl) unameEl.textContent = "@" + currentOtherUser.username;
+      }
+    }
+  }, 6000);
 }
 
 async function loadMyProfile() {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, username, display_name, avatar_url, accent_color, gender, last_seen, birthday, created_at")
+    .select("id, username, display_name, avatar_url, accent_color, gender, last_seen, birthday, created_at, imagi_tokens")
     .eq("id", currentUser.id).single();
   if (error) { console.error(error); return; }
   myProfile = data;
   profileCache.set(currentUser.id, data);
 
   applyAccent(data.accent_color || "orange");
-
   paintAvatar(document.getElementById("me-avatar"), data);
   document.getElementById("me-name").textContent = data.display_name;
   document.getElementById("me-username").textContent = "@" + data.username;
@@ -250,7 +279,7 @@ async function getProfile(id) {
 }
 
 // ======================================================
-// 6. УНИВЕРСАЛЬНЫЕ ДИАЛОГИ (замена alert / confirm / prompt)
+// 6. УНИВЕРСАЛЬНЫЕ ДИАЛОГИ
 // ======================================================
 
 function showAlertDialog(title, text) {
@@ -372,6 +401,8 @@ function showChoiceDialog(title, text, options, confirmLabel) {
 // 7. ПРОФИЛЬ (свой)
 // ======================================================
 
+let draftProfile = {};
+
 function setupProfilePanel() {
   document.getElementById("me-info-btn").addEventListener("click", openProfilePanel);
   document.getElementById("profile-close").addEventListener("click", () => {
@@ -380,7 +411,6 @@ function setupProfilePanel() {
 
   document.getElementById("avatar-upload").addEventListener("change", handleAvatarUpload);
 
-  // Сетка акцентов
   const grid = document.getElementById("accent-grid");
   grid.innerHTML = "";
   ACCENTS.forEach((a) => {
@@ -400,7 +430,6 @@ function setupProfilePanel() {
     await saveProfileField({ accent_color: accent });
   });
 
-  // Username — живая проверка
   const usernameInput = document.getElementById("profile-username");
   usernameInput.addEventListener("input", (e) => {
     clearTimeout(usernameCheckTimeout);
@@ -408,105 +437,95 @@ function setupProfilePanel() {
     const value = e.target.value;
     usernameCheckTimeout = setTimeout(() => checkUsernameLive(value), 350);
   });
-  usernameInput.addEventListener("blur", trySaveUsername);
-  usernameInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); trySaveUsername(); }
-  });
 
-  // Черновик профиля (применяется только по кнопке)
-  let draftProfile = {};
-
-  function markDirty() {
-    document.getElementById("profile-apply").disabled = false;
-  }
-
-  // Смена имени — только в черновик
   const dispInput = document.getElementById("profile-displayname");
   dispInput.addEventListener("input", () => {
     draftProfile.display_name = dispInput.value.trim();
-    markDirty();
+    markProfileDirty();
   });
 
-  // Пол — только в черновик
   document.getElementById("gender-toggle").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-gender]");
     if (!btn) return;
     draftProfile.gender = btn.dataset.gender;
     myProfile.gender = btn.dataset.gender;
     updateGenderButtons();
-    markDirty();
+    markProfileDirty();
   });
 
-  // День рождения — только в черновик
   const bdInput = document.getElementById("profile-birthday");
   bdInput.addEventListener("input", () => {
     draftProfile.birthday = bdInput.value.trim() || null;
-    markDirty();
+    markProfileDirty();
   });
 
-  // Применение
-  document.getElementById("profile-apply").addEventListener("click", async () => {
-    // Валидация username
-    const unameInput = document.getElementById("profile-username");
-    const unameVal = unameInput.value.trim();
-    if (unameVal && unameVal !== myProfile.username) {
-      if (unameVal !== validatedUsername) {
-        document.getElementById("username-hint").className = "username-hint err";
-        document.getElementById("username-hint").textContent = "Проверьте юзернейм";
-        return;
-      }
-    }
+  document.getElementById("profile-apply").addEventListener("click", applyProfileChanges);
 
-    // Проверка даты
-    if (draftProfile.birthday && !/^\d{2}\.\d{2}(\.\d{2,4})?$/.test(draftProfile.birthday)) {
-      await showAlertDialog("Ошибка", "Дата рождения в формате ДД.ММ или ДД.ММ.ГГГГ");
-      return;
-    }
-
-    // Сохраняем username
-    if (unameVal && unameVal !== myProfile.username) {
-      const { error } = await supabase.from("profiles")
-        .update({ username: unameVal }).eq("id", currentUser.id);
-      if (error) {
-        await showAlertDialog("Ошибка", "Не удалось сохранить юзернейм");
-        return;
-      }
-      myProfile.username = unameVal;
-      document.getElementById("me-username").textContent = "@" + unameVal;
-    }
-
-    // Сохраняем остальное
-    const payload = {};
-    if (draftProfile.display_name !== undefined && draftProfile.display_name) {
-      payload.display_name = draftProfile.display_name;
-    }
-    if (draftProfile.gender !== undefined) payload.gender = draftProfile.gender;
-    if (draftProfile.birthday !== undefined) payload.birthday = draftProfile.birthday;
-
-    if (Object.keys(payload).length) {
-      const { error } = await supabase.from("profiles")
-        .update(payload).eq("id", currentUser.id);
-      if (error) {
-        await showAlertDialog("Ошибка", error.message);
-        return;
-      }
-      Object.assign(myProfile, payload);
-      if (payload.display_name) {
-        document.getElementById("me-name").textContent = payload.display_name;
-      }
-      if (currentOtherUser) renderChatSubtitle();
-    }
-
-    draftProfile = {};
-    document.getElementById("profile-apply").disabled = true;
-    document.getElementById("username-hint").className = "username-hint ok";
-    document.getElementById("username-hint").textContent = "Сохранено";
-  });
-
-  // Кнопка подарков
   document.getElementById("profile-gifts-btn").addEventListener("click", () => {
     openGiftsOverlay(currentUser.id);
   });
+}
+
+function markProfileDirty() {
+  const btn = document.getElementById("profile-apply");
+  if (btn) btn.disabled = false;
+}
+
+async function applyProfileChanges() {
+  const unameInput = document.getElementById("profile-username");
+  const unameVal = unameInput.value.trim();
+
+  if (unameVal && unameVal !== myProfile.username) {
+    if (unameVal !== validatedUsername) {
+      const hint = document.getElementById("username-hint");
+      hint.className = "username-hint err";
+      hint.textContent = "Проверьте юзернейм";
+      return;
+    }
+  }
+
+  if (draftProfile.birthday && !/^\d{2}\.\d{2}(\.\d{2,4})?$/.test(draftProfile.birthday)) {
+    await showAlertDialog("Ошибка", "Дата рождения в формате ДД.ММ или ДД.ММ.ГГГГ");
+    return;
+  }
+
+  if (unameVal && unameVal !== myProfile.username) {
+    const { error } = await supabase.from("profiles")
+      .update({ username: unameVal }).eq("id", currentUser.id);
+    if (error) {
+      await showAlertDialog("Ошибка", "Не удалось сохранить юзернейм");
+      return;
+    }
+    myProfile.username = unameVal;
+    document.getElementById("me-username").textContent = "@" + unameVal;
+  }
+
+  const payload = {};
+  if (draftProfile.display_name !== undefined && draftProfile.display_name) {
+    payload.display_name = draftProfile.display_name;
+  }
+  if (draftProfile.gender !== undefined) payload.gender = draftProfile.gender;
+  if (draftProfile.birthday !== undefined) payload.birthday = draftProfile.birthday;
+
+  if (Object.keys(payload).length) {
+    const { error } = await supabase.from("profiles")
+      .update(payload).eq("id", currentUser.id);
+    if (error) {
+      await showAlertDialog("Ошибка", error.message);
+      return;
+    }
+    Object.assign(myProfile, payload);
+    if (payload.display_name) {
+      document.getElementById("me-name").textContent = payload.display_name;
+    }
+    if (currentOtherUser) renderChatSubtitle();
+  }
+
+  draftProfile = {};
+  document.getElementById("profile-apply").disabled = true;
+  const hint = document.getElementById("username-hint");
+  hint.className = "username-hint ok";
+  hint.textContent = "Сохранено";
 }
 
 async function openProfilePanel() {
@@ -519,8 +538,6 @@ async function openProfilePanel() {
 
   document.getElementById("profile-displayname").value = myProfile.display_name || "";
   document.getElementById("profile-birthday").value = myProfile.birthday || "";
-  document.getElementById("profile-apply").disabled = true;
-  await refreshMyGiftsCount();
   updateGenderButtons();
 
   const usernameInput = document.getElementById("profile-username");
@@ -529,6 +546,10 @@ async function openProfilePanel() {
   const hint = document.getElementById("username-hint");
   hint.className = "username-hint";
   hint.textContent = "";
+
+  draftProfile = {};
+  document.getElementById("profile-apply").disabled = true;
+  await refreshMyGiftsCount();
 }
 
 function renderAvatarGrid() {
@@ -664,34 +685,6 @@ async function checkUsernameLive(value) {
   }
 }
 
-async function trySaveUsername() {
-  const input = document.getElementById("profile-username");
-  const username = input.value.trim();
-  if (!username) return;
-  if (username === myProfile.username) return;
-  if (username !== validatedUsername) return;
-
-  const hint = document.getElementById("username-hint");
-  const { error } = await supabase.from("profiles")
-    .update({ username }).eq("id", currentUser.id);
-
-  if (error) {
-    const msg = String(error.message || "");
-    if (msg.toLowerCase().includes("duplicate") || error.code === "23505") {
-      hint.className = "username-hint err";
-      hint.textContent = `@${username} уже занят`;
-    } else {
-      hint.className = "username-hint err";
-      hint.textContent = "Не удалось сохранить";
-    }
-    return;
-  }
-  myProfile.username = username;
-  document.getElementById("me-username").textContent = "@" + username;
-  hint.className = "username-hint ok";
-  hint.textContent = "Сохранено";
-}
-
 // ======================================================
 // 8. ПРОФИЛЬ СОБЕСЕДНИКА
 // ======================================================
@@ -707,6 +700,7 @@ async function openUserProfileDialog() {
     .eq("id", user.id).single();
 
   const p = freshProfile || user;
+  profileCache.set(user.id, { ...profileCache.get(user.id), ...p });
 
   paintAvatar(document.getElementById("user-profile-avatar"), p);
   document.getElementById("user-profile-name").textContent = p.display_name || "—";
@@ -717,41 +711,27 @@ async function openUserProfileDialog() {
 
   document.getElementById("user-profile-username").textContent = "@" + (p.username || "");
 
-  document.getElementById("user-profile-birthday").textContent = formatBirthday(p.birthday);
+  const bdStr = formatBirthday(p.birthday);
+  const todayMD = (new Date().getMonth() + 1) * 100 + new Date().getDate();
+  const bdMD = parseBirthdayMD(p.birthday);
+  const isBd = bdMD && bdMD === todayMD;
+  document.getElementById("user-profile-birthday").innerHTML =
+    escapeHtml(bdStr) + (isBd && bdStr !== "—" ? '<span class="bd-party">🎉</span>' : "");
 
   document.getElementById("user-profile-created").textContent =
     p.created_at ? new Date(p.created_at).toLocaleDateString("ru-RU") : "—";
 
-  // Считаем ВСЕ видимые мне сообщения в чате
   const { data: msgs } = await supabase
     .from("messages").select("id").eq("chat_id", currentChatId);
   const visibleMsgs = (msgs || []).filter((m) => !hiddenMsgIds.has(m.id));
   document.getElementById("user-profile-msgcount").textContent = String(visibleMsgs.length);
 
-  // Подарки в профиле
+  // Подарки — считаем только видимые
   const { count: totalGifts } = await supabase.from("user_gifts")
-    .select("id", { count: "exact", head: true }).eq("owner_id", user.id);
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", user.id).eq("in_profile", true);
   document.getElementById("user-profile-gifts-count").textContent = String(totalGifts || 0);
   document.getElementById("user-profile-gifts-btn").onclick = () => openGiftsOverlay(user.id);
-
-  const strip = document.getElementById("user-profile-gifts");
-  strip.innerHTML = "";
-  const visibleGifts = await loadVisibleGiftsForProfile(user.id);
-  if (visibleGifts.length) {
-    const catalog = await loadGiftCatalog();
-    const catMap = new Map(catalog.map((c) => [c.id, c]));
-    visibleGifts.forEach((ug) => {
-      const cat = catMap.get(ug.gift_id);
-      if (!cat) return;
-      const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
-      const el = document.createElement("div");
-      el.className = "gift-mini";
-      el.style.cssText = bg;
-      el.textContent = cat.emoji;
-      el.title = cat.name + " #" + ug.serial_number;
-      strip.appendChild(el);
-    });
-  }
 
   overlay.classList.remove("hidden");
 }
@@ -826,7 +806,7 @@ function updateUserEverywhere(profile) {
   }
 
   if (currentOtherUser && currentOtherUser.id === profile.id) {
-    currentOtherUser = { ...currentOtherUser, ...profile };
+    Object.assign(currentOtherUser, profile);
     paintAvatar(document.getElementById("chat-avatar"), currentOtherUser);
     const custom = document.querySelector(`.user-item[data-user-id="${profile.id}"]`)?.dataset.customName;
     document.getElementById("chat-title").textContent = custom || profile.display_name;
@@ -851,7 +831,6 @@ function subscribeToProfiles() {
       updateUserEverywhere(p);
       if (currentOtherUser && currentOtherUser.id === p.id) renderChatSubtitle();
 
-      // Обновим кэш для дня рождения
       const i = cachedProfilesForBirthday.findIndex((x) => x.id === p.id);
       if (i !== -1) cachedProfilesForBirthday[i] = { ...cachedProfilesForBirthday[i], ...p };
       renderBirthdayBanner();
@@ -952,7 +931,7 @@ async function performSearch(query) {
   listEl.innerHTML = '<div class="empty">Ищу...</div>';
 
   const { data, error } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, last_seen, gender")
+    .select("id, username, display_name, avatar_url, last_seen, gender, birthday")
     .neq("id", currentUser.id).ilike("username", `%${clean}%`)
     .order("username").limit(20);
   if (error) { listEl.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
@@ -1053,7 +1032,6 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
     if (newName === null) return;
     const trimmed = newName.trim();
 
-    // Ищем chat_id с этим пользователем
     const { data: myMemberships } = await supabase
       .from("chat_members").select("chat_id").eq("user_id", currentUser.id);
     const myChatIds = (myMemberships || []).map((m) => m.chat_id);
@@ -1075,7 +1053,6 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
       return;
     }
 
-    // Обновляем в UI без перезагрузки
     const el = document.querySelector(`.user-item[data-user-id="${user.id}"]`);
     if (el) {
       el.dataset.customName = valueToSave || "";
@@ -1337,7 +1314,7 @@ async function updateMessageInUI(msg) {
 
 async function openChatByUsername(username) {
   const { data } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, last_seen, gender").eq("username", username).single();
+    .select("id, username, display_name, avatar_url, last_seen, gender, birthday").eq("username", username).single();
   if (!data) return;
   if (data.id === currentUser.id) return;
   document.getElementById("search-input").value = "";
@@ -1995,9 +1972,6 @@ function updateForwardInfo() {
 }
 
 function setupForwardDialog() {
-  // Подарки — кнопки закрытия
-  const giftsCloseBtn = document.getElementById("gifts-close");
-  if (giftsCloseBtn) giftsCloseBtn.addEventListener("click", closeGiftsOverlay);
   document.getElementById("forward-cancel").addEventListener("click", () => {
     document.getElementById("forward-overlay").classList.add("hidden");
     if (selectionMode) exitSelectionMode();
@@ -2038,9 +2012,25 @@ async function sendForward() {
 // 26. ДНИ РОЖДЕНИЯ
 // ======================================================
 
+function setupBirthdayClose() {
+  const closeBtn = document.getElementById("birthday-close");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      birthdayBannerDismissed = true;
+      document.getElementById("birthday-banner").classList.add("hidden");
+    });
+  }
+}
+
 function renderBirthdayBanner() {
   const banner = document.getElementById("birthday-banner");
   if (!banner) return;
+
+  if (birthdayBannerDismissed) {
+    banner.classList.add("hidden");
+    return;
+  }
 
   const today = new Date();
   const todayMD = (today.getMonth() + 1) * 100 + today.getDate();
@@ -2062,15 +2052,58 @@ function renderBirthdayBanner() {
     `У ${cnt} вашего ${word} сегодня день рождения 🎉`;
 
   banner.classList.remove("hidden");
-  banner.onclick = async () => {
+  banner.onclick = async (e) => {
+    if (e.target.closest("#birthday-close")) return;
     const lines = celebrants.map((p) => `${p.display_name} (@${p.username})`).join("\n");
     await showAlertDialog("День рождения 🎂", "Сегодня поздравляем:\n\n" + lines);
   };
 }
 
+async function checkBirthdays() {
+  renderBirthdayBanner();
+}
+
 // ======================================================
-// 27. ПОЛ, ПАДЕЖИ, ПОСЛЕДНИЙ ВХОД
+// 27. ФОРМАТИРОВАНИЕ
 // ======================================================
+
+function formatDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const day = String(d.getDate()).padStart(2, "0");
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const y = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${day}.${mo}.${y} ${hh}:${mm}`;
+}
+
+function parseBirthdayMD(str) {
+  if (!str) return null;
+  const m = /^(\d{2})\.(\d{2})(?:\.(\d{2,4}))?$/.exec(str);
+  if (!m) return null;
+  const d = parseInt(m[1], 10);
+  const mo = parseInt(m[2], 10);
+  if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+  return mo * 100 + d;
+}
+
+function formatBirthday(str) {
+  if (!str) return "—";
+  const m = /^(\d{2})\.(\d{2})(?:\.(\d{2,4}))?$/.exec(str);
+  if (!m) return "—";
+  const day = parseInt(m[1], 10);
+  const mo = parseInt(m[2], 10);
+  const year = m[3];
+  const months = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+  let res = day + " " + months[mo - 1];
+  if (year) {
+    let y = year;
+    if (y.length === 2) y = "20" + y;
+    res += " " + y;
+  }
+  return res;
+}
 
 function pluralRu(n, one, few, many) {
   const mod10 = n % 10;
@@ -2094,7 +2127,7 @@ function formatLastSeen(profile) {
   if (!lastSeen) return "";
 
   const diffSec = Math.floor((now - lastSeen) / 1000);
-  if (diffSec < 45) return "в сети";
+  if (diffSec < 20) return "в сети";
 
   const wasVerb = genderVerb(profile);
   const diffMin = Math.floor(diffSec / 60);
@@ -2137,10 +2170,13 @@ async function updateMyLastSeen() {
 }
 
 // ======================================================
-// 27.5. ПОДАРКИ
+// 28. ПОДАРКИ
 // ======================================================
 
-let giftCatalogCache = [];
+function setupGiftsUI() {
+  const giftsCloseBtn = document.getElementById("gifts-close");
+  if (giftsCloseBtn) giftsCloseBtn.addEventListener("click", closeGiftsOverlay);
+}
 
 async function refreshMyGiftsCount() {
   if (!currentUser) return;
@@ -2148,7 +2184,8 @@ async function refreshMyGiftsCount() {
     .from("user_gifts")
     .select("id", { count: "exact", head: true })
     .eq("owner_id", currentUser.id);
-  document.getElementById("profile-gifts-count").textContent = String(count || 0);
+  const el = document.getElementById("profile-gifts-count");
+  if (el) el.textContent = String(count || 0);
 }
 
 async function refreshBalance() {
@@ -2156,7 +2193,8 @@ async function refreshBalance() {
     .select("imagi_tokens").eq("id", currentUser.id).single();
   if (data) {
     myProfile.imagi_tokens = data.imagi_tokens;
-    document.getElementById("gifts-balance").textContent = String(data.imagi_tokens);
+    const el = document.getElementById("gifts-balance");
+    if (el) el.textContent = String(data.imagi_tokens);
   }
 }
 
@@ -2210,10 +2248,9 @@ async function renderGiftsMain(userId) {
     title.textContent = "Подарки " + (p ? p.display_name : "");
   }
 
-  const { data: gifts } = await supabase
-    .from("user_gifts").select("*")
-    .eq("owner_id", userId)
-    .order("created_at", { ascending: false });
+  let giftsQuery = supabase.from("user_gifts").select("*").eq("owner_id", userId);
+  if (!isMe) giftsQuery = giftsQuery.eq("in_profile", true);
+  const { data: gifts } = await giftsQuery.order("created_at", { ascending: false });
 
   const catalog = await loadGiftCatalog();
   const catalogMap = new Map(catalog.map((g) => [g.id, g]));
@@ -2228,9 +2265,7 @@ async function renderGiftsMain(userId) {
     if (isMe) {
       html += `<div class="empty">У вас пока нет подарков.</div>`;
     } else {
-      html += `<div class="empty">У этого пользователя ещё нет подарков.<br><br>Хотите отправить?<br><br>
-        <button class="gift-card-button" id="send-gift-btn" style="margin-top:8px;">🎁 Отправить подарок</button>
-      </div>`;
+      html += `<div class="empty">У этого пользователя нет подарков.</div>`;
     }
   } else {
     gifts.forEach((ug) => {
@@ -2255,10 +2290,7 @@ async function renderGiftsMain(userId) {
     const openBtn = document.getElementById("open-catalog-btn");
     if (openBtn) openBtn.addEventListener("click", () => renderCatalog(userId));
   }
-  const sendBtn = document.getElementById("send-gift-btn");
-  if (sendBtn) sendBtn.addEventListener("click", () => renderCatalog(userId));
 
-  // Клик на карточку — детали
   content.querySelectorAll(".gift-card").forEach((el) => {
     el.addEventListener("click", () => {
       const ugId = el.dataset.giftUgId;
@@ -2284,7 +2316,6 @@ async function renderCatalog(recipientId) {
     return;
   }
 
-  // Считаем сколько уже продано каждого
   const { data: sold } = await supabase.from("user_gifts").select("gift_id");
   const soldMap = new Map();
   (sold || []).forEach((s) => {
@@ -2297,10 +2328,9 @@ async function renderCatalog(recipientId) {
     const supplyText = g.max_supply !== null
       ? `${soldCount} / ${g.max_supply}`
       : `${soldCount}`;
-    const bg = "background: var(--bg-input);";
     return `
       <div class="gift-card" data-cat-id="${g.id}">
-        <div class="gift-card-emoji" style="${bg}">${g.emoji}</div>
+        <div class="gift-card-emoji" style="background: var(--bg-input);">${g.emoji}</div>
         <div class="gift-card-body">
           <div class="gift-card-name">${escapeHtml(g.name)}</div>
           <div class="gift-card-sub gift-rarity-${g.rarity}">${giftRarityLabel(g.rarity)}${g.collection ? " · " + escapeHtml(g.collection) : ""} · ${supplyText}</div>
@@ -2371,6 +2401,9 @@ function openGiftPurchase(gift, recipientId) {
 }
 
 async function renderGiftDetail(ownerId, ug) {
+  const { data: fresh } = await supabase.from("user_gifts").select("*").eq("id", ug.id).single();
+  if (fresh) ug = fresh;
+
   const content = document.getElementById("gifts-content");
   const title = document.getElementById("gifts-title");
   const backBtn = document.getElementById("gifts-back");
@@ -2384,16 +2417,17 @@ async function renderGiftDetail(ownerId, ug) {
 
   const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
   const isOwner = ug.owner_id === currentUser.id;
-
-  let ownerHtml = "";
-  if (isOwner) {
-    ownerHtml = `<div class="gift-detail-row"><span class="gdr-label">Узор</span><span class="gdr-value">${ug.background_rarity === "gradient" ? "Градиент" : (ug.background_rarity === "monotone" ? "Монотонный" : "—")}</span></div>`;
-  }
+  const isInProfile = ug.in_profile === true;
 
   let giftedFromHtml = "";
   if (ug.gifted_from) {
     const gp = profileCache.get(ug.gifted_from);
     giftedFromHtml = `<div class="gift-detail-row"><span class="gdr-label">От</span><span class="gdr-value">${gp ? escapeHtml(gp.display_name) : "—"}</span></div>`;
+  }
+
+  let bgRow = "";
+  if (ug.background_name) {
+    bgRow = `<div class="gift-detail-row"><span class="gdr-label">Фон</span><span class="gdr-value">${escapeHtml(ug.background_name)}${ug.background_rarity === "gradient" ? " · градиент" : ""}</span></div>`;
   }
 
   content.innerHTML = `
@@ -2404,15 +2438,16 @@ async function renderGiftDetail(ownerId, ug) {
 
       <div class="gift-detail-rows">
         ${giftedFromHtml}
-        ${ownerHtml}
+        ${bgRow}
         <div class="gift-detail-row"><span class="gdr-label">Стоимость</span><span class="gdr-value">🧩 ${cat.price}</span></div>
+        <div class="gift-detail-row"><span class="gdr-label">Дата получения</span><span class="gdr-value">${formatDateTime(ug.created_at)}</span></div>
         ${ug.caption ? `<div class="gift-detail-row"><span class="gdr-label">Подпись</span><span class="gdr-value">${escapeHtml(ug.caption)}</span></div>` : ""}
       </div>
 
       <div class="gift-detail-actions">
         ${isOwner ? `
-          <button class="dialog-btn ${ug.in_profile ? "dialog-cancel" : "dialog-primary"}" id="gift-toggle-visible">
-            ${ug.in_profile ? "Скрыть из профиля" : "Добавить в профиль"}
+          <button class="dialog-btn ${isInProfile ? "dialog-cancel" : "dialog-primary"}" id="gift-toggle-visible">
+            ${isInProfile ? "Скрыть из профиля" : "Добавить в профиль"}
           </button>
           <button class="dialog-btn" id="gift-send">🎁 Подарить</button>
           <button class="dialog-btn" id="gift-sell">💰 Продать за 🧩 ${Math.floor(cat.price * 0.85)}</button>
@@ -2424,10 +2459,12 @@ async function renderGiftDetail(ownerId, ug) {
 
   if (isOwner) {
     document.getElementById("gift-toggle-visible").addEventListener("click", async () => {
+      const newVal = !isInProfile;
       const { error } = await supabase.from("user_gifts")
-        .update({ in_profile: !ug.in_profile }).eq("id", ug.id);
+        .update({ in_profile: newVal }).eq("id", ug.id);
       if (error) { await showAlertDialog("Ошибка", error.message); return; }
-      ug.in_profile = !ug.in_profile;
+      ug.in_profile = newVal;
+      await refreshMyGiftsCount();
       renderGiftDetail(ownerId, ug);
     });
 
@@ -2493,47 +2530,9 @@ async function openGiftSend(ug) {
   };
 }
 
-async function loadVisibleGiftsForProfile(userId) {
-  const { data } = await supabase.from("user_gifts")
-    .select("*").eq("owner_id", userId).eq("in_profile", true)
-    .order("created_at", { ascending: false }).limit(20);
-  return data || [];
-}
-
 // ======================================================
-// 28. XSS + автопроверка сессии
+// 29. XSS + автопроверка сессии
 // ======================================================
-
-// ======================================================
-// Форматирование ДР (без года / с годом)
-// ======================================================
-
-function parseBirthdayMD(str) {
-  if (!str) return null;
-  const m = /^(\d{2})\.(\d{2})(?:\.(\d{2,4}))?$/.exec(str);
-  if (!m) return null;
-  const d = parseInt(m[1], 10);
-  const mo = parseInt(m[2], 10);
-  if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
-  return mo * 100 + d;
-}
-
-function formatBirthday(str) {
-  if (!str) return "—";
-  const m = /^(\d{2})\.(\d{2})(?:\.(\d{2,4}))?$/.exec(str);
-  if (!m) return "—";
-  const day = parseInt(m[1], 10);
-  const mo = parseInt(m[2], 10);
-  const year = m[3];
-  const months = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
-  let res = day + " " + months[mo - 1];
-  if (year) {
-    let y = year;
-    if (y.length === 2) y = "20" + y;
-    res += " " + y;
-  }
-  return res;
-}
 
 function escapeHtml(str) {
   if (!str) return "";
