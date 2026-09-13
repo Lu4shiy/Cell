@@ -180,6 +180,10 @@ let channelCreateAvatarUrl = "color:0";
 let channelUsernameCheckTimeout = null;
 let channelUsernameValidated = null;
 let channelProfileChannelId = null;
+let currentChannelIsSubscribed = false;
+let currentChannelViewsMap = new Map();
+let currentChannelTotalViews = 0;
+let currentChannelViewsChannel = null;
 let usernameCheckTimeout = null, validatedUsername = null, reactionsRefreshTimer = null;
 let giftCatalogCache = [];
 let lastSeenInterval = null, otherUserInterval = null, statusPollInterval = null, deliveredInterval = null;
@@ -688,11 +692,13 @@ function subscribeToMemberships() {
   if (membershipChannel) return;
   membershipChannel = supabase.channel("membership-changes")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_members" }, async (payload) => {
-      // Обновить счётчик подписчиков, если это текущий канал
       if (currentChannelObj && currentChannelObj.id === payload.new.chat_id) {
         await updateChannelSubtitle(payload.new.chat_id);
+        if (payload.new.user_id === currentUser.id) {
+          currentChannelIsSubscribed = true;
+          await updateChannelComposerState();
+        }
       }
-      // Меня добавили
       if (payload.new.user_id === currentUser.id) {
         const chatId = payload.new.chat_id;
         if (document.querySelector(`.user-item[data-chat-id="${chatId}"]`)) return;
@@ -706,6 +712,10 @@ function subscribeToMemberships() {
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_members" }, (payload) => {
       if (currentChannelObj && currentChannelObj.id === payload.old.chat_id) {
         updateChannelSubtitle(payload.old.chat_id);
+        if (payload.old.user_id === currentUser.id) {
+          currentChannelIsSubscribed = false;
+          updateChannelComposerState();
+        }
       }
       if (payload.old && payload.old.user_id === currentUser.id) {
         const chatId = payload.old.chat_id;
@@ -1056,18 +1066,23 @@ async function updateChannelSubtitle(chatId) {
 }
 
 async function updateChannelComposerState() {
-  const inputEl = document.getElementById("message-input");
-  const sendBtn = document.getElementById("send-btn");
+  const composer = document.getElementById("composer");
+  const actionBar = document.getElementById("channel-action-bar");
+  const subBtn = document.getElementById("channel-subscribe-btn");
   if (!currentChannelObj) return;
   if (currentChannelIsAdmin) {
-    inputEl.setAttribute("contenteditable", "true");
-    inputEl.setAttribute("data-placeholder", "Написать в канал...");
-    sendBtn.disabled = false;
+    composer.classList.remove("hidden");
+    actionBar.classList.add("hidden");
   } else {
-    inputEl.setAttribute("contenteditable", "false");
-    inputEl.setAttribute("data-placeholder", "Только администраторы могут писать");
-    inputEl.innerHTML = "";
-    sendBtn.disabled = true;
+    composer.classList.add("hidden");
+    actionBar.classList.remove("hidden");
+    if (currentChannelIsSubscribed) {
+      subBtn.textContent = "Отписаться";
+      subBtn.classList.add("unsub");
+    } else {
+      subBtn.textContent = "Подписаться";
+      subBtn.classList.remove("unsub");
+    }
   }
 }
 
@@ -1077,6 +1092,8 @@ async function openChannel(chatId) {
   channelCache.set(chatId, ch);
   currentChannelObj = ch;
   currentOtherUser = null; pendingOtherUser = null;
+  currentChannelViewsMap = new Map();
+  currentChannelTotalViews = 0;
 
   const searchInput = document.getElementById("search-input");
   if (searchInput && searchInput.value.trim()) {
@@ -1091,16 +1108,24 @@ async function openChannel(chatId) {
   document.getElementById("chat-menu").classList.add("hidden");
   exitSelectionMode(); cancelReply(); cancelEdit(); closeReactionPicker();
 
+  // Подписан ли я?
+  const { data: mem } = await supabase.from("chat_members")
+    .select("chat_id").eq("chat_id", ch.id).eq("user_id", currentUser.id).maybeSingle();
+  currentChannelIsSubscribed = !!mem;
+
   currentChannelIsAdmin = await checkChannelAdmin(ch.id, currentUser.id);
   await updateChannelSubtitle(ch.id);
   await updateChannelComposerState();
-    configureChatMenuForChannel(ch);
+  configureChatMenuForChannel(ch);
 
   currentChatId = chatId;
   await loadMessages(chatId);
   await loadReactionsForVisibleMessages();
-  subscribeToChat(chatId); subscribeToReactions();
-  await markChatRead(chatId);
+  subscribeToChat(chatId);
+  subscribeToReactions();
+  subscribeToChannelViews(chatId);
+
+  if (currentChannelIsSubscribed) await markChatRead(chatId);
 }
 
 function updateChatItemPreview(chatId) {
@@ -1448,7 +1473,9 @@ async function openChatWith(otherUser) {
   currentChannelObj = null; currentChannelIsAdmin = false;
   document.getElementById("message-input").setAttribute("contenteditable", "true");
   document.getElementById("message-input").setAttribute("data-placeholder", "Написать сообщение...");
-    resetChatMenuToDm();
+  resetChatMenuToDm();
+  document.getElementById("composer").classList.remove("hidden");
+  document.getElementById("channel-action-bar").classList.add("hidden");
   const searchInput = document.getElementById("search-input");
   if (searchInput && searchInput.value.trim()) {
     searchInput.value = "";
@@ -1532,6 +1559,7 @@ async function loadMessages(chatId) {
   const box = document.getElementById("messages");
   box.innerHTML = '<div class="empty">Загрузка...</div>';
   msgCache.clear(); hiddenMsgIds = new Set(); reactionsCache.clear();
+  currentChannelViewsMap = new Map();
 
   const { data: hides } = await supabase.from("message_hides").select("message_id").eq("user_id", currentUser.id);
   hiddenMsgIds = new Set((hides || []).map((h) => h.message_id));
@@ -1548,8 +1576,35 @@ async function loadMessages(chatId) {
   all.forEach((m) => msgCache.set(m.id, m));
   const visible = all.filter((m) => !hiddenMsgIds.has(m.id));
   if (visible.length === 0) { box.innerHTML = '<div class="empty">Пока сообщений нет. Напиши первым!</div>'; return; }
+
+  const isChannel = channelCache.has(chatId);
+
+  // Счётчики просмотров — только для канала
+  if (isChannel && visible.length) {
+    const ids = visible.map((m) => m.id);
+    const chunks = [];
+    for (let i = 0; i < ids.length; i += 500) chunks.push(ids.slice(i, i + 500));
+    for (const chunk of chunks) {
+      const { data: views } = await supabase.rpc("get_message_view_counts", { p_message_ids: chunk });
+      (views || []).forEach((v) => currentChannelViewsMap.set(v.message_id, Number(v.views) || 0));
+    }
+  }
+
   for (const m of visible) await appendMessage(m);
   scrollToBottom();
+
+  // Отправляем свои просмотры — только для канала, только для чужих сообщений
+  if (isChannel) {
+    const nonMyIds = visible.filter((m) => m.sender_id !== currentUser.id).map((m) => m.id);
+    if (nonMyIds.length) {
+      const rows = nonMyIds.map((id) => ({ message_id: id, user_id: currentUser.id }));
+      for (let i = 0; i < rows.length; i += 500) {
+        await supabase.from("message_views").upsert(rows.slice(i, i + 500), {
+          onConflict: "message_id,user_id", ignoreDuplicates: true,
+        });
+      }
+    }
+  }
 }
 
 async function loadReactionsForVisibleMessages() {
@@ -1636,7 +1691,14 @@ async function buildMsgHtml(msg) {
   }
   html += `<div class="msg-text">${applyFormatting(escapeHtml(msg.content || ""))}</div>`;
   html += `<div class="msg-reactions" data-reactions-for="${msg.id}"></div>`;
-  html += `<div class="msg-time">${time}${renderMsgStatus(msg)}`;
+
+  let viewsHtml = "";
+  if (channelCache.has(msg.chat_id)) {
+    const vc = currentChannelViewsMap.get(msg.id) || 0;
+    if (vc > 0) viewsHtml = `<span class="msg-views">👁 ${vc}</span>`;
+  }
+
+  html += `<div class="msg-time">${viewsHtml}${time}${renderMsgStatus(msg)}`;
   if (msg.edited_at) html += `<span class="msg-edited">изменено</span>`;
   html += `</div>`;
   html += `<button class="msg-add-reaction" data-add-reaction="${msg.id}" title="Реакция">😊</button>`;
@@ -1682,6 +1744,55 @@ function updateMessageStatusInUI(msg) {
   const html = el.innerHTML;
   const newHtml = html.replace(/<span class="msg-status[^"]*">[^<]*<\/span>/, renderMsgStatus(msg));
   if (newHtml !== html) el.innerHTML = newHtml;
+}
+
+function updateMessageViewsInUI(msgId, count) {
+  const el = document.querySelector(`[data-id="${msgId}"]`);
+  if (!el) return;
+  const timeEl = el.querySelector(".msg-time");
+  if (!timeEl) return;
+  let viewsEl = timeEl.querySelector(".msg-views");
+  if (count > 0) {
+    if (!viewsEl) {
+      viewsEl = document.createElement("span");
+      viewsEl.className = "msg-views";
+      timeEl.insertBefore(viewsEl, timeEl.firstChild);
+    }
+    viewsEl.textContent = `👁 ${count}`;
+  } else if (viewsEl) {
+    viewsEl.remove();
+  }
+}
+
+function subtractViewsForDeletedMessage(msgId) {
+  const vc = currentChannelViewsMap.get(msgId) || 0;
+  currentChannelViewsMap.delete(msgId);
+  if (!vc) return;
+  currentChannelTotalViews = Math.max(0, currentChannelTotalViews - vc);
+  const viewsEl = document.getElementById("channel-profile-views");
+  if (viewsEl) viewsEl.textContent = String(currentChannelTotalViews);
+}
+
+function subscribeToChannelViews(chatId) {
+  if (currentChannelViewsChannel) { supabase.removeChannel(currentChannelViewsChannel); currentChannelViewsChannel = null; }
+  currentChannelViewsChannel = supabase.channel("views-" + chatId)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "message_views" }, (payload) => {
+      const mv = payload.new; if (!mv) return;
+      const m = msgCache.get(mv.message_id);
+      if (!m || m.chat_id !== currentChatId) return;
+      const next = (currentChannelViewsMap.get(mv.message_id) || 0) + 1;
+      currentChannelViewsMap.set(mv.message_id, next);
+      updateMessageViewsInUI(mv.message_id, next);
+    })
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "message_views" }, (payload) => {
+      const mv = payload.old; if (!mv) return;
+      const m = msgCache.get(mv.message_id);
+      if (!m || m.chat_id !== currentChatId) return;
+      const next = Math.max(0, (currentChannelViewsMap.get(mv.message_id) || 0) - 1);
+      currentChannelViewsMap.set(mv.message_id, next);
+      updateMessageViewsInUI(mv.message_id, next);
+    })
+    .subscribe();
 }
 
 function onMsgClick(e) {
@@ -1859,13 +1970,22 @@ function subscribeToChat(chatId) {
       async (payload) => {
         const m = payload.new;
         if (!m || m.chat_id !== currentChatId) return;
-        // свои текстовые уже показаны локально, но системные (tokens/gift) — тоже свои, их надо показать
         if (m.sender_id === currentUser.id && m.message_type !== "tokens" && m.message_type !== "gift") return;
         if (document.querySelector(`[data-id="${m.id}"]`)) return;
         await appendMessage(m);
         scrollToBottom();
-        // Помечаем прочитанным — я в чате
-        markChatRead(chatId);
+        if (currentChannelObj) {
+          if (currentChannelIsSubscribed) markChatRead(chatId);
+          if (m.sender_id !== currentUser.id) {
+            // Отметить просмотр
+            await supabase.from("message_views").upsert(
+              { message_id: m.id, user_id: currentUser.id },
+              { onConflict: "message_id,user_id", ignoreDuplicates: true }
+            );
+          }
+        } else {
+          markChatRead(chatId);
+        }
       })
     .on("postgres_changes",
       { event: "UPDATE", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
@@ -1885,6 +2005,7 @@ function subscribeToChat(chatId) {
         const id = payload.old && payload.old.id;
         if (!id) return;
         msgCache.delete(id); reactionsCache.delete(id);
+        subtractViewsForDeletedMessage(id);
         const el = document.querySelector(`[data-id="${id}"]`);
         if (el) el.remove();
         checkEmptyChat();
@@ -2151,6 +2272,10 @@ async function deleteChatForBoth() {
 function closeCurrentChat() {
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
   currentChannelObj = null; currentChannelIsAdmin = false;
+  currentChannelIsSubscribed = false;
+  currentChannelViewsMap = new Map();
+  currentChannelTotalViews = 0;
+  if (currentChannelViewsChannel) { supabase.removeChannel(currentChannelViewsChannel); currentChannelViewsChannel = null; }
   if (currentChannel) { supabase.removeChannel(currentChannel); currentChannel = null; }
   if (reactionsChannel) { supabase.removeChannel(reactionsChannel); reactionsChannel = null; }
   cancelReply(); cancelEdit(); exitSelectionMode(); closeReactionPicker();
@@ -2406,6 +2531,7 @@ async function deleteMessageForBoth(msgId) {
   const { error } = await supabase.from("messages").delete().eq("id", msgId);
   if (error) { await showAlertDialog("Ошибка", error.message); return; }
   msgCache.delete(msgId); reactionsCache.delete(msgId);
+  subtractViewsForDeletedMessage(msgId);
   const el = document.querySelector(`[data-id="${msgId}"]`);
   if (el) el.remove();
   checkEmptyChat();
@@ -2481,6 +2607,7 @@ async function handleDeleteSelected() {
     if (error) { await showAlertDialog("Ошибка", error.message); return; }
     ids.forEach((id) => {
       msgCache.delete(id); reactionsCache.delete(id);
+      subtractViewsForDeletedMessage(id);
       const el = document.querySelector(`[data-id="${id}"]`);
       if (el) el.remove();
     });
@@ -3240,6 +3367,29 @@ function setupChannelCreate() {
     channelUsernameCheckTimeout = setTimeout(() => checkChannelUsernameLive(value), 350);
   });
   document.getElementById("channel-name-input").addEventListener("input", updateChannelCreateButton);
+  // Кнопка подписки
+  const subBtn = document.getElementById("channel-subscribe-btn");
+  if (subBtn) subBtn.addEventListener("click", async () => {
+    if (!currentChannelObj) return;
+    subBtn.disabled = true;
+    if (currentChannelIsSubscribed) {
+      const { error } = await supabase.from("chat_members")
+        .delete().eq("chat_id", currentChannelObj.id).eq("user_id", currentUser.id);
+      subBtn.disabled = false;
+      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      currentChannelIsSubscribed = false;
+      removeChatFromList(currentChannelObj.id);
+    } else {
+      const { error } = await supabase.from("chat_members")
+        .insert({ chat_id: currentChannelObj.id, user_id: currentUser.id });
+      subBtn.disabled = false;
+      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      currentChannelIsSubscribed = true;
+      await addOrUpdateChannelInList(currentChannelObj.id, currentChannelObj);
+    }
+    await updateChannelSubtitle(currentChannelObj.id);
+    await updateChannelComposerState();
+  });
 }
 
 function updateChannelCreateButton() {
@@ -3435,6 +3585,10 @@ async function openChannelProfileDialog() {
     ? new Date(ch.created_at).toLocaleDateString("ru-RU")
     : "—";
 
+  const { data: totalViews } = await supabase.rpc("get_channel_total_views", { p_chat_id: ch.id });
+  currentChannelTotalViews = Number(totalViews) || 0;
+  document.getElementById("channel-profile-views").textContent = String(currentChannelTotalViews);
+
   const menuBtn = document.getElementById("channel-profile-menu-btn");
   menuBtn.classList.toggle("hidden", ch.owner_id !== currentUser.id);
   document.getElementById("channel-profile-menu").classList.add("hidden");
@@ -3480,16 +3634,5 @@ async function deleteChannelDialog() {
 }
 
 async function joinAndOpenChannel(ch) {
-  const { data: membership } = await supabase.from("chat_members")
-    .select("chat_id").eq("chat_id", ch.id).eq("user_id", currentUser.id).maybeSingle();
-  if (!membership) {
-    const { error } = await supabase.from("chat_members").insert({
-      chat_id: ch.id, user_id: currentUser.id,
-    });
-    if (error) { await showAlertDialog("Ошибка", error.message); return; }
-  }
-  const searchInput = document.getElementById("search-input");
-  if (searchInput) searchInput.value = "";
-  await loadRecentChats();
   await openChannel(ch.id);
 }
