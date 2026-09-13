@@ -213,7 +213,7 @@ async function initApp() {
   setInterval(() => {
     updateMyLastSeen();
     if (currentOtherUser) renderChatSubtitle();
-  }, 30000);
+  }, 8000);
 }
 
 async function loadMyProfile() {
@@ -413,35 +413,99 @@ function setupProfilePanel() {
     if (e.key === "Enter") { e.preventDefault(); trySaveUsername(); }
   });
 
-  // Смена имени
+  // Черновик профиля (применяется только по кнопке)
+  let draftProfile = {};
+
+  function markDirty() {
+    document.getElementById("profile-apply").disabled = false;
+  }
+
+  // Смена имени — только в черновик
   const dispInput = document.getElementById("profile-displayname");
-  dispInput.addEventListener("blur", async () => {
-    const newName = dispInput.value.trim();
-    if (!newName || newName === myProfile.display_name) return;
-    await saveProfileField({ display_name: newName });
-    document.getElementById("me-name").textContent = newName;
-  });
-  dispInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); dispInput.blur(); }
+  dispInput.addEventListener("input", () => {
+    draftProfile.display_name = dispInput.value.trim();
+    markDirty();
   });
 
-  // Пол
-  document.getElementById("gender-toggle").addEventListener("click", async (e) => {
+  // Пол — только в черновик
+  document.getElementById("gender-toggle").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-gender]");
     if (!btn) return;
-    const g = btn.dataset.gender;
-    myProfile.gender = g;
+    draftProfile.gender = btn.dataset.gender;
+    myProfile.gender = btn.dataset.gender;
     updateGenderButtons();
-    await saveProfileField({ gender: g });
-    if (currentOtherUser) renderChatSubtitle();
+    markDirty();
   });
 
-  // День рождения
+  // День рождения — только в черновик
   const bdInput = document.getElementById("profile-birthday");
-  bdInput.addEventListener("change", async () => {
-    const val = bdInput.value || null;
-    myProfile.birthday = val;
-    await saveProfileField({ birthday: val });
+  bdInput.addEventListener("input", () => {
+    draftProfile.birthday = bdInput.value.trim() || null;
+    markDirty();
+  });
+
+  // Применение
+  document.getElementById("profile-apply").addEventListener("click", async () => {
+    // Валидация username
+    const unameInput = document.getElementById("profile-username");
+    const unameVal = unameInput.value.trim();
+    if (unameVal && unameVal !== myProfile.username) {
+      if (unameVal !== validatedUsername) {
+        document.getElementById("username-hint").className = "username-hint err";
+        document.getElementById("username-hint").textContent = "Проверьте юзернейм";
+        return;
+      }
+    }
+
+    // Проверка даты
+    if (draftProfile.birthday && !/^\d{2}\.\d{2}(\.\d{2,4})?$/.test(draftProfile.birthday)) {
+      await showAlertDialog("Ошибка", "Дата рождения в формате ДД.ММ или ДД.ММ.ГГГГ");
+      return;
+    }
+
+    // Сохраняем username
+    if (unameVal && unameVal !== myProfile.username) {
+      const { error } = await supabase.from("profiles")
+        .update({ username: unameVal }).eq("id", currentUser.id);
+      if (error) {
+        await showAlertDialog("Ошибка", "Не удалось сохранить юзернейм");
+        return;
+      }
+      myProfile.username = unameVal;
+      document.getElementById("me-username").textContent = "@" + unameVal;
+    }
+
+    // Сохраняем остальное
+    const payload = {};
+    if (draftProfile.display_name !== undefined && draftProfile.display_name) {
+      payload.display_name = draftProfile.display_name;
+    }
+    if (draftProfile.gender !== undefined) payload.gender = draftProfile.gender;
+    if (draftProfile.birthday !== undefined) payload.birthday = draftProfile.birthday;
+
+    if (Object.keys(payload).length) {
+      const { error } = await supabase.from("profiles")
+        .update(payload).eq("id", currentUser.id);
+      if (error) {
+        await showAlertDialog("Ошибка", error.message);
+        return;
+      }
+      Object.assign(myProfile, payload);
+      if (payload.display_name) {
+        document.getElementById("me-name").textContent = payload.display_name;
+      }
+      if (currentOtherUser) renderChatSubtitle();
+    }
+
+    draftProfile = {};
+    document.getElementById("profile-apply").disabled = true;
+    document.getElementById("username-hint").className = "username-hint ok";
+    document.getElementById("username-hint").textContent = "Сохранено";
+  });
+
+  // Кнопка подарков
+  document.getElementById("profile-gifts-btn").addEventListener("click", () => {
+    openGiftsOverlay(currentUser.id);
   });
 }
 
@@ -455,6 +519,8 @@ async function openProfilePanel() {
 
   document.getElementById("profile-displayname").value = myProfile.display_name || "";
   document.getElementById("profile-birthday").value = myProfile.birthday || "";
+  document.getElementById("profile-apply").disabled = true;
+  await refreshMyGiftsCount();
   updateGenderButtons();
 
   const usernameInput = document.getElementById("profile-username");
@@ -651,14 +717,7 @@ async function openUserProfileDialog() {
 
   document.getElementById("user-profile-username").textContent = "@" + (p.username || "");
 
-  if (p.birthday) {
-    const d = new Date(p.birthday);
-    document.getElementById("user-profile-birthday").textContent =
-      d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" }) +
-      " " + d.getFullYear();
-  } else {
-    document.getElementById("user-profile-birthday").textContent = "—";
-  }
+  document.getElementById("user-profile-birthday").textContent = formatBirthday(p.birthday);
 
   document.getElementById("user-profile-created").textContent =
     p.created_at ? new Date(p.created_at).toLocaleDateString("ru-RU") : "—";
@@ -668,6 +727,31 @@ async function openUserProfileDialog() {
     .from("messages").select("id").eq("chat_id", currentChatId);
   const visibleMsgs = (msgs || []).filter((m) => !hiddenMsgIds.has(m.id));
   document.getElementById("user-profile-msgcount").textContent = String(visibleMsgs.length);
+
+  // Подарки в профиле
+  const { count: totalGifts } = await supabase.from("user_gifts")
+    .select("id", { count: "exact", head: true }).eq("owner_id", user.id);
+  document.getElementById("user-profile-gifts-count").textContent = String(totalGifts || 0);
+  document.getElementById("user-profile-gifts-btn").onclick = () => openGiftsOverlay(user.id);
+
+  const strip = document.getElementById("user-profile-gifts");
+  strip.innerHTML = "";
+  const visibleGifts = await loadVisibleGiftsForProfile(user.id);
+  if (visibleGifts.length) {
+    const catalog = await loadGiftCatalog();
+    const catMap = new Map(catalog.map((c) => [c.id, c]));
+    visibleGifts.forEach((ug) => {
+      const cat = catMap.get(ug.gift_id);
+      if (!cat) return;
+      const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
+      const el = document.createElement("div");
+      el.className = "gift-mini";
+      el.style.cssText = bg;
+      el.textContent = cat.emoji;
+      el.title = cat.name + " #" + ug.serial_number;
+      strip.appendChild(el);
+    });
+  }
 
   overlay.classList.remove("hidden");
 }
@@ -1007,20 +1091,22 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
     user._customName = valueToSave || null;
 
   } else if (action === "clear") {
-    await openChatWith(user);
     const choice = await showChoiceDialog("Очистить чат", "Выбери, что очистить:", [
       { label: "Только у меня", value: "me" },
       { label: "У обоих", value: "both" },
     ], "Очистить");
+    if (!choice) return;
+    await openChatWith(user);
     if (choice === "me") await clearChatForMe();
     else if (choice === "both") await clearChatForBoth();
 
   } else if (action === "delete") {
-    await openChatWith(user);
     const choice = await showChoiceDialog("Удалить чат", "Что удалить?", [
       { label: "У меня (вернётся при новом сообщении)", value: "me" },
       { label: "У обоих (безвозвратно)", value: "both" },
     ], "Удалить");
+    if (!choice) return;
+    await openChatWith(user);
     if (choice === "me") await hideChatFromList();
     else if (choice === "both") await deleteChatForBoth();
 
@@ -1909,6 +1995,9 @@ function updateForwardInfo() {
 }
 
 function setupForwardDialog() {
+  // Подарки — кнопки закрытия
+  const giftsCloseBtn = document.getElementById("gifts-close");
+  if (giftsCloseBtn) giftsCloseBtn.addEventListener("click", closeGiftsOverlay);
   document.getElementById("forward-cancel").addEventListener("click", () => {
     document.getElementById("forward-overlay").classList.add("hidden");
     if (selectionMode) exitSelectionMode();
@@ -1957,9 +2046,8 @@ function renderBirthdayBanner() {
   const todayMD = (today.getMonth() + 1) * 100 + today.getDate();
 
   const celebrants = (cachedProfilesForBirthday || []).filter((p) => {
-    if (!p.birthday) return false;
-    const d = new Date(p.birthday);
-    return (d.getMonth() + 1) * 100 + d.getDate() === todayMD;
+    const md = parseBirthdayMD(p.birthday);
+    return md && md === todayMD;
   });
 
   if (celebrants.length === 0) {
@@ -2038,7 +2126,7 @@ function formatLastSeen(profile) {
 
 function isUserOnline(profile) {
   if (!profile || !profile.last_seen) return false;
-  return (Date.now() - new Date(profile.last_seen).getTime()) < 45000;
+  return (Date.now() - new Date(profile.last_seen).getTime()) < 20000;
 }
 
 async function updateMyLastSeen() {
@@ -2049,8 +2137,403 @@ async function updateMyLastSeen() {
 }
 
 // ======================================================
+// 27.5. ПОДАРКИ
+// ======================================================
+
+let giftCatalogCache = [];
+
+async function refreshMyGiftsCount() {
+  if (!currentUser) return;
+  const { count } = await supabase
+    .from("user_gifts")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", currentUser.id);
+  document.getElementById("profile-gifts-count").textContent = String(count || 0);
+}
+
+async function refreshBalance() {
+  const { data } = await supabase.from("profiles")
+    .select("imagi_tokens").eq("id", currentUser.id).single();
+  if (data) {
+    myProfile.imagi_tokens = data.imagi_tokens;
+    document.getElementById("gifts-balance").textContent = String(data.imagi_tokens);
+  }
+}
+
+function giftRarityLabel(r) {
+  if (r === "common") return "Обычный";
+  if (r === "rare") return "Редкий";
+  if (r === "epic") return "Эпический";
+  return r;
+}
+
+function giftBackgroundStyle(bg, bgType) {
+  if (!bg) return "background: var(--bg-input);";
+  if (bgType === "gradient") {
+    const [c1, c2] = bg.split("|");
+    return `background: linear-gradient(135deg, ${c1}, ${c2});`;
+  }
+  return `background: ${bg};`;
+}
+
+async function loadGiftCatalog() {
+  if (giftCatalogCache.length) return giftCatalogCache;
+  const { data } = await supabase.from("gift_catalog").select("*");
+  giftCatalogCache = data || [];
+  return giftCatalogCache;
+}
+
+function openGiftsOverlay(userId) {
+  const overlay = document.getElementById("gifts-overlay");
+  overlay.classList.remove("hidden");
+  refreshBalance();
+  renderGiftsMain(userId);
+}
+
+function closeGiftsOverlay() {
+  document.getElementById("gifts-overlay").classList.add("hidden");
+}
+
+async function renderGiftsMain(userId) {
+  const content = document.getElementById("gifts-content");
+  const title = document.getElementById("gifts-title");
+  const backBtn = document.getElementById("gifts-back");
+  backBtn.classList.add("hidden");
+  content.innerHTML = '<div class="empty">Загрузка...</div>';
+
+  const isMe = userId === currentUser.id;
+
+  if (isMe) {
+    title.textContent = "Мои подарки";
+  } else {
+    const p = profileCache.get(userId);
+    title.textContent = "Подарки " + (p ? p.display_name : "");
+  }
+
+  const { data: gifts } = await supabase
+    .from("user_gifts").select("*")
+    .eq("owner_id", userId)
+    .order("created_at", { ascending: false });
+
+  const catalog = await loadGiftCatalog();
+  const catalogMap = new Map(catalog.map((g) => [g.id, g]));
+
+  let html = "";
+
+  if (isMe) {
+    html += `<button class="gift-card-button" style="width:100%;padding:12px;margin-bottom:12px;" id="open-catalog-btn">🛍️ Купить подарок</button>`;
+  }
+
+  if (!gifts || gifts.length === 0) {
+    if (isMe) {
+      html += `<div class="empty">У вас пока нет подарков.</div>`;
+    } else {
+      html += `<div class="empty">У этого пользователя ещё нет подарков.<br><br>Хотите отправить?<br><br>
+        <button class="gift-card-button" id="send-gift-btn" style="margin-top:8px;">🎁 Отправить подарок</button>
+      </div>`;
+    }
+  } else {
+    gifts.forEach((ug) => {
+      const cat = catalogMap.get(ug.gift_id);
+      if (!cat) return;
+      const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
+      html += `
+        <div class="gift-card" data-gift-ug-id="${ug.id}">
+          <div class="gift-card-emoji" style="${bg}">${cat.emoji}</div>
+          <div class="gift-card-body">
+            <div class="gift-card-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
+            <div class="gift-card-sub gift-rarity-${cat.rarity}">${giftRarityLabel(cat.rarity)}${cat.collection ? " · " + escapeHtml(cat.collection) : ""}</div>
+          </div>
+          <div class="gift-card-price">🧩 ${cat.price}</div>
+        </div>`;
+    });
+  }
+
+  content.innerHTML = html;
+
+  if (isMe) {
+    const openBtn = document.getElementById("open-catalog-btn");
+    if (openBtn) openBtn.addEventListener("click", () => renderCatalog(userId));
+  }
+  const sendBtn = document.getElementById("send-gift-btn");
+  if (sendBtn) sendBtn.addEventListener("click", () => renderCatalog(userId));
+
+  // Клик на карточку — детали
+  content.querySelectorAll(".gift-card").forEach((el) => {
+    el.addEventListener("click", () => {
+      const ugId = el.dataset.giftUgId;
+      const ug = gifts.find((g) => g.id === ugId);
+      if (ug) renderGiftDetail(userId, ug);
+    });
+  });
+}
+
+async function renderCatalog(recipientId) {
+  const content = document.getElementById("gifts-content");
+  const title = document.getElementById("gifts-title");
+  const backBtn = document.getElementById("gifts-back");
+  backBtn.classList.remove("hidden");
+  backBtn.onclick = () => renderGiftsMain(recipientId);
+
+  title.textContent = "Каталог подарков";
+  content.innerHTML = '<div class="empty">Загрузка...</div>';
+
+  const catalog = await loadGiftCatalog();
+  if (!catalog.length) {
+    content.innerHTML = '<div class="empty">Каталог пуст</div>';
+    return;
+  }
+
+  // Считаем сколько уже продано каждого
+  const { data: sold } = await supabase.from("user_gifts").select("gift_id");
+  const soldMap = new Map();
+  (sold || []).forEach((s) => {
+    soldMap.set(s.gift_id, (soldMap.get(s.gift_id) || 0) + 1);
+  });
+
+  content.innerHTML = catalog.map((g) => {
+    const soldCount = soldMap.get(g.id) || 0;
+    const soldOut = g.max_supply !== null && soldCount >= g.max_supply;
+    const supplyText = g.max_supply !== null
+      ? `${soldCount} / ${g.max_supply}`
+      : `${soldCount}`;
+    const bg = "background: var(--bg-input);";
+    return `
+      <div class="gift-card" data-cat-id="${g.id}">
+        <div class="gift-card-emoji" style="${bg}">${g.emoji}</div>
+        <div class="gift-card-body">
+          <div class="gift-card-name">${escapeHtml(g.name)}</div>
+          <div class="gift-card-sub gift-rarity-${g.rarity}">${giftRarityLabel(g.rarity)}${g.collection ? " · " + escapeHtml(g.collection) : ""} · ${supplyText}</div>
+        </div>
+        <button class="gift-card-button" ${soldOut ? "disabled" : ""} data-buy="${g.id}">
+          ${soldOut ? "Распродано" : "🧩 " + g.price}
+        </button>
+      </div>`;
+  }).join("");
+
+  content.querySelectorAll("button[data-buy]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const gid = btn.dataset.buy;
+      const gift = catalog.find((g) => g.id === gid);
+      if (gift) openGiftPurchase(gift, recipientId);
+    });
+  });
+}
+
+function openGiftPurchase(gift, recipientId) {
+  const overlay = document.getElementById("gift-purchase-overlay");
+  const titleEl = document.getElementById("gift-purchase-title");
+  const infoEl = document.getElementById("gift-purchase-info");
+  const costEl = document.getElementById("gift-purchase-cost");
+  const captionInput = document.getElementById("gift-purchase-caption");
+  const confirmBtn = document.getElementById("gift-purchase-confirm");
+  const cancelBtn = document.getElementById("gift-purchase-cancel");
+
+  const isSelf = recipientId === currentUser.id;
+  const recipient = profileCache.get(recipientId);
+  const recipientName = isSelf ? "себе" : (recipient ? recipient.display_name : "пользователю");
+
+  titleEl.textContent = "Купить подарок " + recipientName;
+  infoEl.textContent = `${gift.emoji} ${gift.name} — ${giftRarityLabel(gift.rarity)}${gift.collection ? " · " + gift.collection : ""}`;
+  costEl.textContent = `Стоимость: 🧩 ${gift.price}`;
+  captionInput.value = "";
+
+  overlay.classList.remove("hidden");
+
+  confirmBtn.onclick = async () => {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "Покупаю...";
+    const caption = captionInput.value.trim() || null;
+
+    const { error } = await supabase.rpc("buy_gift", {
+      p_gift_id: gift.id,
+      p_recipient_id: recipientId,
+      p_caption: caption,
+    });
+
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = "Купить";
+
+    if (error) {
+      await showAlertDialog("Ошибка", error.message);
+      return;
+    }
+    overlay.classList.add("hidden");
+    await refreshBalance();
+    if (recipientId === currentUser.id) await refreshMyGiftsCount();
+    giftCatalogCache = [];
+    await loadGiftCatalog();
+    renderGiftsMain(recipientId);
+  };
+
+  cancelBtn.onclick = () => overlay.classList.add("hidden");
+}
+
+async function renderGiftDetail(ownerId, ug) {
+  const content = document.getElementById("gifts-content");
+  const title = document.getElementById("gifts-title");
+  const backBtn = document.getElementById("gifts-back");
+  backBtn.classList.remove("hidden");
+  backBtn.onclick = () => renderGiftsMain(ownerId);
+  title.textContent = "Подарок";
+
+  const catalog = await loadGiftCatalog();
+  const cat = catalog.find((c) => c.id === ug.gift_id);
+  if (!cat) { content.innerHTML = '<div class="empty">Не найдено</div>'; return; }
+
+  const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
+  const isOwner = ug.owner_id === currentUser.id;
+
+  let ownerHtml = "";
+  if (isOwner) {
+    ownerHtml = `<div class="gift-detail-row"><span class="gdr-label">Узор</span><span class="gdr-value">${ug.background_rarity === "gradient" ? "Градиент" : (ug.background_rarity === "monotone" ? "Монотонный" : "—")}</span></div>`;
+  }
+
+  let giftedFromHtml = "";
+  if (ug.gifted_from) {
+    const gp = profileCache.get(ug.gifted_from);
+    giftedFromHtml = `<div class="gift-detail-row"><span class="gdr-label">От</span><span class="gdr-value">${gp ? escapeHtml(gp.display_name) : "—"}</span></div>`;
+  }
+
+  content.innerHTML = `
+    <div class="gift-detail">
+      <div class="gift-detail-emoji" style="${bg}">${cat.emoji}</div>
+      <div class="gift-detail-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
+      <div class="gift-detail-sub gift-rarity-${cat.rarity}">${giftRarityLabel(cat.rarity)}${cat.collection ? " · " + escapeHtml(cat.collection) : ""}</div>
+
+      <div class="gift-detail-rows">
+        ${giftedFromHtml}
+        ${ownerHtml}
+        <div class="gift-detail-row"><span class="gdr-label">Стоимость</span><span class="gdr-value">🧩 ${cat.price}</span></div>
+        ${ug.caption ? `<div class="gift-detail-row"><span class="gdr-label">Подпись</span><span class="gdr-value">${escapeHtml(ug.caption)}</span></div>` : ""}
+      </div>
+
+      <div class="gift-detail-actions">
+        ${isOwner ? `
+          <button class="dialog-btn ${ug.in_profile ? "dialog-cancel" : "dialog-primary"}" id="gift-toggle-visible">
+            ${ug.in_profile ? "Скрыть из профиля" : "Добавить в профиль"}
+          </button>
+          <button class="dialog-btn" id="gift-send">🎁 Подарить</button>
+          <button class="dialog-btn" id="gift-sell">💰 Продать за 🧩 ${Math.floor(cat.price * 0.85)}</button>
+        ` : `
+          <div class="dialog-text" style="text-align:center;">Подарок принадлежит другому пользователю</div>
+        `}
+      </div>
+    </div>`;
+
+  if (isOwner) {
+    document.getElementById("gift-toggle-visible").addEventListener("click", async () => {
+      const { error } = await supabase.from("user_gifts")
+        .update({ in_profile: !ug.in_profile }).eq("id", ug.id);
+      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      ug.in_profile = !ug.in_profile;
+      renderGiftDetail(ownerId, ug);
+    });
+
+    document.getElementById("gift-send").addEventListener("click", () => openGiftSend(ug));
+
+    document.getElementById("gift-sell").addEventListener("click", async () => {
+      const ok = await showConfirmDialog("Продать подарок",
+        `Продать за 🧩 ${Math.floor(cat.price * 0.85)} (комиссия 15%)?`, "Продать");
+      if (!ok) return;
+      const { error } = await supabase.rpc("sell_gift", { p_user_gift_id: ug.id });
+      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      await refreshBalance();
+      await refreshMyGiftsCount();
+      renderGiftsMain(ownerId);
+    });
+  }
+}
+
+async function openGiftSend(ug) {
+  const overlay = document.getElementById("gift-send-overlay");
+  const listEl = document.getElementById("gift-send-list");
+  overlay.classList.remove("hidden");
+  listEl.innerHTML = '<div class="empty">Загрузка...</div>';
+
+  const { data: profiles } = await supabase.from("profiles")
+    .select("id, username, display_name, avatar_url")
+    .neq("id", currentUser.id);
+
+  let selectedId = null;
+
+  listEl.innerHTML = (profiles || []).map((p) => `
+    <div class="forward-item" data-uid="${p.id}">
+      <div class="avatar"></div>
+      <div class="fname">${escapeHtml(p.display_name)} <span style="color:var(--text-dim)">@${escapeHtml(p.username)}</span></div>
+      <div class="fcheck hidden">✓</div>
+    </div>
+  `).join("");
+
+  listEl.querySelectorAll(".forward-item").forEach((el) => {
+    const p = profiles.find((x) => x.id === el.dataset.uid);
+    paintAvatar(el.querySelector(".avatar"), p);
+    el.addEventListener("click", () => {
+      listEl.querySelectorAll(".forward-item").forEach((x) => {
+        x.classList.remove("selected");
+        x.querySelector(".fcheck").classList.add("hidden");
+      });
+      el.classList.add("selected");
+      el.querySelector(".fcheck").classList.remove("hidden");
+      selectedId = p.id;
+    });
+  });
+
+  document.getElementById("gift-send-cancel").onclick = () => overlay.classList.add("hidden");
+  document.getElementById("gift-send-confirm").onclick = async () => {
+    if (!selectedId) return;
+    const { error } = await supabase.from("user_gifts")
+      .update({ owner_id: selectedId, gifted_from: currentUser.id, in_profile: false })
+      .eq("id", ug.id);
+    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    overlay.classList.add("hidden");
+    await refreshMyGiftsCount();
+    closeGiftsOverlay();
+  };
+}
+
+async function loadVisibleGiftsForProfile(userId) {
+  const { data } = await supabase.from("user_gifts")
+    .select("*").eq("owner_id", userId).eq("in_profile", true)
+    .order("created_at", { ascending: false }).limit(20);
+  return data || [];
+}
+
+// ======================================================
 // 28. XSS + автопроверка сессии
 // ======================================================
+
+// ======================================================
+// Форматирование ДР (без года / с годом)
+// ======================================================
+
+function parseBirthdayMD(str) {
+  if (!str) return null;
+  const m = /^(\d{2})\.(\d{2})(?:\.(\d{2,4}))?$/.exec(str);
+  if (!m) return null;
+  const d = parseInt(m[1], 10);
+  const mo = parseInt(m[2], 10);
+  if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+  return mo * 100 + d;
+}
+
+function formatBirthday(str) {
+  if (!str) return "—";
+  const m = /^(\d{2})\.(\d{2})(?:\.(\d{2,4}))?$/.exec(str);
+  if (!m) return "—";
+  const day = parseInt(m[1], 10);
+  const mo = parseInt(m[2], 10);
+  const year = m[3];
+  const months = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+  let res = day + " " + months[mo - 1];
+  if (year) {
+    let y = year;
+    if (y.length === 2) y = "20" + y;
+    res += " " + y;
+  }
+  return res;
+}
 
 function escapeHtml(str) {
   if (!str) return "";

@@ -1133,3 +1133,234 @@ input:focus { border-color: var(--accent); }
   outline: none;
 }
 #profile-birthday:focus { border-color: var(--accent); }
+
+/* ====================================================== */
+/* Кнопка "Применить" и "Подарки" в профиле               */
+/* ====================================================== */
+
+.profile-gifts-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 15px;
+  font-family: inherit;
+  margin-bottom: 12px;
+  transition: background 0.15s;
+}
+.profile-gifts-btn:hover { background: var(--bg-hover); }
+
+.gifts-count-badge {
+  background: var(--accent);
+  color: #fff;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Лента подарков в профиле собеседника */
+.profile-gifts-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 14px;
+  min-height: 8px;
+}
+.profile-gifts-strip:empty { display: none; }
+
+.gift-mini {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  cursor: pointer;
+  transition: transform 0.1s;
+  border: 2px solid transparent;
+}
+.gift-mini:hover { transform: scale(1.08); }
+
+/* ====================================================== */
+/* Окно подарков                                          */
+/* ====================================================== */
+
+.dialog-gifts { max-width: 480px; }
+
+.gifts-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.gifts-back-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-sub);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+.gifts-back-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+.gifts-title {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.gifts-balance {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--bg-input);
+  padding: 6px 12px;
+  border-radius: 20px;
+}
+
+.gifts-content {
+  max-height: 60vh;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+
+/* ====================================================== */
+/* Карточка подарка                                       */
+/* ====================================================== */
+
+.gift-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+  transition: background 0.12s;
+}
+.gift-card:hover { background: var(--bg-hover); }
+
+.gift-card-emoji {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.gift-card-body { flex: 1; min-width: 0; }
+.gift-card-name { font-size: 15px; font-weight: 600; color: var(--text); }
+.gift-card-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.gift-card-price { font-size: 14px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+
+.gift-rarity-common { color: #9c8a7c; }
+.gift-rarity-rare { color: #4caf50; }
+.gift-rarity-epic { color: #e91e63; }
+
+.gift-card-button {
+  padding: 8px 14px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.gift-card-button:hover { background: var(--accent-hover); }
+.gift-card-button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.gift-card-button.secondary:hover { background: var(--bg-hover); }
+
+/* Детальный вид подарка */
+.gift-detail {
+  text-align: center;
+}
+
+.gift-detail-emoji {
+  width: 140px;
+  height: 140px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 72px;
+  margin: 10px 0 20px;
+}
+
+.gift-detail-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.gift-detail-sub {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 20px;
+}
+
+.gift-detail-rows {
+  text-align: left;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 0;
+  margin-bottom: 16px;
+}
+
+.gift-detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 4px;
+  font-size: 14px;
+}
+.gift-detail-row .gdr-label { color: var(--text-dim); }
+.gift-detail-row .gdr-value { color: var(--text); font-weight: 500; }
+
+.gift-detail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#gift-purchase-caption {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
+  margin-bottom: 12px;
+}
+#gift-purchase-caption:focus { border-color: var(--accent); }
+
+/* Иконка подарка в чатах (упрощённо — как сообщение) */
+.msg-gift {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px;
+  gap: 6px;
+}
+.msg-gift .mg-emoji { font-size: 42px; }
+.msg-gift .mg-name { font-size: 13px; font-weight: 600; }

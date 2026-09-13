@@ -184,7 +184,7 @@
 
       <div class="profile-section">
         <div class="profile-label">День рождения</div>
-        <input type="date" id="profile-birthday">
+        <input type="text" id="profile-birthday" placeholder="ДД.ММ или ДД.ММ.ГГГГ" maxlength="10">
       </div>
 
 
@@ -193,7 +193,13 @@
         <div class="accent-grid" id="accent-grid"></div>
       </div>
 
+      <button class="profile-gifts-btn" id="profile-gifts-btn">
+        <span>🎁 Подарки</span>
+        <span class="gifts-count-badge" id="profile-gifts-count">0</span>
+      </button>
+
       <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="profile-apply" disabled>Применить изменения</button>
         <button class="dialog-btn dialog-cancel" id="profile-close">Закрыть</button>
       </div>
     </div>
@@ -249,6 +255,14 @@
         </div>
       </div>
 
+      <!-- Подарки в профиле -->
+      <div id="user-profile-gifts" class="profile-gifts-strip"></div>
+
+      <button class="profile-gifts-btn" id="user-profile-gifts-btn">
+        <span>🎁 Подарки</span>
+        <span class="gifts-count-badge" id="user-profile-gifts-count">0</span>
+      </button>
+
       <div class="dialog-actions">
         <button class="dialog-btn dialog-cancel" id="user-profile-close">Закрыть</button>
       </div>
@@ -293,6 +307,48 @@
       <div class="dialog-actions">
         <button class="dialog-btn dialog-primary" id="forward-send">Переслать</button>
         <button class="dialog-btn dialog-cancel" id="forward-cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Окно подарков -->
+  <div id="gifts-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-gifts">
+      <div class="gifts-header">
+        <button class="gifts-back-btn hidden" id="gifts-back">←</button>
+        <div class="gifts-title" id="gifts-title">Подарки</div>
+        <div class="gifts-balance">🧩 <span id="gifts-balance">0</span></div>
+      </div>
+      <div id="gifts-content" class="gifts-content"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="gifts-close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Диалог покупки подарка -->
+  <div id="gift-purchase-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" id="gift-purchase-title">Купить подарок</div>
+      <div class="dialog-text" id="gift-purchase-info"></div>
+      <input type="text" id="gift-purchase-caption" placeholder="Подпись (необязательно)" maxlength="80">
+      <div class="dialog-text" id="gift-purchase-cost" style="text-align:center;font-weight:600;color:var(--accent);"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="gift-purchase-confirm">Купить</button>
+        <button class="dialog-btn dialog-cancel" id="gift-purchase-cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Диалог «Подарить» -->
+  <div id="gift-send-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title">Подарить подарок</div>
+      <div class="dialog-text">Выбери получателя</div>
+      <div id="gift-send-list" class="forward-list"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="gift-send-confirm">Подарить</button>
+        <button class="dialog-btn dialog-cancel" id="gift-send-cancel">Отмена</button>
       </div>
     </div>
   </div>
