@@ -71,22 +71,34 @@
     <p>Выбери человека слева, чтобы начать переписку</p>
   </div>
 
-  <div id="chat-content" class="chat-content hidden">
-    <header class="chat-header">
-      <div class="avatar" id="chat-avatar">?</div>
-      <div class="chat-header-text">
-        <div class="chat-title" id="chat-title">Имя</div>
-        <div class="chat-subtitle" id="chat-subtitle">@username</div>
-      </div>
-    </header>
+<div id="chat-content" class="chat-content hidden">
+  <header class="chat-header">
+    <div class="avatar" id="chat-avatar">?</div>
+    <div class="chat-header-text">
+      <div class="chat-title" id="chat-title">Имя</div>
+      <div class="chat-subtitle" id="chat-subtitle">@username</div>
+    </div>
+    <button id="chat-menu-btn" class="icon-btn" title="Меню">⋮</button>
+    <div id="chat-menu" class="menu hidden">
+      <button data-action="clear-me">Очистить у себя</button>
+      <button data-action="clear-all">Очистить у обоих</button>
+      <button data-action="block" id="menu-block">Заблокировать</button>
+      <button data-action="delete" class="danger">Удалить из списка</button>
+    </div>
+  </header>
 
-    <div class="messages" id="messages"></div>
-
-    <form class="composer" id="composer">
-      <input type="text" id="message-input" placeholder="Написать сообщение..." autocomplete="off" maxlength="4000">
-      <button type="submit" class="send-btn" title="Отправить">➤</button>
-    </form>
+  <div id="block-banner" class="block-banner hidden">
+    <span id="block-banner-text"></span>
+    <button id="unblock-btn" class="hidden">Разблокировать</button>
   </div>
+
+  <div class="messages" id="messages"></div>
+
+  <form class="composer" id="composer">
+    <input type="text" id="message-input" placeholder="Написать сообщение..." autocomplete="off" maxlength="4000">
+    <button type="submit" class="send-btn" title="Отправить">➤</button>
+  </form>
+</div>
 </main>
 
 </div>

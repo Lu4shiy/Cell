@@ -533,3 +533,82 @@ body {
   border-radius: 12px;
   margin: 12px 0 6px;
 }
+/* ====================================================== */
+/* Меню чата и баннер блокировки                          */
+/* ====================================================== */
+
+.chat-header {
+  position: relative;
+}
+
+.chat-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% - 4px);
+  right: 12px;
+  background: #1e2b38;
+  border: 1px solid #232e3c;
+  border-radius: 10px;
+  padding: 6px;
+  min-width: 230px;
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  color: #e6ebf0;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.menu button:hover {
+  background: #232e3c;
+}
+
+.menu button.danger {
+  color: #ff5b5b;
+}
+
+.block-banner {
+  padding: 10px 20px;
+  background: #3a1d1d;
+  border-bottom: 1px solid #4a2020;
+  color: #ffb3b3;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.block-banner button {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid #ff7a7a;
+  color: #ff7a7a;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.block-banner button:hover {
+  background: rgba(255,122,122,0.15);
+}
+
+.composer input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
