@@ -82,7 +82,7 @@ let currentUser = null;
 let currentChatId = null;
 let currentOtherUser = null;
 let currentChannel = null;
-let allUsersCache = [];
+let searchTimeout = null;
 
 function showApp(user) {
   currentUser = user;
@@ -109,7 +109,8 @@ function showAuth() {
 
 async function initApp() {
   await loadMyProfile();
-  await loadUsers();
+  setupSearch();
+  await loadRecentChats();
 }
 
 async function loadMyProfile() {
@@ -119,43 +120,125 @@ async function loadMyProfile() {
     .eq("id", currentUser.id)
     .single();
 
-  if (error) { console.error("Не удалось загрузить профиль:", error); return; }
+  if (error) { console.error(error); return; }
 
   document.getElementById("me-name").textContent = data.display_name;
   document.getElementById("me-username").textContent = "@" + data.username;
   document.getElementById("me-avatar").textContent = (data.display_name || "?")[0].toUpperCase();
 }
 
-async function loadUsers() {
+// ======================================================
+// 4. НЕДАВНИЕ ЧАТЫ (показываются, когда поиск пустой)
+// ======================================================
+
+async function loadRecentChats() {
   const listEl = document.getElementById("users-list");
+  document.getElementById("section-title").textContent = "Недавние чаты";
   listEl.innerHTML = '<div class="empty">Загрузка...</div>';
+
+  // 1) Все мои чаты
+  const { data: myChats, error: e1 } = await supabase
+    .from("chat_members")
+    .select("chat_id")
+    .eq("user_id", currentUser.id);
+
+  if (e1 || !myChats || myChats.length === 0) {
+    listEl.innerHTML = '<div class="empty">Введи @username выше, чтобы найти человека</div>';
+    return;
+  }
+
+  const chatIds = myChats.map((c) => c.chat_id);
+
+  // 2) Другие участники этих чатов
+  const { data: others, error: e2 } = await supabase
+    .from("chat_members")
+    .select("chat_id, user_id")
+    .in("chat_id", chatIds)
+    .neq("user_id", currentUser.id);
+
+  if (e2 || !others || others.length === 0) {
+    listEl.innerHTML = '<div class="empty">Введи @username выше, чтобы найти человека</div>';
+    return;
+  }
+
+  const userIds = [...new Set(others.map((o) => o.user_id))];
+
+  // 3) Профили этих людей
+  const { data: profiles, error: e3 } = await supabase
+    .from("profiles")
+    .select("id, username, display_name")
+    .in("id", userIds);
+
+  if (e3 || !profiles || profiles.length === 0) {
+    listEl.innerHTML = '<div class="empty">Введи @username выше, чтобы найти человека</div>';
+    return;
+  }
+
+  renderUsers(profiles);
+}
+
+// ======================================================
+// 5. ПОИСК ПО @USERNAME
+// ======================================================
+
+function setupSearch() {
+  const input = document.getElementById("search-input");
+  input.addEventListener("input", () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => performSearch(input.value.trim()), 250);
+  });
+}
+
+async function performSearch(query) {
+  const listEl = document.getElementById("users-list");
+  const titleEl = document.getElementById("section-title");
+
+  // Пусто — возвращаемся к недавним
+  if (!query) {
+    await loadRecentChats();
+    return;
+  }
+
+  titleEl.textContent = "Поиск";
+  const clean = query.replace(/^@+/, "").trim().toLowerCase();
+
+  if (!clean) {
+    listEl.innerHTML = '<div class="empty">Начни вводить @username</div>';
+    return;
+  }
+
+  listEl.innerHTML = '<div class="empty">Ищу...</div>';
 
   const { data, error } = await supabase
     .from("profiles")
     .select("id, username, display_name")
     .neq("id", currentUser.id)
-    .order("display_name");
+    .ilike("username", `%${clean}%`)
+    .order("username")
+    .limit(20);
 
   if (error) {
     listEl.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`;
     return;
   }
 
-  allUsersCache = data || [];
-
-  if (allUsersCache.length === 0) {
-    listEl.innerHTML = '<div class="empty">Пока никого нет. Позови друзей!</div>';
+  if (!data || data.length === 0) {
+    listEl.innerHTML = `<div class="empty">Никого не найдено по «${escapeHtml(query)}»</div>`;
     return;
   }
 
-  renderUsers(allUsersCache);
-  setupSearch();
+  renderUsers(data);
 }
+
+// ======================================================
+// 6. ОТРИСОВКА СПИСКА ЛЮДЕЙ
+// ======================================================
 
 function renderUsers(users) {
   const listEl = document.getElementById("users-list");
+
   if (!users.length) {
-    listEl.innerHTML = '<div class="empty">Никого не найдено</div>';
+    listEl.innerHTML = '<div class="empty">Пусто</div>';
     return;
   }
 
@@ -175,47 +258,31 @@ function renderUsers(users) {
   listEl.querySelectorAll(".user-item").forEach((el) => {
     el.addEventListener("click", () => {
       const userId = el.dataset.userId;
-      const user = allUsersCache.find((u) => u.id === userId);
+      const user = users.find((u) => u.id === userId);
       if (!user) return;
 
       listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
       el.classList.add("active");
-
       openChatWith(user);
     });
   });
 }
 
-function setupSearch() {
-  const input = document.getElementById("search-input");
-  input.oninput = () => {
-    const q = input.value.trim().toLowerCase();
-    const filtered = allUsersCache.filter((u) =>
-      u.display_name.toLowerCase().includes(q) ||
-      u.username.toLowerCase().includes(q)
-    );
-    renderUsers(filtered);
-  };
-}
-
 // ======================================================
-// 4. ОТКРЫТИЕ ЧАТА
+// 7. ОТКРЫТИЕ ЧАТА
 // ======================================================
 
 async function openChatWith(otherUser) {
   currentOtherUser = otherUser;
 
-  // Заголовок
   document.getElementById("chat-avatar").textContent = (otherUser.display_name || "?")[0].toUpperCase();
   document.getElementById("chat-title").textContent = otherUser.display_name;
   document.getElementById("chat-subtitle").textContent = "@" + otherUser.username;
 
-  // Переключаем заглушку на чат
   document.getElementById("chat-placeholder").classList.add("hidden");
   document.getElementById("chat-content").classList.remove("hidden");
   document.getElementById("messages").innerHTML = '<div class="empty">Загрузка сообщений...</div>';
 
-  // Ищем или создаём чат
   const chatId = await getOrCreateChat(otherUser.id);
   if (!chatId) {
     document.getElementById("messages").innerHTML = '<div class="empty">Не удалось открыть чат</div>';
@@ -223,15 +290,16 @@ async function openChatWith(otherUser) {
   }
 
   currentChatId = chatId;
-
-  // Загружаем сообщения и подписываемся на новые
   await loadMessages(chatId);
   subscribeToChat(chatId);
+
+  // Обновим список недавних — на случай, если чат новый
+  if (!document.getElementById("search-input").value.trim()) {
+    loadRecentChats();
+  }
 }
 
-// Находит существующий 1-на-1 чат между нами или создаёт новый
 async function getOrCreateChat(otherUserId) {
-  // Мои чаты
   const { data: myMemberships, error: err1 } = await supabase
     .from("chat_members")
     .select("chat_id")
@@ -249,20 +317,16 @@ async function getOrCreateChat(otherUserId) {
       .in("chat_id", myChatIds);
 
     if (err2) { console.error(err2); }
-
-    if (shared && shared.length > 0) {
-      return shared[0].chat_id;
-    }
+    if (shared && shared.length > 0) return shared[0].chat_id;
   }
 
-  // Создаём новый чат
   const { data: newChat, error: chatErr } = await supabase
     .from("chats")
     .insert({})
     .select()
     .single();
 
-  if (chatErr) { console.error("Не удалось создать чат:", chatErr); return null; }
+  if (chatErr) { console.error(chatErr); return null; }
 
   const { error: membersErr } = await supabase
     .from("chat_members")
@@ -271,13 +335,12 @@ async function getOrCreateChat(otherUserId) {
       { chat_id: newChat.id, user_id: otherUserId },
     ]);
 
-  if (membersErr) { console.error("Не удалось добавить участников:", membersErr); return null; }
-
+  if (membersErr) { console.error(membersErr); return null; }
   return newChat.id;
 }
 
 // ======================================================
-// 5. СООБЩЕНИЯ
+// 8. СООБЩЕНИЯ
 // ======================================================
 
 async function loadMessages(chatId) {
@@ -287,12 +350,13 @@ async function loadMessages(chatId) {
     .eq("chat_id", chatId)
     .order("created_at", { ascending: true });
 
+  const box = document.getElementById("messages");
+
   if (error) {
-    document.getElementById("messages").innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`;
+    box.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`;
     return;
   }
 
-  const box = document.getElementById("messages");
   box.innerHTML = "";
 
   if (!data || data.length === 0) {
@@ -307,7 +371,6 @@ async function loadMessages(chatId) {
 function appendMessage(msg) {
   const box = document.getElementById("messages");
 
-  // Если есть заглушка «Загрузка...» или «Пока сообщений нет» — убираем
   const empty = box.querySelector(".empty");
   if (empty) empty.remove();
 
@@ -321,10 +384,8 @@ function appendMessage(msg) {
     minute: "2-digit",
   });
 
-  el.innerHTML = `
-    <div class="msg-text">${escapeHtml(msg.content || "")}</div>
-    <div class="msg-time">${time}</div>
-  `;
+  // ВАЖНО: без пробелов между тегами — иначе pre-wrap их покажет
+  el.innerHTML = `<div class="msg-text">${escapeHtml(msg.content || "")}</div><div class="msg-time">${time}</div>`;
 
   box.appendChild(el);
 }
@@ -334,7 +395,6 @@ function scrollToBottom() {
   box.scrollTop = box.scrollHeight;
 }
 
-// Отправка сообщения
 document.getElementById("composer").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!currentChatId) return;
@@ -352,15 +412,13 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
   });
 
   if (error) {
-    console.error("Не удалось отправить:", error);
-    alert("Не удалось отправить сообщение: " + error.message);
+    console.error(error);
+    alert("Не удалось отправить: " + error.message);
   }
-  // Realtime сам пришлёт событие и отрисует сообщение — ничего не делаем вручную,
-  // чтобы не было дублирования.
 });
 
 // ======================================================
-// 6. REALTIME — подписка на новые сообщения
+// 9. REALTIME
 // ======================================================
 
 function subscribeToChat(chatId) {
@@ -381,19 +439,16 @@ function subscribeToChat(chatId) {
       },
       (payload) => {
         if (payload.new.chat_id !== currentChatId) return;
-        // Не рисуем дважды
         if (document.querySelector(`.msg[data-id="${payload.new.id}"]`)) return;
         appendMessage(payload.new);
         scrollToBottom();
       }
     )
-    .subscribe((status) => {
-      console.log("Realtime-канал:", status);
-    });
+    .subscribe((status) => console.log("Realtime:", status));
 }
 
 // ======================================================
-// 7. XSS-защита и автопроверка сессии
+// 10. XSS-защита и автопроверка сессии
 // ======================================================
 
 function escapeHtml(str) {

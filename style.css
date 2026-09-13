@@ -421,15 +421,28 @@ body {
 
 /* Пузырь сообщения */
 .msg {
-  max-width: 60%;
-  padding: 8px 12px 6px;
+  max-width: 70%;
+  padding: 6px 12px 8px;
   border-radius: 14px;
   font-size: 15px;
   line-height: 1.35;
   word-wrap: break-word;
-  white-space: pre-wrap;
   position: relative;
   animation: msgIn 0.15s ease-out;
+}
+
+.msg-text {
+  display: block;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.msg-time {
+  display: block;
+  font-size: 11px;
+  color: rgba(255,255,255,0.45);
+  text-align: right;
+  margin-top: 2px;
 }
 
 @keyframes msgIn {
