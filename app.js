@@ -2496,7 +2496,9 @@ function giftBackgroundStyle(bg, bgType) {
 
 async function loadGiftCatalog() {
   if (giftCatalogCache.length) return giftCatalogCache;
-  const { data } = await supabase.from("gift_catalog").select("*");
+  const { data } = await supabase.from("gift_catalog")
+    .select("*")
+    .eq("hidden", false);
   giftCatalogCache = data || [];
   return giftCatalogCache;
 }
