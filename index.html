@@ -72,20 +72,19 @@
   </div>
 
 <div id="chat-content" class="chat-content hidden">
-  <header class="chat-header">
-    <div class="avatar" id="chat-avatar">?</div>
-    <div class="chat-header-text">
-      <div class="chat-title" id="chat-title">Имя</div>
-      <div class="chat-subtitle" id="chat-subtitle">@username</div>
-    </div>
-    <button id="chat-menu-btn" class="icon-btn" title="Меню">⋮</button>
-    <div id="chat-menu" class="menu hidden">
-      <button data-action="clear-me">Очистить у себя</button>
-      <button data-action="clear-all">Очистить у обоих</button>
-      <button data-action="block" id="menu-block">Заблокировать</button>
-      <button data-action="delete" class="danger">Удалить из списка</button>
-    </div>
-  </header>
+<header class="chat-header">
+  <div class="avatar" id="chat-avatar">?</div>
+  <div class="chat-header-text">
+    <div class="chat-title" id="chat-title">Имя</div>
+    <div class="chat-subtitle" id="chat-subtitle">@username</div>
+  </div>
+  <button id="chat-menu-btn" class="icon-btn" title="Меню">⋮</button>
+  <div id="chat-menu" class="menu hidden">
+    <button data-action="clear">Очистить чат</button>
+    <button data-action="delete">Удалить чат</button>
+    <button data-action="block" id="menu-block">Заблокировать</button>
+  </div>
+</header>
 
   <div id="block-banner" class="block-banner hidden">
     <span id="block-banner-text"></span>
@@ -101,6 +100,19 @@
 </div>
 </main>
 
+</div>
+
+<!-- Универсальный диалог с выбором -->
+<div id="dialog-overlay" class="dialog-overlay hidden">
+  <div class="dialog">
+    <div class="dialog-title" id="dialog-title"></div>
+    <div class="dialog-text" id="dialog-text"></div>
+    <div class="dialog-actions">
+      <button class="dialog-btn" id="dialog-opt1"></button>
+      <button class="dialog-btn" id="dialog-opt2"></button>
+      <button class="dialog-btn dialog-cancel" id="dialog-cancel">Отмена</button>
+    </div>
+  </div>
 </div>
 
   <script type="module" src="app.js"></script>
