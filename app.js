@@ -837,7 +837,7 @@ async function loadRecentChats() {
     const preview = it.lastMsg
       ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
         : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
-        : (it.lastMsg.content || ""))
+        : stripMarkdown(it.lastMsg.content || ""))
       : "";
     chatLastMsg.set(it.chat_id, { text: preview, time: it.lastTime, senderId: it.lastMsg ? it.lastMsg.sender_id : null, unread: it.unread });
   });
@@ -853,7 +853,7 @@ function renderChatItem(it, user) {
   const preview = it.lastMsg
     ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
       : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
-      : ((it.lastMsg.sender_id === currentUser.id ? "Вы: " : "") + (it.lastMsg.content || "")))
+      : ((it.lastMsg.sender_id === currentUser.id ? "Вы: " : "") + stripMarkdown(it.lastMsg.content || "")))
     : "Нет сообщений";
   const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
   return `
@@ -893,7 +893,7 @@ function renderChatList(items, profileMap) {
     const preview = it.lastMsg
       ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
         : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
-        : ((it.lastMsg.sender_id === currentUser.id ? "Вы: " : "") + (it.lastMsg.content || "")))
+        : ((it.lastMsg.sender_id === currentUser.id ? "Вы: " : "") + stripMarkdown(it.lastMsg.content || "")))
       : "Нет сообщений";
     const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
     return `
@@ -926,7 +926,7 @@ function updateChatItemPreview(chatId) {
   const data = chatLastMsg.get(chatId); if (!data) return;
   const previewEl = el.querySelector(".user-item-preview");
   const timeEl = el.querySelector(".user-item-time");
-  let preview = data.text || "Нет сообщений";
+  let preview = stripMarkdown(data.text) || "Нет сообщений";
   if (preview && !preview.startsWith("🧩") && !preview.startsWith("🎁") && data.senderId === currentUser.id) preview = "Вы: " + preview;
   if (previewEl) { previewEl.textContent = preview.slice(0, 60); previewEl.classList.toggle("unread", data.unread > 0); }
   if (timeEl) timeEl.textContent = data.time ? formatChatTime(data.time) : "";
