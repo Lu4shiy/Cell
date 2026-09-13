@@ -1423,3 +1423,57 @@ input:focus { border-color: var(--accent); }
 }
 .msg-tokens .tok-icon { font-size: 32px; }
 .msg-tokens .tok-amount { font-weight: 700; font-size: 18px; }
+
+/* Системные сообщения (по центру, без галочек) */
+.msg-system {
+  align-self: center;
+  max-width: 80%;
+  padding: 6px 14px;
+  border-radius: 12px;
+  background: var(--bg-card);
+  color: var(--text-sub);
+  font-size: 13px;
+  text-align: center;
+  margin: 4px 0;
+  line-height: 1.4;
+}
+.msg-system .msg-system-text { display: block; }
+.msg-system .msg-system-text b { color: var(--text); }
+
+.msg-system.gift-msg {
+  background: transparent;
+  padding: 4px 0;
+  max-width: 90%;
+}
+
+.msg-system .gift-card-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 20px;
+  margin-top: 8px;
+  border-radius: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  min-width: 200px;
+}
+.msg-system .gift-card-inline .gci-emoji {
+  width: 84px; height: 84px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 46px;
+}
+.msg-system .gift-card-inline .gci-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.msg-system .gift-card-inline .gci-sub {
+  font-size: 12px;
+}
+
+/* Превью в списке чатов не обрезается некорректно */
+.user-item-preview b { color: var(--text); font-weight: 600; }
