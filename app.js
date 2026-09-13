@@ -106,6 +106,7 @@ let reactionsChannel = null;
 let blocksChannel = null;
 let globalChannel = null;
 let profilesChannel = null;
+let membershipChannel = null;
 let searchTimeout = null;
 let myBlockedIds = new Set();
 let blockedMeIds = new Set();
@@ -188,9 +189,9 @@ function showAuth() {
   replyToMsg = null; editingMsgId = null; selectionMode = false;
   validatedUsername = null; contextChatUser = null; contextChatCustomName = null;
   birthdayBannerDismissed = false;
-  [currentChannel, reactionsChannel, blocksChannel, globalChannel, profilesChannel]
+  [currentChannel, reactionsChannel, blocksChannel, globalChannel, profilesChannel, membershipChannel]
     .forEach((ch) => ch && supabase.removeChannel(ch));
-  currentChannel = reactionsChannel = blocksChannel = globalChannel = profilesChannel = null;
+  currentChannel = reactionsChannel = blocksChannel = globalChannel = profilesChannel = membershipChannel = null;
   applyAccent("orange");
   document.getElementById("auth-screen").classList.remove("hidden");
   document.getElementById("app-screen").classList.add("hidden");
@@ -201,8 +202,7 @@ function showAuth() {
 // ======================================================
 
 async function initApp() {
-  await loadMyProfile();
-  await loadBlocks();
+  // 1) Сначала быстро настраиваем UI и подписки (это синхронно)
   setupSearch();
   setupChatMenu();
   setupMessageMenu();
@@ -215,7 +215,18 @@ async function initApp() {
   subscribeToBlocks();
   subscribeToGlobalChanges();
   subscribeToProfiles();
-  await loadRecentChats();
+  subscribeToMemberships();
+
+  // 2) Параллельно грузим независимые данные
+  // Плюс «прогреваем» соединение лёгким запросом
+  supabase.from("profiles").select("id").limit(1).then(() => {});
+
+  await Promise.all([
+    loadMyProfile(),
+    loadBlocks(),
+    loadRecentChats(),
+  ]);
+
   await checkBirthdays();
 
   await updateMyLastSeen();
@@ -794,6 +805,26 @@ function subscribeToGlobalChanges() {
     }).subscribe();
 }
 
+function subscribeToMemberships() {
+  if (membershipChannel) return;
+  membershipChannel = supabase.channel("membership-changes")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_members" }, (payload) => {
+      // Меня добавили в новый чат — обновляем список
+      if (payload.new.user_id === currentUser.id) {
+        if (!document.getElementById("search-input").value.trim()) {
+          loadRecentChats();
+        }
+      }
+    })
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chats" }, () => {
+      // Новый чат создан — обновляем список
+      if (!document.getElementById("search-input").value.trim()) {
+        loadRecentChats();
+      }
+    })
+    .subscribe();
+}
+
 function updateUserEverywhere(profile) {
   const itemEl = document.querySelector(`.user-item[data-user-id="${profile.id}"]`);
   if (itemEl) {
@@ -848,30 +879,38 @@ async function loadRecentChats() {
 
   const { data: myChats, error: e1 } = await supabase
     .from("chat_members").select("chat_id, custom_name").eq("user_id", currentUser.id);
+
+  // Если чатов нет — сразу показываем понятное сообщение
   if (e1 || !myChats || myChats.length === 0) {
-    listEl.innerHTML = '<div class="empty">Введи @username выше, чтобы найти человека</div>';
+    listEl.innerHTML = '<div class="empty">У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.</div>';
     return;
   }
 
   const chatIds = myChats.map((c) => c.chat_id);
 
-  const { data: hides } = await supabase
-    .from("chat_hides").select("chat_id, hidden_at").eq("user_id", currentUser.id);
+  // ВСЕ запросы параллельно
+  const [hidesRes, msgsRes, othersRes] = await Promise.all([
+    supabase.from("chat_hides").select("chat_id, hidden_at").eq("user_id", currentUser.id),
+    supabase.from("messages").select("chat_id, created_at").in("chat_id", chatIds)
+      .order("created_at", { ascending: false }).limit(500),
+    supabase.from("chat_members").select("chat_id, user_id")
+      .in("chat_id", chatIds).neq("user_id", currentUser.id),
+  ]);
+
+  const hides = hidesRes.data;
+  const recentMsgs = msgsRes.data;
+  const others = othersRes.data;
+  const e2 = othersRes.error;
+
   const hideMap = new Map((hides || []).map((h) => [h.chat_id, new Date(h.hidden_at).getTime()]));
 
-  const { data: recentMsgs } = await supabase
-    .from("messages").select("chat_id, created_at").in("chat_id", chatIds)
-    .order("created_at", { ascending: false }).limit(500);
   const lastMsgMap = new Map();
   (recentMsgs || []).forEach((m) => {
     if (!lastMsgMap.has(m.chat_id)) lastMsgMap.set(m.chat_id, new Date(m.created_at).getTime());
   });
 
-  const { data: others, error: e2 } = await supabase
-    .from("chat_members").select("chat_id, user_id")
-    .in("chat_id", chatIds).neq("user_id", currentUser.id);
   if (e2 || !others || others.length === 0) {
-    listEl.innerHTML = '<div class="empty">Введи @username выше, чтобы найти человека</div>';
+    listEl.innerHTML = '<div class="empty">У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.</div>';
     return;
   }
 
@@ -921,6 +960,8 @@ function setupSearch() {
   });
 }
 
+let searchReqId = 0;
+
 async function performSearch(query) {
   const listEl = document.getElementById("users-list");
   const titleEl = document.getElementById("section-title");
@@ -930,10 +971,16 @@ async function performSearch(query) {
   if (!clean) { listEl.innerHTML = '<div class="empty">Начни вводить @username</div>'; return; }
   listEl.innerHTML = '<div class="empty">Ищу...</div>';
 
+  const reqId = ++searchReqId;
+
   const { data, error } = await supabase.from("profiles")
     .select("id, username, display_name, avatar_url, last_seen, gender, birthday")
     .neq("id", currentUser.id).ilike("username", `%${clean}%`)
     .order("username").limit(20);
+
+  // Игнорируем устаревший ответ
+  if (reqId !== searchReqId) return;
+
   if (error) { listEl.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
   if (!data || data.length === 0) {
     listEl.innerHTML = `<div class="empty">Никого не найдено по «${escapeHtml(query)}»</div>`;
