@@ -1628,3 +1628,31 @@ button:not(:disabled):active { transform: scale(0.97); }
   margin: 4px 0;
   color: var(--text-sub);
 }
+
+.gift-card-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+.gift-card-button:disabled:hover { background: var(--accent); }
+
+/* ====================================================== */
+/* Каналы                                                 */
+/* ====================================================== */
+
+.sidebar-actions { display: flex; gap: 2px; align-items: center; }
+
+.channel-mark {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* Кнопка покупки подарка — заблокирована */
+.gift-card-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+.gift-card-button:disabled:hover { background: var(--accent); }

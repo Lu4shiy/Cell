@@ -172,6 +172,10 @@ let selectionMode = false, selectedMsgIds = new Set();
 let contextMsgId = null, contextChatUser = null, contextChatCustomName = null;
 let forwardSourceMsgs = [], forwardSelectedChats = new Set();
 let profileCache = new Map(), cachedProfilesForBirthday = [];
+let channelCache = new Map();
+let channelCreateAvatarUrl = "color:0";
+let channelUsernameCheckTimeout = null;
+let channelUsernameValidated = null;
 let usernameCheckTimeout = null, validatedUsername = null, reactionsRefreshTimer = null;
 let giftCatalogCache = [];
 let lastSeenInterval = null, otherUserInterval = null, statusPollInterval = null, deliveredInterval = null;
@@ -229,7 +233,7 @@ function showAuth() {
 async function initApp() {
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
-  setupBirthdayClose(); setupTokensDialog();
+  setupBirthdayClose(); setupTokensDialog(); setupChannelCreate();
   supabase.from("profiles").select("id").limit(1).then(() => {});
   subscribeToBlocks(); subscribeToGlobalChanges(); subscribeToProfiles();
   subscribeToMemberships(); subscribeToReads(); subscribeToGlobalMessages();
@@ -661,7 +665,19 @@ function subscribeToGlobalChanges() {
       const id = payload.old && payload.old.id; if (!id) return;
       if (currentChatId === id) closeCurrentChat();
       removeChatFromList(id);
-    }).subscribe();
+      channelCache.delete(id);
+    })
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "channels" }, (payload) => {
+      const ch = payload.new; if (!ch) return;
+      channelCache.set(ch.id, ch);
+      const el = document.querySelector(`.user-item[data-chat-id="${ch.id}"][data-chat-type="channel"]`);
+      if (el) {
+        const nameEl = el.querySelector(".user-item-name");
+        if (nameEl) nameEl.innerHTML = escapeHtml(ch.name) + '<span class="channel-mark">📢</span>';
+        paintAvatar(el.querySelector(".avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
+      }
+    })
+    .subscribe();
 }
 
 function subscribeToMemberships() {
@@ -780,6 +796,11 @@ async function loadRecentChats() {
   }
   const chatIds = myChats.map((c) => c.chat_id);
 
+  // Каналы среди моих chat_id
+  const { data: channelsData } = await supabase.from("channels").select("*").in("id", chatIds);
+  channelCache = new Map((channelsData || []).map((c) => [c.id, c]));
+  const channelIds = new Set(channelCache.keys());
+
   const [msgsRes, othersRes, readsRes, hidesRes] = await Promise.all([
     supabase.from("messages").select("id, chat_id, sender_id, content, created_at, message_type, tokens_amount, delivered_at, read_at")
       .in("chat_id", chatIds).order("created_at", { ascending: false }).limit(1000),
@@ -804,16 +825,19 @@ async function loadRecentChats() {
   });
 
   chatLastMsg = new Map();
-  const items = []; const userIds = [];
+  const dmItems = []; const userIds = [];
+  const channelItems = [];
   const customNameByChatId = new Map();
   myChats.forEach((c) => { if (c.custom_name) customNameByChatId.set(c.chat_id, c.custom_name); });
 
   others.forEach((o) => {
+    if (channelIds.has(o.chat_id)) return;
     const lastMsg = lastMsgPerChat.get(o.chat_id);
     const hiddenAt = hideMap.get(o.chat_id);
     const lastTime = lastMsg ? new Date(lastMsg.created_at).getTime() : 0;
     if (hiddenAt && hiddenAt > lastTime) return;
-    items.push({
+    dmItems.push({
+      type: "dm",
       chat_id: o.chat_id, user_id: o.user_id, lastMsg, lastTime,
       unread: unreadCountPerChat.get(o.chat_id) || 0,
       customName: customNameByChatId.get(o.chat_id) || null,
@@ -821,18 +845,38 @@ async function loadRecentChats() {
     userIds.push(o.user_id);
   });
 
-  if (!items.length) {
+  channelIds.forEach((cid) => {
+    const ch = channelCache.get(cid);
+    const lastMsg = lastMsgPerChat.get(cid);
+    const hiddenAt = hideMap.get(cid);
+    const lastTime = lastMsg
+      ? new Date(lastMsg.created_at).getTime()
+      : (ch.created_at ? new Date(ch.created_at).getTime() : 0);
+    if (hiddenAt && hiddenAt > lastTime) return;
+    channelItems.push({
+      type: "channel",
+      chat_id: cid, channel: ch, lastMsg, lastTime,
+      unread: unreadCountPerChat.get(cid) || 0,
+    });
+  });
+
+  if (!dmItems.length && !channelItems.length) {
     listEl.innerHTML = '<div class="empty">У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.</div>';
     chatIdByUser.clear(); return;
   }
+
   const uniqueUserIds = [...new Set(userIds)];
-  const { data: profiles } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, last_seen, gender, birthday").in("id", uniqueUserIds);
-  (profiles || []).forEach((p) => profileCache.set(p.id, p));
-  const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
-  items.sort((a, b) => b.lastTime - a.lastTime);
+  let profilesData = [];
+  if (uniqueUserIds.length) {
+    const { data } = await supabase.from("profiles")
+      .select("id, username, display_name, avatar_url, last_seen, gender, birthday").in("id", uniqueUserIds);
+    profilesData = data || [];
+    profilesData.forEach((p) => profileCache.set(p.id, p));
+  }
+  const profileMap = new Map(profilesData.map((p) => [p.id, p]));
+
   chatIdByUser.clear();
-  items.forEach((it) => {
+  dmItems.forEach((it) => {
     chatIdByUser.set(it.user_id, it.chat_id);
     const preview = it.lastMsg
       ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
@@ -841,8 +885,18 @@ async function loadRecentChats() {
       : "";
     chatLastMsg.set(it.chat_id, { text: preview, time: it.lastTime, senderId: it.lastMsg ? it.lastMsg.sender_id : null, unread: it.unread });
   });
-  renderChatList(items, profileMap);
-  cachedProfilesForBirthday = profiles || [];
+  channelItems.forEach((it) => {
+    const preview = it.lastMsg
+      ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
+        : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
+        : stripMarkdown(it.lastMsg.content || ""))
+      : "";
+    chatLastMsg.set(it.chat_id, { text: preview, time: it.lastTime, senderId: null, unread: it.unread });
+  });
+
+  const unified = [...dmItems, ...channelItems].sort((a, b) => b.lastTime - a.lastTime);
+  renderChatListUnified(unified, profileMap);
+  cachedProfilesForBirthday = profilesData || [];
   renderBirthdayBanner();
 }
 
@@ -882,52 +936,107 @@ function bindChatItemEvents(el, user) {
   el.addEventListener("contextmenu", (ev) => { ev.preventDefault(); openChatListContextMenu(ev, user, el); });
 }
 
-function renderChatList(items, profileMap) {
+function renderChatListUnified(items, profileMap) {
   const listEl = document.getElementById("users-list");
   if (!items.length) { listEl.innerHTML = '<div class="empty">У вас пока нет чатов.</div>'; return; }
   listEl.innerHTML = items.map((it) => {
-    const user = profileMap.get(it.user_id); if (!user) return "";
-    const blocked = isBlockedByMe(user.id) ? " 🚫" : "";
-    const name = it.customName || user.display_name;
-    const time = it.lastTime ? formatChatTime(it.lastTime) : "";
-    const preview = it.lastMsg
-      ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
-        : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
-        : ((it.lastMsg.sender_id === currentUser.id ? "Вы: " : "") + stripMarkdown(it.lastMsg.content || "")))
-      : "Нет сообщений";
-    const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
-    return `
-      <div class="user-item" data-user-id="${user.id}" data-chat-id="${it.chat_id}" data-custom-name="${it.customName ? escapeHtml(it.customName) : ""}">
-        <div class="avatar"></div>
-        <div class="user-item-body">
-          <div class="user-item-row1">
-            <div class="user-item-name">${escapeHtml(name)}${blocked}</div>
-            <div class="user-item-time">${time}</div>
-          </div>
-          <div class="user-item-row2">
-            <div class="user-item-preview ${it.unread > 0 ? "unread" : ""}">${escapeHtml(preview.slice(0, 60))}</div>
-            ${unreadHtml}
-          </div>
-        </div>
-      </div>`;
+    if (it.type === "channel") return renderChannelItemHtml(it);
+    return renderDmItemHtml(it, profileMap);
   }).join("");
 
   listEl.querySelectorAll(".user-item").forEach((el) => {
-    const userId = el.dataset.userId;
-    const user = profileMap.get(userId) || profileCache.get(userId);
-    if (!user) return;
-    paintAvatar(el.querySelector(".avatar"), user);
-    bindChatItemEvents(el, user);
+    const chatType = el.dataset.chatType || "dm";
+    if (chatType === "channel") {
+      const ch = channelCache.get(el.dataset.chatId);
+      if (!ch) return;
+      paintAvatar(el.querySelector(".avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
+      bindChannelItemEvents(el, ch);
+    } else {
+      const userId = el.dataset.userId;
+      const user = profileMap.get(userId) || profileCache.get(userId);
+      if (!user) return;
+      paintAvatar(el.querySelector(".avatar"), user);
+      bindChatItemEvents(el, user);
+    }
+  });
+}
+
+function renderDmItemHtml(it, profileMap) {
+  const user = profileMap.get(it.user_id);
+  if (!user) return "";
+  const blocked = isBlockedByMe(user.id) ? " 🚫" : "";
+  const name = it.customName || user.display_name;
+  const time = it.lastTime ? formatChatTime(it.lastTime) : "";
+  const preview = it.lastMsg
+    ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
+      : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
+      : ((it.lastMsg.sender_id === currentUser.id ? "Вы: " : "") + stripMarkdown(it.lastMsg.content || "")))
+    : "Нет сообщений";
+  const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
+  return `
+    <div class="user-item" data-user-id="${user.id}" data-chat-id="${it.chat_id}" data-chat-type="dm" data-custom-name="${it.customName ? escapeHtml(it.customName) : ""}">
+      <div class="avatar"></div>
+      <div class="user-item-body">
+        <div class="user-item-row1">
+          <div class="user-item-name">${escapeHtml(name)}${blocked}</div>
+          <div class="user-item-time">${time}</div>
+        </div>
+        <div class="user-item-row2">
+          <div class="user-item-preview ${it.unread > 0 ? "unread" : ""}">${escapeHtml(preview.slice(0, 60))}</div>
+          ${unreadHtml}
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderChannelItemHtml(it) {
+  const ch = it.channel;
+  const time = it.lastTime ? formatChatTime(it.lastTime) : "";
+  const preview = it.lastMsg
+    ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
+      : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
+      : stripMarkdown(it.lastMsg.content || ""))
+    : "Нет сообщений";
+  const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
+  return `
+    <div class="user-item" data-chat-id="${it.chat_id}" data-chat-type="channel">
+      <div class="avatar"></div>
+      <div class="user-item-body">
+        <div class="user-item-row1">
+          <div class="user-item-name">${escapeHtml(ch.name)}<span class="channel-mark">📢</span></div>
+          <div class="user-item-time">${time}</div>
+        </div>
+        <div class="user-item-row2">
+          <div class="user-item-preview ${it.unread > 0 ? "unread" : ""}">${escapeHtml(preview.slice(0, 60))}</div>
+          ${unreadHtml}
+        </div>
+      </div>
+    </div>`;
+}
+
+function bindChannelItemEvents(el, channel) {
+  el.addEventListener("click", () => {
+    const listEl = document.getElementById("users-list");
+    listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
+    el.classList.add("active");
+    // Этап 1 — просто плейсхолдер, открытие сделаем на Этапе 2
+    document.getElementById("chat-content").classList.add("hidden");
+    const ph = document.getElementById("chat-placeholder");
+    ph.classList.remove("hidden");
+    ph.querySelector("p").textContent = `Канал «${channel.name}» — откроем на следующем этапе`;
   });
 }
 
 function updateChatItemPreview(chatId) {
   const el = document.querySelector(`.user-item[data-chat-id="${chatId}"]`); if (!el) return;
   const data = chatLastMsg.get(chatId); if (!data) return;
+  const isChannel = el.dataset.chatType === "channel";
   const previewEl = el.querySelector(".user-item-preview");
   const timeEl = el.querySelector(".user-item-time");
   let preview = stripMarkdown(data.text) || "Нет сообщений";
-  if (preview && !preview.startsWith("🧩") && !preview.startsWith("🎁") && data.senderId === currentUser.id) preview = "Вы: " + preview;
+  if (!isChannel && preview && !preview.startsWith("🧩") && !preview.startsWith("🎁") && data.senderId === currentUser.id) {
+    preview = "Вы: " + preview;
+  }
   if (previewEl) { previewEl.textContent = preview.slice(0, 60); previewEl.classList.toggle("unread", data.unread > 0); }
   if (timeEl) timeEl.textContent = data.time ? formatChatTime(data.time) : "";
   const row2 = el.querySelector(".user-item-row2");
@@ -2587,6 +2696,9 @@ async function renderCatalog(recipientId) {
   title.textContent = "Каталог подарков";
   content.innerHTML = '<div class="empty">Загрузка...</div>';
 
+  await refreshBalance();
+  const balance = (myProfile && myProfile.imagi_tokens) || 0;
+
   const catalog = await loadGiftCatalog();
   if (!catalog.length) { content.innerHTML = '<div class="empty">Каталог пуст</div>'; return; }
 
@@ -2597,7 +2709,13 @@ async function renderCatalog(recipientId) {
   content.innerHTML = catalog.map((g) => {
     const soldCount = soldMap.get(g.id) || 0;
     const soldOut = g.max_supply !== null && soldCount >= g.max_supply;
+    const canAfford = balance >= g.price;
+    const disabled = soldOut || !canAfford;
     const supplyText = g.max_supply !== null ? `${soldCount} / ${g.max_supply}` : `${soldCount}`;
+    let btnText;
+    if (soldOut) btnText = "Распродано";
+    else if (!canAfford) btnText = `🧩 ${g.price} · мало`;
+    else btnText = `🧩 ${g.price}`;
     return `
       <div class="gift-card" data-cat-id="${g.id}">
         <div class="gift-card-emoji" style="background: var(--bg-input);">${g.emoji}</div>
@@ -2605,8 +2723,8 @@ async function renderCatalog(recipientId) {
           <div class="gift-card-name">${escapeHtml(g.name)}</div>
           <div class="gift-card-sub gift-rarity-${g.rarity}">${giftRarityLabel(g.rarity)}${g.collection ? " · " + escapeHtml(g.collection) : ""} · ${supplyText}</div>
         </div>
-        <button class="gift-card-button" ${soldOut ? "disabled" : ""} data-buy="${g.id}">
-          ${soldOut ? "Распродано" : "🧩 " + g.price}
+        <button class="gift-card-button" ${disabled ? "disabled" : ""} data-buy="${g.id}">
+          ${btnText}
         </button>
       </div>`;
   }).join("");
@@ -2614,6 +2732,7 @@ async function renderCatalog(recipientId) {
   content.querySelectorAll("button[data-buy]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
+      if (btn.disabled) return;
       const gid = btn.dataset.buy;
       const gift = catalog.find((g) => g.id === gid);
       if (gift) openGiftPurchase(gift, recipientId);
@@ -2912,3 +3031,159 @@ function escapeHtml(str) {
 
 const { data: { session } } = await supabase.auth.getSession();
 if (session) showApp(session.user);
+
+// ======================================================
+// 30. КАНАЛЫ: СОЗДАНИЕ
+// ======================================================
+
+function setupChannelCreate() {
+  const btn = document.getElementById("create-channel-btn");
+  if (btn) btn.addEventListener("click", openChannelCreateDialog);
+
+  document.getElementById("channel-create-cancel").addEventListener("click", closeChannelCreateDialog);
+  document.getElementById("channel-create-confirm").addEventListener("click", createChannel);
+
+  document.getElementById("channel-avatar-upload").addEventListener("change", handleChannelAvatarUpload);
+
+  document.getElementById("channel-username-input").addEventListener("input", (e) => {
+    clearTimeout(channelUsernameCheckTimeout);
+    channelUsernameValidated = null;
+    updateChannelCreateButton();
+    const value = e.target.value;
+    channelUsernameCheckTimeout = setTimeout(() => checkChannelUsernameLive(value), 350);
+  });
+  document.getElementById("channel-name-input").addEventListener("input", updateChannelCreateButton);
+}
+
+function updateChannelCreateButton() {
+  const name = document.getElementById("channel-name-input").value.trim();
+  const uname = document.getElementById("channel-username-input").value.trim();
+  const btn = document.getElementById("channel-create-confirm");
+  btn.disabled = !name || !uname || uname !== channelUsernameValidated;
+}
+
+function openChannelCreateDialog() {
+  channelCreateAvatarUrl = "color:0";
+  channelUsernameValidated = null;
+  document.getElementById("channel-name-input").value = "";
+  document.getElementById("channel-username-input").value = "";
+  const hint = document.getElementById("channel-username-hint");
+  hint.className = "username-hint"; hint.textContent = "";
+  renderChannelAvatarGrid();
+  paintAvatar(document.getElementById("channel-avatar-preview"), { display_name: "К", avatar_url: channelCreateAvatarUrl });
+  updateChannelCreateButton();
+  document.getElementById("channel-create-overlay").classList.remove("hidden");
+  setTimeout(() => document.getElementById("channel-name-input").focus(), 60);
+}
+
+function closeChannelCreateDialog() {
+  document.getElementById("channel-create-overlay").classList.add("hidden");
+}
+
+function renderChannelAvatarGrid() {
+  const grid = document.getElementById("channel-avatar-grid"); grid.innerHTML = "";
+  BASE_AVATARS.forEach((pair, idx) => {
+    const el = document.createElement("div");
+    el.className = "avatar-option"; el.dataset.idx = idx;
+    el.style.background = `linear-gradient(135deg, ${pair[0]}, ${pair[1]})`;
+    el.textContent = "К";
+    if (channelCreateAvatarUrl === "color:" + idx) el.classList.add("selected");
+    el.addEventListener("click", () => {
+      channelCreateAvatarUrl = "color:" + idx;
+      paintAvatar(document.getElementById("channel-avatar-preview"), { display_name: "К", avatar_url: channelCreateAvatarUrl });
+      renderChannelAvatarGrid();
+    });
+    grid.appendChild(el);
+  });
+}
+
+async function handleChannelAvatarUpload(e) {
+  const file = e.target.files && e.target.files[0]; e.target.value = "";
+  if (!file) return;
+  const dataUrl = await resizeImage(file, 200); if (!dataUrl) return;
+  channelCreateAvatarUrl = dataUrl;
+  paintAvatar(document.getElementById("channel-avatar-preview"), { display_name: "К", avatar_url: dataUrl });
+  renderChannelAvatarGrid();
+}
+
+async function checkChannelUsernameLive(value) {
+  const hint = document.getElementById("channel-username-hint");
+  const username = value.trim(); channelUsernameValidated = null; updateChannelCreateButton();
+  if (!username) { hint.className = "username-hint"; hint.textContent = ""; return; }
+  if (!/^[a-zA-Z0-9_-]+$/.test(username)) { hint.className = "username-hint err"; hint.textContent = "Только английские буквы, цифры, _ и -"; return; }
+  if (username.length < 3) { hint.className = "username-hint err"; hint.textContent = "Минимум 3 символа"; return; }
+  hint.className = "username-hint"; hint.textContent = "Проверяю...";
+
+  const [pRes, cRes] = await Promise.all([
+    supabase.from("profiles").select("id").ilike("username", username).limit(1),
+    supabase.from("channels").select("id").ilike("username", username).limit(1),
+  ]);
+
+  if (document.getElementById("channel-username-input").value.trim() !== username) return;
+  if (pRes.error || cRes.error) { hint.className = "username-hint err"; hint.textContent = "Ошибка проверки"; return; }
+  if ((pRes.data && pRes.data.length > 0) || (cRes.data && cRes.data.length > 0)) {
+    hint.className = "username-hint err"; hint.textContent = `@${username} уже занят`; channelUsernameValidated = null;
+  } else {
+    hint.className = "username-hint ok"; hint.textContent = `@${username} свободен`; channelUsernameValidated = username;
+  }
+  updateChannelCreateButton();
+}
+
+async function createChannel() {
+  const name = document.getElementById("channel-name-input").value.trim();
+  const username = document.getElementById("channel-username-input").value.trim();
+  if (!name || !username || username !== channelUsernameValidated) return;
+  const btn = document.getElementById("channel-create-confirm");
+  btn.disabled = true; btn.textContent = "Создаю...";
+
+  try {
+    // Двойная проверка username — на всякий случай
+    const [pRes, cRes] = await Promise.all([
+      supabase.from("profiles").select("id").ilike("username", username).limit(1),
+      supabase.from("channels").select("id").ilike("username", username).limit(1),
+    ]);
+    if ((pRes.data && pRes.data.length) || (cRes.data && cRes.data.length)) {
+      await showAlertDialog("Ошибка", "Юзернейм уже занят");
+      btn.disabled = false; btn.textContent = "Создать канал";
+      return;
+    }
+
+    // 1. Создаём chats
+    const { data: newChat, error: chatErr } = await supabase.from("chats").insert({}).select().single();
+    if (chatErr || !newChat) {
+      await showAlertDialog("Ошибка", "Не удалось создать канал: " + (chatErr ? chatErr.message : "?"));
+      btn.disabled = false; btn.textContent = "Создать канал";
+      return;
+    }
+
+    // 2. Создаём channels
+    const { error: chanErr } = await supabase.from("channels").insert({
+      id: newChat.id,
+      username,
+      name,
+      avatar_url: channelCreateAvatarUrl,
+      owner_id: currentUser.id,
+    });
+    if (chanErr) {
+      await supabase.from("chats").delete().eq("id", newChat.id);
+      await showAlertDialog("Ошибка", "Не удалось создать канал: " + chanErr.message);
+      btn.disabled = false; btn.textContent = "Создать канал";
+      return;
+    }
+
+    // 3. Добавляем себя в chat_members (подписчиком)
+    const { error: memErr } = await supabase.from("chat_members").insert({
+      chat_id: newChat.id, user_id: currentUser.id,
+    });
+    if (memErr) console.error("chat_members insert:", memErr);
+
+    closeChannelCreateDialog();
+    btn.disabled = false; btn.textContent = "Создать канал";
+
+    await loadRecentChats();
+  } catch (ex) {
+    console.error(ex);
+    await showAlertDialog("Ошибка", ex.message || String(ex));
+    btn.disabled = false; btn.textContent = "Создать канал";
+  }
+}
