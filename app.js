@@ -179,6 +179,7 @@ let currentChannelSubscribers = 0;
 let channelCreateAvatarUrl = "color:0";
 let channelUsernameCheckTimeout = null;
 let channelUsernameValidated = null;
+let channelProfileChannelId = null;
 let usernameCheckTimeout = null, validatedUsername = null, reactionsRefreshTimer = null;
 let giftCatalogCache = [];
 let lastSeenInterval = null, otherUserInterval = null, statusPollInterval = null, deliveredInterval = null;
@@ -1093,6 +1094,7 @@ async function openChannel(chatId) {
   currentChannelIsAdmin = await checkChannelAdmin(ch.id, currentUser.id);
   await updateChannelSubtitle(ch.id);
   await updateChannelComposerState();
+    configureChatMenuForChannel(ch);
 
   currentChatId = chatId;
   await loadMessages(chatId);
@@ -1247,20 +1249,18 @@ async function performSearch(query) {
   listEl.innerHTML = '<div class="empty">Ищу...</div>';
   const reqId = ++searchReqId;
 
-  // Ищем и в profiles, и в моих custom_name
-  const [profilesRes, customRes, myChatsRes] = await Promise.all([
+  const [profilesRes, customRes, channelsRes] = await Promise.all([
     supabase.from("profiles").select("id, username, display_name, avatar_url, last_seen, gender, birthday")
       .neq("id", currentUser.id).or(`username.ilike.%${clean}%,display_name.ilike.%${clean}%`).limit(20),
     supabase.from("chat_members").select("chat_id, custom_name").eq("user_id", currentUser.id).ilike("custom_name", `%${clean}%`),
-    supabase.from("chat_members").select("chat_id").eq("user_id", currentUser.id),
+    supabase.from("channels").select("*")
+      .or(`username.ilike.%${clean}%,name.ilike.%${clean}%`).limit(20),
   ]);
 
   if (reqId !== searchReqId) return;
 
   const resultIds = new Set((profilesRes.data || []).map((p) => p.id));
   const customNameByUserId = new Map();
-
-  // Из custom_name находим собеседников
   const customChatIds = (customRes.data || []).map((c) => c.chat_id);
   if (customChatIds.length) {
     const { data: others } = await supabase.from("chat_members")
@@ -1272,13 +1272,20 @@ async function performSearch(query) {
     });
   }
 
-  if (!resultIds.size) { listEl.innerHTML = `<div class="empty">Никого не найдено по «${escapeHtml(query)}»</div>`; return; }
+  const channels = channelsRes.data || [];
+  if (!resultIds.size && !channels.length) {
+    listEl.innerHTML = `<div class="empty">Никого не найдено по «${escapeHtml(query)}»</div>`;
+    return;
+  }
 
-  const { data: allProfiles } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, last_seen, gender, birthday").in("id", [...resultIds]);
-  (allProfiles || []).forEach((p) => profileCache.set(p.id, p));
+  let allProfiles = [];
+  if (resultIds.size) {
+    const { data } = await supabase.from("profiles")
+      .select("id, username, display_name, avatar_url, last_seen, gender, birthday").in("id", [...resultIds]);
+    allProfiles = data || [];
+    allProfiles.forEach((p) => profileCache.set(p.id, p));
+  }
 
-  // Подтягиваем custom_name для ВСЕХ найденных, даже если нашли по оригинальному имени
   const { data: myMemberships } = await supabase.from("chat_members")
     .select("chat_id, custom_name").eq("user_id", currentUser.id).not("custom_name", "is", null);
   const customByChatId = new Map((myMemberships || []).map((m) => [m.chat_id, m.custom_name]));
@@ -1295,15 +1302,27 @@ async function performSearch(query) {
   }
 
   allProfiles.forEach((p) => { p._customName = customNameByUserId.get(p.id) || null; });
-  renderSearchResults(allProfiles);
+  renderSearchResultsUnified(allProfiles, channels);
 }
 
-function renderSearchResults(users) {
+function renderSearchResultsUnified(users, channels) {
   const listEl = document.getElementById("users-list");
-  if (!users.length) { listEl.innerHTML = '<div class="empty">Пусто</div>'; return; }
-  listEl.innerHTML = users.map((u) => {
+  if (!users.length && !channels.length) { listEl.innerHTML = '<div class="empty">Пусто</div>'; return; }
+
+  const channelsHtml = channels.map((ch) => `
+    <div class="user-item" data-chat-type="channel-search" data-channel-id="${ch.id}">
+      <div class="avatar"></div>
+      <div class="user-item-body">
+        <div class="user-item-row1"><div class="user-item-name">${escapeHtml(ch.name)}<span class="channel-mark">📢</span></div></div>
+        <div class="user-item-row2"><div class="user-item-preview">@${escapeHtml(ch.username)}</div></div>
+      </div>
+    </div>`).join("");
+
+  const usersHtml = users.map((u) => {
     const blocked = isBlockedByMe(u.id) ? " 🚫" : "";
-    const displayName = u._customName ? `${u._customName} <span style="color:var(--text-dim);font-size:12px;">(${escapeHtml(u.display_name)})</span>` : escapeHtml(u.display_name);
+    const displayName = u._customName
+      ? `${escapeHtml(u._customName)} <span style="color:var(--text-dim);font-size:12px;">(${escapeHtml(u.display_name)})</span>`
+      : escapeHtml(u.display_name);
     return `
       <div class="user-item" data-user-id="${u.id}" data-custom-name="${u._customName ? escapeHtml(u._customName) : ""}">
         <div class="avatar"></div>
@@ -1314,16 +1333,29 @@ function renderSearchResults(users) {
       </div>`;
   }).join("");
 
+  listEl.innerHTML = channelsHtml + usersHtml;
+
   listEl.querySelectorAll(".user-item").forEach((el) => {
-    const userId = el.dataset.userId;
-    const user = users.find((u) => u.id === userId);
-    if (!user) return;
-    paintAvatar(el.querySelector(".avatar"), user);
-    el.addEventListener("click", () => {
-      listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
-      el.classList.add("active");
-      openChatWith(user);
-    });
+    if (el.dataset.chatType === "channel-search") {
+      const ch = channels.find((x) => x.id === el.dataset.channelId);
+      if (!ch) return;
+      paintAvatar(el.querySelector(".avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
+      el.addEventListener("click", async () => {
+        listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
+        el.classList.add("active");
+        await joinAndOpenChannel(ch);
+      });
+    } else {
+      const userId = el.dataset.userId;
+      const user = users.find((u) => u.id === userId);
+      if (!user) return;
+      paintAvatar(el.querySelector(".avatar"), user);
+      el.addEventListener("click", () => {
+        listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
+        el.classList.add("active");
+        openChatWith(user);
+      });
+    }
   });
 }
 
@@ -1416,6 +1448,7 @@ async function openChatWith(otherUser) {
   currentChannelObj = null; currentChannelIsAdmin = false;
   document.getElementById("message-input").setAttribute("contenteditable", "true");
   document.getElementById("message-input").setAttribute("data-placeholder", "Написать сообщение...");
+    resetChatMenuToDm();
   const searchInput = document.getElementById("search-input");
   if (searchInput && searchInput.value.trim()) {
     searchInput.value = "";
@@ -1958,6 +1991,7 @@ function setupChatMenu() {
   if (headerText) {
     headerText.addEventListener("click", (e) => {
       if (e.target.closest("#chat-menu-btn")) return;
+      if (currentChannelObj) { openChannelProfileDialog(); return; }
       openUserProfileDialog();
     });
   }
@@ -2002,6 +2036,12 @@ function setupChatMenu() {
         await blockUser(currentOtherUser.id);
       }
       updateBlockUI();
+    } else if (action === "channel-configure") {
+      if (!currentChannelObj) return;
+      // Этап 4 — редактирование. Пока заглушка.
+      await showAlertDialog("Настройки канала", "Редактирование канала — следующий этап");
+    } else if (action === "channel-delete") {
+      await deleteChannelDialog();
     }
   });
 
@@ -2010,6 +2050,31 @@ function setupChatMenu() {
     if (!currentOtherUser) return;
     await unblockUser(currentOtherUser.id);
     updateBlockUI();
+  });
+
+  // Профиль канала — открыть/закрыть
+  document.getElementById("channel-profile-close").addEventListener("click", closeChannelProfileDialog);
+
+  const chMenuBtn = document.getElementById("channel-profile-menu-btn");
+  const chMenu = document.getElementById("channel-profile-menu");
+  chMenuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    chMenu.classList.toggle("hidden");
+  });
+  document.addEventListener("click", (e) => {
+    if (!chMenu.classList.contains("hidden") && !chMenu.contains(e.target)) chMenu.classList.add("hidden");
+  });
+  chMenu.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button"); if (!btn) return;
+    e.stopPropagation();
+    const action = btn.dataset.action;
+    chMenu.classList.add("hidden");
+    if (action === "edit") {
+      await showAlertDialog("Изменить канал", "Редактирование канала — следующий этап");
+    } else if (action === "delete") {
+      closeChannelProfileDialog();
+      await deleteChannelDialog();
+    }
   });
 }
 
@@ -3315,4 +3380,116 @@ async function createChannel() {
     await showAlertDialog("Ошибка", ex.message || String(ex));
     btn.disabled = false; btn.textContent = "Создать канал";
   }
+}
+
+// ======================================================
+// 31. КАНАЛЫ: ПРОФИЛЬ + МЕНЮ + УДАЛЕНИЕ
+// ======================================================
+
+function resetChatMenuToDm() {
+  const menu = document.getElementById("chat-menu");
+  ["tokens", "clear", "delete", "block"].forEach((a) => {
+    const b = menu.querySelector(`[data-action="${a}"]`);
+    if (b) b.classList.remove("hidden");
+  });
+  ["channel-configure", "channel-delete"].forEach((a) => {
+    const b = menu.querySelector(`[data-action="${a}"]`);
+    if (b) b.classList.add("hidden");
+  });
+  const menuBtn = document.getElementById("chat-menu-btn");
+  if (menuBtn) menuBtn.classList.remove("hidden");
+}
+
+function configureChatMenuForChannel(ch) {
+  const menu = document.getElementById("chat-menu");
+  ["tokens", "clear", "delete", "block"].forEach((a) => {
+    const b = menu.querySelector(`[data-action="${a}"]`);
+    if (b) b.classList.add("hidden");
+  });
+  const isOwner = ch.owner_id === currentUser.id;
+  ["channel-configure", "channel-delete"].forEach((a) => {
+    const b = menu.querySelector(`[data-action="${a}"]`);
+    if (b) b.classList.toggle("hidden", !isOwner);
+  });
+  const menuBtn = document.getElementById("chat-menu-btn");
+  if (menuBtn) menuBtn.classList.toggle("hidden", !isOwner);
+}
+
+async function openChannelProfileDialog() {
+  if (!currentChannelObj) return;
+  channelProfileChannelId = currentChannelObj.id;
+  const ch = currentChannelObj;
+
+  paintAvatar(document.getElementById("channel-profile-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
+  document.getElementById("channel-profile-name").textContent = ch.name;
+  document.getElementById("channel-profile-username").textContent = "@" + (ch.username || "");
+
+  const { count } = await supabase.from("chat_members")
+    .select("user_id", { count: "exact", head: true }).eq("chat_id", ch.id);
+  const cnt = count || 0;
+  const word = pluralRu(cnt, "подписчик", "подписчика", "подписчиков");
+  document.getElementById("channel-profile-subscribers-status").textContent = `${cnt} ${word}`;
+  document.getElementById("channel-profile-subscribers").textContent = String(cnt);
+
+  document.getElementById("channel-profile-created").textContent = ch.created_at
+    ? new Date(ch.created_at).toLocaleDateString("ru-RU")
+    : "—";
+
+  const menuBtn = document.getElementById("channel-profile-menu-btn");
+  menuBtn.classList.toggle("hidden", ch.owner_id !== currentUser.id);
+  document.getElementById("channel-profile-menu").classList.add("hidden");
+
+  document.getElementById("channel-profile-overlay").classList.remove("hidden");
+}
+
+function closeChannelProfileDialog() {
+  document.getElementById("channel-profile-overlay").classList.add("hidden");
+  document.getElementById("channel-profile-menu").classList.add("hidden");
+  channelProfileChannelId = null;
+}
+
+async function deleteChannelDialog() {
+  if (!currentChannelObj) return;
+  const ch = currentChannelObj;
+
+  const ok1 = await showConfirmDialog(
+    "Удалить канал",
+    `Канал «${ch.name}» будет удалён у всех подписчиков безвозвратно. Продолжить?`,
+    "Продолжить"
+  );
+  if (!ok1) return;
+
+  const typed = await showInputDialog(
+    "Подтверждение",
+    `Введите название канала «${ch.name}» для подтверждения`,
+    ""
+  );
+  if (typed === null) return;
+  if (typed.trim() !== ch.name) {
+    await showAlertDialog("Отменено", "Название не совпало. Канал не удалён.");
+    return;
+  }
+
+  const chatId = ch.id;
+  const { error } = await supabase.from("chats").delete().eq("id", chatId);
+  if (error) { await showAlertDialog("Ошибка", error.message); return; }
+
+  channelCache.delete(chatId);
+  closeCurrentChat();
+  removeChatFromList(chatId);
+}
+
+async function joinAndOpenChannel(ch) {
+  const { data: membership } = await supabase.from("chat_members")
+    .select("chat_id").eq("chat_id", ch.id).eq("user_id", currentUser.id).maybeSingle();
+  if (!membership) {
+    const { error } = await supabase.from("chat_members").insert({
+      chat_id: ch.id, user_id: currentUser.id,
+    });
+    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  }
+  const searchInput = document.getElementById("search-input");
+  if (searchInput) searchInput.value = "";
+  await loadRecentChats();
+  await openChannel(ch.id);
 }

@@ -89,6 +89,8 @@
             <button data-action="clear">Очистить чат</button>
             <button data-action="delete">Удалить чат</button>
             <button data-action="block" id="menu-block" class="danger">Заблокировать</button>
+            <button data-action="channel-configure" class="hidden">Настроить канал</button>
+            <button data-action="channel-delete" class="hidden danger">Удалить канал</button>
           </div>
         </header>
 
@@ -352,6 +354,50 @@
       <div class="dialog-actions">
         <button class="dialog-btn dialog-primary" id="tokens-send-confirm" disabled>Отправить</button>
         <button class="dialog-btn dialog-cancel" id="tokens-send-cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="channel-profile-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-profile">
+      <div class="profile-menu-btn hidden" id="channel-profile-menu-btn">⋮</div>
+      <div class="profile-menu-dropdown hidden" id="channel-profile-menu">
+        <button data-action="edit">Изменить</button>
+        <button data-action="delete" class="danger">Удалить канал</button>
+      </div>
+
+      <div class="profile-hero">
+        <div class="avatar avatar-large" id="channel-profile-avatar">?</div>
+        <div class="profile-hero-name" id="channel-profile-name">—</div>
+        <div class="profile-hero-status" id="channel-profile-subscribers-status">—</div>
+      </div>
+
+      <div class="profile-info-list">
+        <div class="profile-info-row">
+          <span class="pir-icon">@</span>
+          <div class="pir-body">
+            <div class="pir-value" id="channel-profile-username">—</div>
+            <div class="pir-label">Юзернейм канала</div>
+          </div>
+        </div>
+        <div class="profile-info-row">
+          <span class="pir-icon">👥</span>
+          <div class="pir-body">
+            <div class="pir-value" id="channel-profile-subscribers">0</div>
+            <div class="pir-label">Подписчиков</div>
+          </div>
+        </div>
+        <div class="profile-info-row">
+          <span class="pir-icon">📅</span>
+          <div class="pir-body">
+            <div class="pir-value" id="channel-profile-created">—</div>
+            <div class="pir-label">Дата создания</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="channel-profile-close">Закрыть</button>
       </div>
     </div>
   </div>
