@@ -480,7 +480,7 @@ input:focus { border-color: var(--accent); }
 
 .composer {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   padding: 12px 20px;
   background: var(--bg-side);
@@ -1579,9 +1579,11 @@ button:not(:disabled):active { transform: scale(0.97); }
 /* Contenteditable-инпут */
 .message-input {
   flex: 1;
+  min-width: 0;                       /* ← важно: разрешает сжатие */
   min-height: 44px;
   max-height: 140px;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px 18px;
   border-radius: 22px;
   background: var(--bg-input);
@@ -1591,8 +1593,9 @@ button:not(:disabled):active { transform: scale(0.97); }
   font-family: inherit;
   line-height: 1.35;
   outline: none;
-  word-wrap: break-word;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;            /* ← переносит длинные слова */
+  word-break: break-word;
   transition: border-color 0.15s;
 }
 .message-input:focus { border-color: var(--accent); }

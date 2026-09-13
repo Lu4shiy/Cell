@@ -130,6 +130,18 @@ function setInputFromMarkdown(md) {
   el.innerHTML = applyFormatting(escapeHtml(md || "")).replace(/\n/g, "<br>");
 }
 
+function stripMarkdown(text) {
+  if (!text) return "";
+  return String(text)
+    .replace(/\|\|(.+?)\|\|/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, "$1$2")
+    .replace(/~~([^~]+)~~/g, "$1")
+    .replace(/^> /gm, "");
+}
+
 function applyFormatting(escaped) {
   let html = escaped;
   html = html.replace(/\|\|(.+?)\|\|/g, '<span class="spoiler">$1</span>');
