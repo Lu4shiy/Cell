@@ -1656,3 +1656,10 @@ button:not(:disabled):active { transform: scale(0.97); }
   filter: grayscale(0.4);
 }
 .gift-card-button:disabled:hover { background: var(--accent); }
+
+.message-input[contenteditable="false"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  color: var(--text-dim);
+}
+.message-input[contenteditable="false"]:focus { border-color: var(--border); }

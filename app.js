@@ -173,6 +173,9 @@ let contextMsgId = null, contextChatUser = null, contextChatCustomName = null;
 let forwardSourceMsgs = [], forwardSelectedChats = new Set();
 let profileCache = new Map(), cachedProfilesForBirthday = [];
 let channelCache = new Map();
+let currentChannelObj = null;
+let currentChannelIsAdmin = false;
+let currentChannelSubscribers = 0;
 let channelCreateAvatarUrl = "color:0";
 let channelUsernameCheckTimeout = null;
 let channelUsernameValidated = null;
@@ -684,26 +687,25 @@ function subscribeToMemberships() {
   if (membershipChannel) return;
   membershipChannel = supabase.channel("membership-changes")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_members" }, async (payload) => {
+      // Обновить счётчик подписчиков, если это текущий канал
+      if (currentChannelObj && currentChannelObj.id === payload.new.chat_id) {
+        await updateChannelSubtitle(payload.new.chat_id);
+      }
+      // Меня добавили
       if (payload.new.user_id === currentUser.id) {
         const chatId = payload.new.chat_id;
         if (document.querySelector(`.user-item[data-chat-id="${chatId}"]`)) return;
-
-        // Канал?
         const { data: ch } = await supabase.from("channels").select("*").eq("id", chatId).maybeSingle();
-        if (ch) {
-          await addOrUpdateChannelInList(chatId, ch);
-          return;
-        }
-
-        // Обычный DM
+        if (ch) { await addOrUpdateChannelInList(chatId, ch); return; }
         const { data: others } = await supabase.from("chat_members")
           .select("user_id").eq("chat_id", chatId).neq("user_id", currentUser.id);
-        if (others && others.length) {
-          await addOrUpdateChatInList(chatId, others[0].user_id);
-        }
+        if (others && others.length) await addOrUpdateChatInList(chatId, others[0].user_id);
       }
     })
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_members" }, (payload) => {
+      if (currentChannelObj && currentChannelObj.id === payload.old.chat_id) {
+        updateChannelSubtitle(payload.old.chat_id);
+      }
       if (payload.old && payload.old.user_id === currentUser.id) {
         const chatId = payload.old.chat_id;
         if (currentChatId === chatId) closeCurrentChat();
@@ -1027,12 +1029,76 @@ function bindChannelItemEvents(el, channel) {
     const listEl = document.getElementById("users-list");
     listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
     el.classList.add("active");
-    // Этап 1 — просто плейсхолдер, открытие сделаем на Этапе 2
-    document.getElementById("chat-content").classList.add("hidden");
-    const ph = document.getElementById("chat-placeholder");
-    ph.classList.remove("hidden");
-    ph.querySelector("p").textContent = `Канал «${channel.name}» — откроем на следующем этапе`;
+    openChannel(channel.id);
   });
+}
+
+async function checkChannelAdmin(channelId, userId) {
+  const ch = channelCache.get(channelId);
+  if (ch && ch.owner_id === userId) return true;
+  const { data } = await supabase.from("channel_admins")
+    .select("user_id").eq("channel_id", channelId).eq("user_id", userId).maybeSingle();
+  return !!data;
+}
+
+async function updateChannelSubtitle(chatId) {
+  const { count } = await supabase
+    .from("chat_members")
+    .select("user_id", { count: "exact", head: true })
+    .eq("chat_id", chatId);
+  currentChannelSubscribers = count || 0;
+  const el = document.getElementById("chat-subtitle");
+  if (el && currentChannelObj && currentChannelObj.id === chatId) {
+    el.textContent = `${currentChannelSubscribers} ${pluralRu(currentChannelSubscribers, "подписчик", "подписчика", "подписчиков")}`;
+    el.classList.remove("online");
+  }
+}
+
+async function updateChannelComposerState() {
+  const inputEl = document.getElementById("message-input");
+  const sendBtn = document.getElementById("send-btn");
+  if (!currentChannelObj) return;
+  if (currentChannelIsAdmin) {
+    inputEl.setAttribute("contenteditable", "true");
+    inputEl.setAttribute("data-placeholder", "Написать в канал...");
+    sendBtn.disabled = false;
+  } else {
+    inputEl.setAttribute("contenteditable", "false");
+    inputEl.setAttribute("data-placeholder", "Только администраторы могут писать");
+    inputEl.innerHTML = "";
+    sendBtn.disabled = true;
+  }
+}
+
+async function openChannel(chatId) {
+  const { data: ch } = await supabase.from("channels").select("*").eq("id", chatId).maybeSingle();
+  if (!ch) { await showAlertDialog("Ошибка", "Канал не найден"); return; }
+  channelCache.set(chatId, ch);
+  currentChannelObj = ch;
+  currentOtherUser = null; pendingOtherUser = null;
+
+  const searchInput = document.getElementById("search-input");
+  if (searchInput && searchInput.value.trim()) {
+    searchInput.value = "";
+    setTimeout(() => loadRecentChats(), 50);
+  }
+
+  paintAvatar(document.getElementById("chat-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
+  document.getElementById("chat-title").textContent = ch.name;
+  document.getElementById("chat-placeholder").classList.add("hidden");
+  document.getElementById("chat-content").classList.remove("hidden");
+  document.getElementById("chat-menu").classList.add("hidden");
+  exitSelectionMode(); cancelReply(); cancelEdit(); closeReactionPicker();
+
+  currentChannelIsAdmin = await checkChannelAdmin(ch.id, currentUser.id);
+  await updateChannelSubtitle(ch.id);
+  await updateChannelComposerState();
+
+  currentChatId = chatId;
+  await loadMessages(chatId);
+  await loadReactionsForVisibleMessages();
+  subscribeToChat(chatId); subscribeToReactions();
+  await markChatRead(chatId);
 }
 
 function updateChatItemPreview(chatId) {
@@ -1347,6 +1413,9 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
 // ======================= 13. ОТКРЫТИЕ ЧАТА =======================
 async function openChatWith(otherUser) {
   currentOtherUser = otherUser; pendingOtherUser = null;
+  currentChannelObj = null; currentChannelIsAdmin = false;
+  document.getElementById("message-input").setAttribute("contenteditable", "true");
+  document.getElementById("message-input").setAttribute("data-placeholder", "Написать сообщение...");
   const searchInput = document.getElementById("search-input");
   if (searchInput && searchInput.value.trim()) {
     searchInput.value = "";
@@ -1462,6 +1531,7 @@ async function loadReactionsForVisibleMessages() {
 }
 
 function renderMsgStatus(msg) {
+  if (msg.chat_id && channelCache.has(msg.chat_id)) return "";
   if (msg.sender_id !== currentUser.id) return "";
   if (String(msg.id).startsWith("tmp_")) return '<span class="msg-status sending">⏳</span>';
   if (msg.read_at) return '<span class="msg-status read">✓✓</span>';
@@ -1559,7 +1629,8 @@ async function appendMessage(msg) {
     return;
   }
 
-  const mine = msg.sender_id === currentUser.id;
+  const isChannelMsg = msg.chat_id && channelCache.has(msg.chat_id);
+  const mine = !isChannelMsg && msg.sender_id === currentUser.id;
   const el = document.createElement("div");
   el.className = "msg " + (mine ? "mine" : "other");
   el.dataset.id = msg.id;
@@ -1693,6 +1764,10 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
 });
 
 async function sendMessage(chatId, content) {
+  if (currentChannelObj && currentChannelObj.id === chatId && !currentChannelIsAdmin) {
+    await showAlertDialog("Нельзя", "Только администраторы могут писать в этом канале");
+    return;
+  }
   const tempId = "tmp_" + Date.now();
   const tempMsg = {
     id: tempId, chat_id: chatId, sender_id: currentUser.id,
@@ -1817,7 +1892,11 @@ function renderReactionsUI(msgId) {
 function openReactionPickerFor(anchorEl, msgId) {
   const picker = document.getElementById("reaction-picker");
   picker.innerHTML = "";
-  REACTION_EMOJIS.forEach((em) => {
+  let emojis = REACTION_EMOJIS;
+  if (currentChannelObj && Array.isArray(currentChannelObj.available_reactions) && currentChannelObj.available_reactions.length) {
+    emojis = currentChannelObj.available_reactions;
+  }
+  emojis.forEach((em) => {
     const b = document.createElement("button");
     b.textContent = em;
     b.addEventListener("click", (e) => {
@@ -2006,6 +2085,7 @@ async function deleteChatForBoth() {
 
 function closeCurrentChat() {
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
+  currentChannelObj = null; currentChannelIsAdmin = false;
   if (currentChannel) { supabase.removeChannel(currentChannel); currentChannel = null; }
   if (reactionsChannel) { supabase.removeChannel(reactionsChannel); reactionsChannel = null; }
   cancelReply(); cancelEdit(); exitSelectionMode(); closeReactionPicker();
