@@ -45,7 +45,6 @@ registerForm.addEventListener("submit", async (e) => {
     email, password,
     options: { data: { username, display_name: displayName } },
   });
-
   if (error) { errEl.textContent = error.message; return; }
   if (data.session) showApp(data.session.user);
   else {
@@ -60,7 +59,6 @@ loginForm.addEventListener("submit", async (e) => {
   errEl.textContent = "";
   const email = document.getElementById("login-email").value.trim();
   const password = document.getElementById("login-password").value;
-
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) { errEl.textContent = error.message; return; }
   showApp(data.user);
@@ -76,13 +74,22 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
 // ======================================================
 
 let currentUser = null;
+let myProfile = null;
 let currentChatId = null;
 let currentOtherUser = null;
 let currentChannel = null;
 let blocksChannel = null;
+let globalChannel = null;
 let searchTimeout = null;
 let myBlockedIds = new Set();
 let blockedMeIds = new Set();
+let hiddenMsgIds = new Set();
+let msgCache = new Map();
+let selectionMode = false;
+let selectedMsgIds = new Set();
+let contextMsgId = null;
+let forwardSourceMsgs = [];
+let forwardSelectedChats = new Set();
 
 function showApp(user) {
   currentUser = user;
@@ -93,12 +100,18 @@ function showApp(user) {
 
 function showAuth() {
   currentUser = null;
+  myProfile = null;
   currentChatId = null;
   currentOtherUser = null;
   myBlockedIds = new Set();
   blockedMeIds = new Set();
-  if (currentChannel) { supabase.removeChannel(currentChannel); currentChannel = null; }
-  if (blocksChannel) { supabase.removeChannel(blocksChannel); blocksChannel = null; }
+  hiddenMsgIds = new Set();
+  msgCache.clear();
+  selectedMsgIds.clear();
+  forwardSelectedChats.clear();
+  selectionMode = false;
+  [currentChannel, blocksChannel, globalChannel].forEach((ch) => ch && supabase.removeChannel(ch));
+  currentChannel = blocksChannel = globalChannel = null;
   document.getElementById("auth-screen").classList.remove("hidden");
   document.getElementById("app-screen").classList.add("hidden");
 }
@@ -112,17 +125,20 @@ async function initApp() {
   await loadBlocks();
   setupSearch();
   setupChatMenu();
+  setupMessageMenu();
+  setupSelectionToolbar();
+  setupForwardDialog();
   subscribeToBlocks();
+  subscribeToGlobalChanges();
   await loadRecentChats();
 }
 
 async function loadMyProfile() {
   const { data, error } = await supabase
-    .from("profiles")
-    .select("username, display_name")
-    .eq("id", currentUser.id)
-    .single();
+    .from("profiles").select("username, display_name")
+    .eq("id", currentUser.id).single();
   if (error) { console.error(error); return; }
+  myProfile = data;
   document.getElementById("me-name").textContent = data.display_name;
   document.getElementById("me-username").textContent = "@" + data.username;
   document.getElementById("me-avatar").textContent = (data.display_name || "?")[0].toUpperCase();
@@ -135,12 +151,9 @@ async function loadMyProfile() {
 async function loadBlocks() {
   myBlockedIds = new Set();
   blockedMeIds = new Set();
-
   const { data, error } = await supabase
-    .from("blocked_users")
-    .select("blocker_id, blocked_id");
+    .from("blocked_users").select("blocker_id, blocked_id");
   if (error) { console.error(error); return; }
-
   (data || []).forEach((b) => {
     if (b.blocker_id === currentUser.id) myBlockedIds.add(b.blocked_id);
     if (b.blocked_id === currentUser.id) blockedMeIds.add(b.blocker_id);
@@ -148,42 +161,45 @@ async function loadBlocks() {
 }
 
 async function blockUser(userId) {
-  const { error } = await supabase
-    .from("blocked_users")
+  const { error } = await supabase.from("blocked_users")
     .insert({ blocker_id: currentUser.id, blocked_id: userId });
-  if (error) { alert("Не удалось заблокировать: " + error.message); return; }
+  if (error) { alert("Не удалось: " + error.message); return; }
   await loadBlocks();
 }
 
 async function unblockUser(userId) {
-  const { error } = await supabase
-    .from("blocked_users")
-    .delete()
-    .eq("blocker_id", currentUser.id)
-    .eq("blocked_id", userId);
-  if (error) { alert("Не удалось разблокировать: " + error.message); return; }
+  const { error } = await supabase.from("blocked_users").delete()
+    .eq("blocker_id", currentUser.id).eq("blocked_id", userId);
+  if (error) { alert("Не удалось: " + error.message); return; }
   await loadBlocks();
 }
 
-function isBlockedByMe(userId) { return myBlockedIds.has(userId); }
-function hasBlockedMe(userId) { return blockedMeIds.has(userId); }
+function isBlockedByMe(id) { return myBlockedIds.has(id); }
+function hasBlockedMe(id) { return blockedMeIds.has(id); }
 
-// Realtime на блокировки — чтобы оба аккаунта узнавали мгновенно
 function subscribeToBlocks() {
   if (blocksChannel) return;
   blocksChannel = supabase
     .channel("blocks-changes")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "blocked_users" },
-      async () => {
-        await loadBlocks();
-        if (currentOtherUser) updateBlockUI();
-        if (!document.getElementById("search-input").value.trim()) {
-          await loadRecentChats();
-        }
-      }
-    )
+    .on("postgres_changes", { event: "*", schema: "public", table: "blocked_users" }, async () => {
+      await loadBlocks();
+      if (currentOtherUser) updateBlockUI();
+      if (!document.getElementById("search-input").value.trim()) await loadRecentChats();
+    })
+    .subscribe();
+}
+
+// Глобальные события: удаление чата
+function subscribeToGlobalChanges() {
+  if (globalChannel) return;
+  globalChannel = supabase
+    .channel("global-changes")
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "chats" }, (payload) => {
+      const id = payload.old && payload.old.id;
+      if (!id) return;
+      if (currentChatId === id) closeCurrentChat();
+      if (!document.getElementById("search-input").value.trim()) loadRecentChats();
+    })
     .subscribe();
 }
 
@@ -197,9 +213,7 @@ async function loadRecentChats() {
   listEl.innerHTML = '<div class="empty">Загрузка...</div>';
 
   const { data: myChats, error: e1 } = await supabase
-    .from("chat_members")
-    .select("chat_id")
-    .eq("user_id", currentUser.id);
+    .from("chat_members").select("chat_id").eq("user_id", currentUser.id);
 
   if (e1 || !myChats || myChats.length === 0) {
     listEl.innerHTML = '<div class="empty">Введи @username выше, чтобы найти человека</div>';
@@ -267,10 +281,7 @@ async function performSearch(query) {
 
   titleEl.textContent = "Поиск";
   const clean = query.replace(/^@+/, "").trim().toLowerCase();
-  if (!clean) {
-    listEl.innerHTML = '<div class="empty">Начни вводить @username</div>';
-    return;
-  }
+  if (!clean) { listEl.innerHTML = '<div class="empty">Начни вводить @username</div>'; return; }
   listEl.innerHTML = '<div class="empty">Ищу...</div>';
 
   const { data, error } = await supabase
@@ -325,7 +336,6 @@ function renderUsers(users) {
 
 async function openChatWith(otherUser) {
   currentOtherUser = otherUser;
-
   document.getElementById("chat-avatar").textContent = (otherUser.display_name || "?")[0].toUpperCase();
   document.getElementById("chat-title").textContent = otherUser.display_name;
   document.getElementById("chat-subtitle").textContent = "@" + otherUser.username;
@@ -333,6 +343,7 @@ async function openChatWith(otherUser) {
   document.getElementById("chat-content").classList.remove("hidden");
   document.getElementById("chat-menu").classList.add("hidden");
 
+  exitSelectionMode();
   updateBlockUI();
 
   const chatId = await getOrCreateChat(otherUser.id);
@@ -378,13 +389,19 @@ async function getOrCreateChat(otherUserId) {
 async function loadMessages(chatId) {
   const box = document.getElementById("messages");
   box.innerHTML = '<div class="empty">Загрузка...</div>';
+  msgCache.clear();
+  hiddenMsgIds = new Set();
+
+  const { data: hides } = await supabase
+    .from("message_hides").select("message_id").eq("user_id", currentUser.id);
+  hiddenMsgIds = new Set((hides || []).map((h) => h.message_id));
 
   const { data: clearRow } = await supabase
     .from("chat_clears").select("cleared_at")
     .eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle();
 
   let query = supabase
-    .from("messages").select("id, sender_id, content, created_at")
+    .from("messages").select("*")
     .eq("chat_id", chatId).order("created_at", { ascending: true });
   if (clearRow && clearRow.cleared_at) query = query.gt("created_at", clearRow.cleared_at);
 
@@ -392,11 +409,13 @@ async function loadMessages(chatId) {
   if (error) { box.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
 
   box.innerHTML = "";
-  if (!data || data.length === 0) {
+  const visible = (data || []).filter((m) => !hiddenMsgIds.has(m.id));
+
+  if (visible.length === 0) {
     box.innerHTML = '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
     return;
   }
-  data.forEach(appendMessage);
+  visible.forEach(appendMessage);
   scrollToBottom();
 }
 
@@ -405,19 +424,38 @@ function appendMessage(msg) {
   const empty = box.querySelector(".empty");
   if (empty) empty.remove();
 
+  if (document.querySelector(`.msg[data-id="${msg.id}"]`)) return;
+
   const mine = msg.sender_id === currentUser.id;
   const el = document.createElement("div");
   el.className = "msg " + (mine ? "mine" : "other");
   el.dataset.id = msg.id;
 
   const time = new Date(msg.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-  el.innerHTML = `<div class="msg-text">${escapeHtml(msg.content || "")}</div><div class="msg-time">${time}</div>`;
+
+  let fwdHtml = "";
+  if (msg.forwarded_from_name) {
+    fwdHtml = `<div class="msg-fwd">Переслано от ${escapeHtml(msg.forwarded_from_name)}</div>`;
+  }
+
+  el.innerHTML = `${fwdHtml}<div class="msg-text">${escapeHtml(msg.content || "")}</div><div class="msg-time">${time}</div>`;
+
+  el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
+
   box.appendChild(el);
+  msgCache.set(msg.id, msg);
 }
 
 function scrollToBottom() {
   const box = document.getElementById("messages");
   box.scrollTop = box.scrollHeight;
+}
+
+function checkEmptyChat() {
+  const box = document.getElementById("messages");
+  if (box.children.length === 0) {
+    box.innerHTML = '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
+  }
 }
 
 document.getElementById("composer").addEventListener("submit", async (e) => {
@@ -441,7 +479,7 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
 });
 
 // ======================================================
-// 10. REALTIME (события в чате: новые, удалённые)
+// 10. REALTIME ЧАТА
 // ======================================================
 
 function subscribeToChat(chatId) {
@@ -449,35 +487,30 @@ function subscribeToChat(chatId) {
 
   currentChannel = supabase
     .channel("chat-" + chatId)
-    .on(
-      "postgres_changes",
+    .on("postgres_changes",
       { event: "INSERT", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
       (payload) => {
         if (payload.new.chat_id !== currentChatId) return;
-        if (document.querySelector(`.msg[data-id="${payload.new.id}"]`)) return;
         appendMessage(payload.new);
         scrollToBottom();
       }
     )
-    .on(
-      "postgres_changes",
+    .on("postgres_changes",
       { event: "DELETE", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
       (payload) => {
         const id = payload.old && payload.old.id;
         if (!id) return;
+        msgCache.delete(id);
         const el = document.querySelector(`.msg[data-id="${id}"]`);
         if (el) el.remove();
-        const box = document.getElementById("messages");
-        if (box.children.length === 0) {
-          box.innerHTML = '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
-        }
+        checkEmptyChat();
       }
     )
     .subscribe();
 }
 
 // ======================================================
-// 11. ДИАЛОГ ВЫБОРА
+// 11. ДИАЛОГ ВЫБОРА (У СЕБЯ / У ОБОИХ)
 // ======================================================
 
 function showDialog(title, text, opt1Label, opt2Label) {
@@ -495,11 +528,8 @@ function showDialog(title, text, opt1Label, opt2Label) {
 
     function cleanup() {
       overlay.classList.add("hidden");
-      btn1.onclick = null;
-      btn2.onclick = null;
-      btnCancel.onclick = null;
+      btn1.onclick = null; btn2.onclick = null; btnCancel.onclick = null;
     }
-
     btn1.onclick = () => { cleanup(); resolve("opt1"); };
     btn2.onclick = () => { cleanup(); resolve("opt2"); };
     btnCancel.onclick = () => { cleanup(); resolve(null); };
@@ -507,7 +537,7 @@ function showDialog(title, text, opt1Label, opt2Label) {
 }
 
 // ======================================================
-// 12. МЕНЮ ЧАТА
+// 12. МЕНЮ ЧАТА (⋮ в шапке)
 // ======================================================
 
 function setupChatMenu() {
@@ -531,32 +561,22 @@ function setupChatMenu() {
     menuEl.classList.add("hidden");
 
     if (action === "clear") {
-      const choice = await showDialog(
-        "Очистить чат",
-        "Сообщения будут удалены. Выбери, что именно очистить:",
-        "Только у меня",
-        "У обоих"
-      );
+      const choice = await showDialog("Очистить чат", "Сообщения будут удалены. У кого?",
+        "Только у меня", "У обоих");
       if (choice === "opt1") await clearChatForMe();
       else if (choice === "opt2") await clearChatForBoth();
 
     } else if (action === "delete") {
-      const choice = await showDialog(
-        "Удалить чат",
-        "Что удалить?",
-        "У меня (чат вернётся при новом сообщении)",
-        "У обоих (безвозвратно)"
-      );
+      const choice = await showDialog("Удалить чат", "Что удалить?",
+        "У меня (вернётся при новом сообщении)", "У обоих (безвозвратно)");
       if (choice === "opt1") await hideChatFromList();
       else if (choice === "opt2") await deleteChatForBoth();
 
     } else if (action === "block") {
       if (!currentOtherUser) return;
-      if (isBlockedByMe(currentOtherUser.id)) {
-        await unblockUser(currentOtherUser.id);
-      } else {
-        const ok = confirm("Заблокировать @" + currentOtherUser.username + "?");
-        if (!ok) return;
+      if (isBlockedByMe(currentOtherUser.id)) await unblockUser(currentOtherUser.id);
+      else {
+        if (!confirm("Заблокировать @" + currentOtherUser.username + "?")) return;
         await blockUser(currentOtherUser.id);
       }
       updateBlockUI();
@@ -574,7 +594,6 @@ function setupChatMenu() {
 
 function updateBlockUI() {
   if (!currentOtherUser) return;
-
   const banner = document.getElementById("block-banner");
   const text = document.getElementById("block-banner-text");
   const btn = document.getElementById("unblock-btn");
@@ -589,53 +608,47 @@ function updateBlockUI() {
     text.textContent = "Ты заблокировал(а) @" + currentOtherUser.username + ".";
     btn.classList.remove("hidden");
     banner.classList.remove("hidden");
-    composerInput.disabled = true;
-    composerBtn.disabled = true;
+    composerInput.disabled = true; composerBtn.disabled = true;
     menuBlockBtn.textContent = "Разблокировать";
   } else if (theyBlocked) {
     text.textContent = "@" + currentOtherUser.username + " заблокировал(а) тебя. Сообщения не отправляются.";
     btn.classList.add("hidden");
     banner.classList.remove("hidden");
-    composerInput.disabled = true;
-    composerBtn.disabled = true;
+    composerInput.disabled = true; composerBtn.disabled = true;
     menuBlockBtn.textContent = "Заблокировать";
   } else {
-    banner.classList.add("hidden");
-    btn.classList.add("hidden");
-    composerInput.disabled = false;
-    composerBtn.disabled = false;
+    banner.classList.add("hidden"); btn.classList.add("hidden");
+    composerInput.disabled = false; composerBtn.disabled = false;
     menuBlockBtn.textContent = "Заблокировать";
   }
 }
 
 // ======================================================
-// 13. ДЕЙСТВИЯ: ОЧИСТКА / УДАЛЕНИЕ
+// 13. ОЧИСТКА / УДАЛЕНИЕ ЧАТА
 // ======================================================
 
 async function clearChatForMe() {
   if (!currentChatId) return;
-  const { error } = await supabase
-    .from("chat_clears")
-    .upsert({ chat_id: currentChatId, user_id: currentUser.id, cleared_at: new Date().toISOString() });
-  if (error) { alert("Ошибка: " + error.message); return; }
+  const { error } = await supabase.from("chat_clears").upsert({
+    chat_id: currentChatId, user_id: currentUser.id, cleared_at: new Date().toISOString(),
+  });
+  if (error) { alert(error.message); return; }
   await loadMessages(currentChatId);
 }
 
 async function clearChatForBoth() {
   if (!currentChatId) return;
   const { error } = await supabase.from("messages").delete().eq("chat_id", currentChatId);
-  if (error) { alert("Ошибка: " + error.message); return; }
-  // Realtime сам удалит сообщения у обоих, но подстрахуемся локально:
-  const box = document.getElementById("messages");
-  box.innerHTML = '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
+  if (error) { alert(error.message); return; }
+  document.getElementById("messages").innerHTML = '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
 }
 
 async function hideChatFromList() {
   if (!currentChatId) return;
-  const { error } = await supabase
-    .from("chat_hides")
-    .upsert({ chat_id: currentChatId, user_id: currentUser.id, hidden_at: new Date().toISOString() });
-  if (error) { alert("Ошибка: " + error.message); return; }
+  const { error } = await supabase.from("chat_hides").upsert({
+    chat_id: currentChatId, user_id: currentUser.id, hidden_at: new Date().toISOString(),
+  });
+  if (error) { alert(error.message); return; }
   closeCurrentChat();
   await loadRecentChats();
 }
@@ -643,7 +656,7 @@ async function hideChatFromList() {
 async function deleteChatForBoth() {
   if (!currentChatId) return;
   const { error } = await supabase.from("chats").delete().eq("id", currentChatId);
-  if (error) { alert("Ошибка: " + error.message); return; }
+  if (error) { alert(error.message); return; }
   closeCurrentChat();
   await loadRecentChats();
 }
@@ -657,7 +670,288 @@ function closeCurrentChat() {
 }
 
 // ======================================================
-// 14. XSS + автопроверка сессии
+// 14. ПКМ МЕНЮ СООБЩЕНИЯ
+// ======================================================
+
+function setupMessageMenu() {
+  const menuEl = document.getElementById("msg-context-menu");
+
+  menuEl.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    e.stopPropagation();
+    const action = btn.dataset.action;
+    const id = contextMsgId;
+    closeMsgContextMenu();
+
+    if (action === "del") await handleDeleteOne(id);
+    else if (action === "fwd") await handleForwardOne(id);
+    else if (action === "sel") enterSelectionMode(id);
+  });
+
+  document.addEventListener("click", () => closeMsgContextMenu());
+}
+
+function openMsgContextMenu(e, msgId) {
+  if (selectionMode) return;
+  e.preventDefault();
+  e.stopPropagation();
+  contextMsgId = msgId;
+
+  const menu = document.getElementById("msg-context-menu");
+  menu.classList.remove("hidden");
+  menu.style.left = "0px"; menu.style.top = "0px";
+  const rect = menu.getBoundingClientRect();
+  let x = e.clientX, y = e.clientY;
+  if (x + rect.width > window.innerWidth - 8) x = window.innerWidth - rect.width - 8;
+  if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
+  menu.style.left = x + "px";
+  menu.style.top = y + "px";
+}
+
+function closeMsgContextMenu() {
+  document.getElementById("msg-context-menu").classList.add("hidden");
+}
+
+// ======================================================
+// 15. УДАЛЕНИЕ ОДНОГО СООБЩЕНИЯ
+// ======================================================
+
+async function handleDeleteOne(msgId) {
+  const choice = await showDialog("Удалить сообщение", "У кого удалить?",
+    "У меня", "У обоих");
+  if (choice === "opt1") await hideMessageForMe(msgId);
+  else if (choice === "opt2") await deleteMessageForBoth(msgId);
+}
+
+async function hideMessageForMe(msgId) {
+  const { error } = await supabase.from("message_hides").insert({
+    message_id: msgId, user_id: currentUser.id,
+  });
+  if (error && !String(error.message).toLowerCase().includes("duplicate")) {
+    alert(error.message); return;
+  }
+  hiddenMsgIds.add(msgId);
+  msgCache.delete(msgId);
+  const el = document.querySelector(`.msg[data-id="${msgId}"]`);
+  if (el) el.remove();
+  checkEmptyChat();
+}
+
+async function deleteMessageForBoth(msgId) {
+  const { error } = await supabase.from("messages").delete().eq("id", msgId);
+  if (error) { alert(error.message); return; }
+  msgCache.delete(msgId);
+  const el = document.querySelector(`.msg[data-id="${msgId}"]`);
+  if (el) el.remove();
+  checkEmptyChat();
+}
+
+// ======================================================
+// 16. РЕЖИМ ВЫБОРА СООБЩЕНИЙ
+// ======================================================
+
+function setupSelectionToolbar() {
+  document.getElementById("sel-cancel").addEventListener("click", exitSelectionMode);
+  document.getElementById("sel-delete").addEventListener("click", handleDeleteSelected);
+  document.getElementById("sel-forward").addEventListener("click", handleForwardSelected);
+
+  document.getElementById("messages").addEventListener("click", (e) => {
+    if (!selectionMode) return;
+    const el = e.target.closest(".msg");
+    if (!el) return;
+    e.stopPropagation();
+    const id = el.dataset.id;
+    if (selectedMsgIds.has(id)) {
+      selectedMsgIds.delete(id);
+      el.classList.remove("selected");
+    } else {
+      if (selectedMsgIds.size >= 100) { alert("Максимум 100 сообщений"); return; }
+      selectedMsgIds.add(id);
+      el.classList.add("selected");
+    }
+    updateSelectionUI();
+  });
+}
+
+function enterSelectionMode(initialId) {
+  selectionMode = true;
+  selectedMsgIds.clear();
+  if (initialId) selectedMsgIds.add(initialId);
+  document.getElementById("selection-toolbar").classList.remove("hidden");
+  document.querySelectorAll(".msg").forEach((el) => {
+    if (selectedMsgIds.has(el.dataset.id)) el.classList.add("selected");
+  });
+  updateSelectionUI();
+}
+
+function exitSelectionMode() {
+  selectionMode = false;
+  selectedMsgIds.clear();
+  document.getElementById("selection-toolbar").classList.add("hidden");
+  document.querySelectorAll(".msg.selected").forEach((el) => el.classList.remove("selected"));
+}
+
+function updateSelectionUI() {
+  document.getElementById("selection-count").textContent = "Выбрано: " + selectedMsgIds.size;
+}
+
+async function handleDeleteSelected() {
+  const count = selectedMsgIds.size;
+  if (!count) return;
+  const choice = await showDialog("Удалить сообщения",
+    `Будет удалено: ${count}. У кого?`, "У меня", "У обоих");
+  if (!choice) return;
+
+  const ids = [...selectedMsgIds];
+
+  if (choice === "opt1") {
+    for (const id of ids) {
+      await supabase.from("message_hides").insert({ message_id: id, user_id: currentUser.id });
+      hiddenMsgIds.add(id);
+      msgCache.delete(id);
+      const el = document.querySelector(`.msg[data-id="${id}"]`);
+      if (el) el.remove();
+    }
+  } else if (choice === "opt2") {
+    const { error } = await supabase.from("messages").delete().in("id", ids);
+    if (error) { alert(error.message); return; }
+    ids.forEach((id) => {
+      msgCache.delete(id);
+      const el = document.querySelector(`.msg[data-id="${id}"]`);
+      if (el) el.remove();
+    });
+  }
+  exitSelectionMode();
+  checkEmptyChat();
+}
+
+async function handleForwardSelected() {
+  const msgs = [...selectedMsgIds].map((id) => msgCache.get(id)).filter(Boolean);
+  if (!msgs.length) return;
+  await openForwardDialog(msgs);
+}
+
+// ======================================================
+// 17. ПЕРЕСЫЛКА
+// ======================================================
+
+async function handleForwardOne(msgId) {
+  const msg = msgCache.get(msgId);
+  if (!msg) return;
+  await openForwardDialog([msg]);
+}
+
+async function openForwardDialog(msgs) {
+  forwardSourceMsgs = msgs;
+  forwardSelectedChats.clear();
+  document.getElementById("forward-overlay").classList.remove("hidden");
+  document.getElementById("forward-list").innerHTML = '<div class="empty">Загрузка...</div>';
+  await populateForwardList();
+  updateForwardInfo();
+}
+
+async function populateForwardList() {
+  const listEl = document.getElementById("forward-list");
+  const { data: myChats } = await supabase
+    .from("chat_members").select("chat_id").eq("user_id", currentUser.id);
+  const chatIds = (myChats || []).map((c) => c.chat_id);
+  if (!chatIds.length) { listEl.innerHTML = '<div class="empty">Нет чатов</div>'; return; }
+
+  const { data: others } = await supabase
+    .from("chat_members").select("chat_id, user_id")
+    .in("chat_id", chatIds).neq("user_id", currentUser.id);
+
+  const userIds = [...new Set((others || []).map((o) => o.user_id))];
+  const { data: profiles } = await supabase
+    .from("profiles").select("id, username, display_name").in("id", userIds);
+  const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+
+  const items = (others || []).map((o) => ({
+    chat_id: o.chat_id, user: profileMap.get(o.user_id),
+  })).filter((x) => x.user);
+
+  if (!items.length) { listEl.innerHTML = '<div class="empty">Нет чатов</div>'; return; }
+
+  listEl.innerHTML = items.map((x) => {
+    const initial = (x.user.display_name || "?")[0].toUpperCase();
+    return `
+      <div class="forward-item" data-chat-id="${x.chat_id}">
+        <div class="avatar">${initial}</div>
+        <div class="fname">${escapeHtml(x.user.display_name)}</div>
+        <div class="fcheck hidden">✓</div>
+      </div>`;
+  }).join("");
+
+  listEl.querySelectorAll(".forward-item").forEach((el) => {
+    el.addEventListener("click", () => {
+      const id = el.dataset.chatId;
+      if (forwardSelectedChats.has(id)) {
+        forwardSelectedChats.delete(id);
+        el.classList.remove("selected");
+        el.querySelector(".fcheck").classList.add("hidden");
+      } else {
+        if (forwardSelectedChats.size >= 10) { alert("Максимум 10 чатов"); return; }
+        forwardSelectedChats.add(id);
+        el.classList.add("selected");
+        el.querySelector(".fcheck").classList.remove("hidden");
+      }
+      updateForwardInfo();
+    });
+  });
+}
+
+function updateForwardInfo() {
+  document.getElementById("forward-info").textContent =
+    `Выбрано чатов: ${forwardSelectedChats.size} / 10`;
+}
+
+function setupForwardDialog() {
+  document.getElementById("forward-cancel").addEventListener("click", () => {
+    document.getElementById("forward-overlay").classList.add("hidden");
+    if (selectionMode) exitSelectionMode();
+  });
+  document.getElementById("forward-send").addEventListener("click", sendForward);
+}
+
+async function sendForward() {
+  if (!forwardSelectedChats.size) return;
+  if (!forwardSourceMsgs.length) return;
+
+  // Собираем имена отправителей один раз
+  const senderMap = new Map();
+  for (const m of forwardSourceMsgs) {
+    if (senderMap.has(m.sender_id)) continue;
+    if (myProfile && m.sender_id === currentUser.id) {
+      senderMap.set(m.sender_id, { name: myProfile.display_name, username: myProfile.username });
+    } else if (currentOtherUser && m.sender_id === currentOtherUser.id) {
+      senderMap.set(m.sender_id, { name: currentOtherUser.display_name, username: currentOtherUser.username });
+    } else {
+      const { data } = await supabase.from("profiles")
+        .select("display_name, username").eq("id", m.sender_id).single();
+      if (data) senderMap.set(m.sender_id, { name: data.display_name, username: data.username });
+    }
+  }
+
+  for (const chatId of forwardSelectedChats) {
+    for (const m of forwardSourceMsgs) {
+      const sender = senderMap.get(m.sender_id) || { name: "?", username: "?" };
+      await supabase.from("messages").insert({
+        chat_id: chatId,
+        sender_id: currentUser.id,
+        content: m.content,
+        forwarded_from_name: sender.name,
+        forwarded_from_username: sender.username,
+      });
+    }
+  }
+
+  document.getElementById("forward-overlay").classList.add("hidden");
+  if (selectionMode) exitSelectionMode();
+}
+
+// ======================================================
+// 18. XSS + автопроверка сессии
 // ======================================================
 
 function escapeHtml(str) {

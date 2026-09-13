@@ -115,6 +115,34 @@
   </div>
 </div>
 
+<!-- Контекстное меню сообщения (ПКМ) -->
+<div id="msg-context-menu" class="context-menu hidden">
+  <button data-action="del">Удалить</button>
+  <button data-action="fwd">Переслать</button>
+  <button data-action="sel">Выбрать</button>
+</div>
+
+<!-- Панель режима выбора -->
+<div id="selection-toolbar" class="selection-toolbar hidden">
+  <span id="selection-count">Выбрано: 0</span>
+  <button id="sel-delete">Удалить</button>
+  <button id="sel-forward">Переслать</button>
+  <button id="sel-cancel">Отмена</button>
+</div>
+
+<!-- Диалог пересылки -->
+<div id="forward-overlay" class="dialog-overlay hidden">
+  <div class="dialog">
+    <div class="dialog-title">Переслать</div>
+    <div class="dialog-text" id="forward-info">Выбери чаты</div>
+    <div id="forward-list" class="forward-list"></div>
+    <div class="dialog-actions">
+      <button class="dialog-btn" id="forward-send">Переслать</button>
+      <button class="dialog-btn dialog-cancel" id="forward-cancel">Отмена</button>
+    </div>
+  </div>
+</div>
+
   <script type="module" src="app.js"></script>
 </body>
 </html>
