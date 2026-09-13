@@ -1,0 +1,155 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  background: #0e1621;
+  color: #e6ebf0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.screen {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Экран входа */
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: #17212b;
+  border-radius: 16px;
+  padding: 40px 30px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.logo {
+  font-size: 36px;
+  font-weight: 700;
+  text-align: center;
+  color: #3ea6ff;
+  margin-bottom: 6px;
+}
+
+.tagline {
+  text-align: center;
+  color: #7d8d99;
+  font-size: 14px;
+  margin-bottom: 30px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  background: #0e1621;
+  padding: 4px;
+  border-radius: 10px;
+  margin-bottom: 24px;
+}
+
+.tab {
+  flex: 1;
+  padding: 10px;
+  background: transparent;
+  border: none;
+  color: #7d8d99;
+  cursor: pointer;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.tab.active {
+  background: #17212b;
+  color: #e6ebf0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+input {
+  padding: 14px 16px;
+  background: #0e1621;
+  border: 1px solid #232e3c;
+  border-radius: 10px;
+  color: #e6ebf0;
+  font-size: 15px;
+  outline: none;
+  transition: border 0.15s;
+}
+
+input:focus {
+  border-color: #3ea6ff;
+}
+
+.btn-primary {
+  padding: 14px;
+  background: #3ea6ff;
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-primary:hover {
+  background: #2b8ee0;
+}
+
+.btn-secondary {
+  padding: 12px 20px;
+  background: transparent;
+  border: 1px solid #3ea6ff;
+  color: #3ea6ff;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.error {
+  color: #ff5b5b;
+  font-size: 13px;
+  text-align: center;
+  min-height: 16px;
+}
+
+/* Главный экран-заглушка */
+.placeholder {
+  text-align: center;
+}
+
+.placeholder h1 {
+  font-size: 48px;
+  color: #3ea6ff;
+  margin-bottom: 12px;
+}
+
+.placeholder p {
+  color: #7d8d99;
+  margin-bottom: 8px;
+}
+
+.placeholder .small {
+  font-size: 13px;
+  margin-bottom: 24px;
+}
