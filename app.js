@@ -9,14 +9,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Список доступных акцентов (для пикера)
 const ACCENTS = ["orange", "blue", "green", "red", "purple", "pink", "teal", "gray"];
 const ACCENT_COLORS = {
   orange: "#ff8c42", blue: "#2196f3", green: "#4caf50", red: "#f44336",
   purple: "#9c27b0", pink: "#e91e63", teal: "#009688", gray: "#607d8b"
 };
 
-// Базовые аватарки (пары цветов градиента)
 const BASE_AVATARS = [
   ["#ff8c42", "#ffb37a"],
   ["#2196f3", "#64b5f6"],
@@ -108,7 +106,7 @@ let myBlockedIds = new Set();
 let blockedMeIds = new Set();
 let hiddenMsgIds = new Set();
 let msgCache = new Map();
-let reactionsCache = new Map(); // message_id -> [{user_id, emoji}]
+let reactionsCache = new Map();
 let replyToMsg = null;
 let editingMsgId = null;
 let selectionMode = false;
@@ -118,13 +116,13 @@ let forwardSourceMsgs = [];
 let forwardSelectedChats = new Set();
 let profileCache = new Map();
 
-// ======================================================
-// 3. ТЕМА / АКЦЕНТ
-// ======================================================
+// Username-проверка
+let usernameCheckTimeout = null;
+let validatedUsername = null;
 
-function applyTheme(theme) {
-  document.documentElement.setAttribute("data-theme", theme || "dark");
-}
+// ======================================================
+// 3. АКЦЕНТ
+// ======================================================
 
 function applyAccent(accent) {
   document.documentElement.setAttribute("data-accent", accent || "orange");
@@ -153,7 +151,7 @@ function paintAvatar(el, user) {
 }
 
 // ======================================================
-// 5. ПОКАЗ ЭКРАНОВ
+// 5. ЭКРАНЫ
 // ======================================================
 
 function showApp(user) {
@@ -170,10 +168,10 @@ function showAuth() {
   hiddenMsgIds = new Set(); msgCache.clear(); reactionsCache.clear();
   selectedMsgIds.clear(); forwardSelectedChats.clear(); profileCache.clear();
   replyToMsg = null; editingMsgId = null; selectionMode = false;
+  validatedUsername = null;
   [currentChannel, reactionsChannel, blocksChannel, globalChannel, profilesChannel]
     .forEach((ch) => ch && supabase.removeChannel(ch));
   currentChannel = reactionsChannel = blocksChannel = globalChannel = profilesChannel = null;
-  applyTheme("dark");
   applyAccent("orange");
   document.getElementById("auth-screen").classList.remove("hidden");
   document.getElementById("app-screen").classList.add("hidden");
@@ -202,13 +200,12 @@ async function initApp() {
 async function loadMyProfile() {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, username, display_name, avatar_url, theme, accent_color")
+    .select("id, username, display_name, avatar_url, accent_color")
     .eq("id", currentUser.id).single();
   if (error) { console.error(error); return; }
   myProfile = data;
   profileCache.set(currentUser.id, data);
 
-  applyTheme(data.theme || "dark");
   applyAccent(data.accent_color || "orange");
 
   paintAvatar(document.getElementById("me-avatar"), data);
@@ -219,14 +216,14 @@ async function loadMyProfile() {
 async function getProfile(id) {
   if (profileCache.has(id)) return profileCache.get(id);
   const { data } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, theme, accent_color")
+    .select("id, username, display_name, avatar_url, accent_color")
     .eq("id", id).single();
   if (data) profileCache.set(id, data);
   return data;
 }
 
 // ======================================================
-// 7. ПРОФИЛЬ (тема / акцент / аватар)
+// 7. ПРОФИЛЬ
 // ======================================================
 
 function setupProfilePanel() {
@@ -237,16 +234,7 @@ function setupProfilePanel() {
 
   document.getElementById("avatar-upload").addEventListener("change", handleAvatarUpload);
 
-  document.getElementById("theme-toggle").addEventListener("click", async (e) => {
-    const btn = e.target.closest("button");
-    if (!btn) return;
-    const theme = btn.dataset.theme;
-    applyTheme(theme);
-    updateThemeButtons();
-    await saveProfileField({ theme });
-  });
-
-  // Пре-рендер сетки акцентов
+  // Сетка акцентов
   const grid = document.getElementById("accent-grid");
   grid.innerHTML = "";
   ACCENTS.forEach((a) => {
@@ -265,6 +253,19 @@ function setupProfilePanel() {
     updateAccentButtons();
     await saveProfileField({ accent_color: accent });
   });
+
+  // Username — живая проверка
+  const usernameInput = document.getElementById("profile-username");
+  usernameInput.addEventListener("input", (e) => {
+    clearTimeout(usernameCheckTimeout);
+    validatedUsername = null;
+    const value = e.target.value;
+    usernameCheckTimeout = setTimeout(() => checkUsernameLive(value), 350);
+  });
+  usernameInput.addEventListener("blur", trySaveUsername);
+  usernameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); trySaveUsername(); }
+  });
 }
 
 async function openProfilePanel() {
@@ -272,9 +273,15 @@ async function openProfilePanel() {
   document.getElementById("profile-overlay").classList.remove("hidden");
 
   paintAvatar(document.getElementById("profile-avatar-preview"), myProfile);
-  updateThemeButtons();
   updateAccentButtons();
   renderAvatarGrid();
+
+  const usernameInput = document.getElementById("profile-username");
+  usernameInput.value = myProfile.username;
+  validatedUsername = myProfile.username;
+  const hint = document.getElementById("username-hint");
+  hint.className = "username-hint";
+  hint.textContent = "";
 }
 
 function renderAvatarGrid() {
@@ -296,13 +303,6 @@ function renderAvatarGrid() {
       await saveProfileField({ avatar_url: url });
     });
     grid.appendChild(el);
-  });
-}
-
-function updateThemeButtons() {
-  const cur = document.documentElement.getAttribute("data-theme") || "dark";
-  document.querySelectorAll("#theme-toggle button").forEach((b) => {
-    b.classList.toggle("active", b.dataset.theme === cur);
   });
 }
 
@@ -361,6 +361,97 @@ function resizeImage(file, maxSize) {
   });
 }
 
+// Проверка username
+async function checkUsernameLive(value) {
+  const hint = document.getElementById("username-hint");
+  const username = value.trim();
+  validatedUsername = null;
+
+  if (!username) {
+    hint.className = "username-hint";
+    hint.textContent = "";
+    return;
+  }
+
+  if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+    hint.className = "username-hint err";
+    hint.textContent = "Только английские буквы, цифры, _ и -";
+    return;
+  }
+
+  if (username.length < 3) {
+    hint.className = "username-hint err";
+    hint.textContent = "Минимум 3 символа";
+    return;
+  }
+
+  if (myProfile && username.toLowerCase() === myProfile.username.toLowerCase()) {
+    hint.className = "username-hint ok";
+    hint.textContent = "Это ваш текущий юзернейм";
+    validatedUsername = username;
+    return;
+  }
+
+  hint.className = "username-hint wait";
+  hint.textContent = "Проверяю...";
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id")
+    .ilike("username", username)
+    .neq("id", currentUser.id)
+    .limit(1);
+
+  // Если пользователь уже поменял поле — игнорируем результат
+  if (document.getElementById("profile-username").value.trim() !== username) return;
+
+  if (error) {
+    hint.className = "username-hint err";
+    hint.textContent = "Ошибка проверки";
+    return;
+  }
+
+  if (data && data.length > 0) {
+    hint.className = "username-hint err";
+    hint.textContent = `@${username} уже занят`;
+    validatedUsername = null;
+  } else {
+    hint.className = "username-hint ok";
+    hint.textContent = `@${username} свободен`;
+    validatedUsername = username;
+  }
+}
+
+async function trySaveUsername() {
+  const input = document.getElementById("profile-username");
+  const username = input.value.trim();
+  if (!username) return;
+  if (username === myProfile.username) return;
+  if (username !== validatedUsername) return;
+
+  const hint = document.getElementById("username-hint");
+
+  const { error } = await supabase.from("profiles")
+    .update({ username }).eq("id", currentUser.id);
+
+  if (error) {
+    const msg = String(error.message || "");
+    if (msg.toLowerCase().includes("duplicate") || error.code === "23505") {
+      hint.className = "username-hint err";
+      hint.textContent = `@${username} уже занят`;
+    } else {
+      hint.className = "username-hint err";
+      hint.textContent = "Не удалось сохранить";
+    }
+    return;
+  }
+
+  myProfile.username = username;
+  document.getElementById("me-username").textContent = "@" + username;
+  hint.className = "username-hint ok";
+  hint.textContent = "Сохранено";
+}
+
 // ======================================================
 // 8. БЛОКИРОВКИ
 // ======================================================
@@ -398,7 +489,14 @@ function subscribeToBlocks() {
     .on("postgres_changes", { event: "*", schema: "public", table: "blocked_users" }, async () => {
       await loadBlocks();
       if (currentOtherUser) updateBlockUI();
-      if (!document.getElementById("search-input").value.trim()) await loadRecentChats();
+      // Обновим иконку 🚫 у элементов списка без перезагрузки
+      document.querySelectorAll(".user-item").forEach((el) => {
+        const uid = el.dataset.userId;
+        const nameEl = el.querySelector(".user-item-name");
+        if (!nameEl || !uid) return;
+        const base = nameEl.textContent.replace(/\s*🚫$/, "");
+        nameEl.textContent = base + (isBlockedByMe(uid) ? " 🚫" : "");
+      });
     }).subscribe();
 }
 
@@ -409,29 +507,55 @@ function subscribeToGlobalChanges() {
       const id = payload.old && payload.old.id;
       if (!id) return;
       if (currentChatId === id) closeCurrentChat();
+      // Убираем элемент из списка без полной перезагрузки
+      // (для простоты — просто перезагрузим, только если это не текущий поиск)
       if (!document.getElementById("search-input").value.trim()) loadRecentChats();
     }).subscribe();
+}
+
+// Обновление в UI без перезагрузки всего
+function updateUserEverywhere(profile) {
+  // Список людей
+  const itemEl = document.querySelector(`.user-item[data-user-id="${profile.id}"]`);
+  if (itemEl) {
+    paintAvatar(itemEl.querySelector(".avatar"), profile);
+    const nameEl = itemEl.querySelector(".user-item-name");
+    const unameEl = itemEl.querySelector(".user-item-username");
+    if (nameEl) nameEl.textContent = profile.display_name + (isBlockedByMe(profile.id) ? " 🚫" : "");
+    if (unameEl) unameEl.textContent = "@" + profile.username;
+  }
+
+  // Заголовок чата
+  if (currentOtherUser && currentOtherUser.id === profile.id) {
+    currentOtherUser = { ...currentOtherUser, ...profile };
+    paintAvatar(document.getElementById("chat-avatar"), currentOtherUser);
+    document.getElementById("chat-title").textContent = profile.display_name;
+    document.getElementById("chat-subtitle").textContent = "@" + profile.username;
+  }
+
+  // Диалог пересылки
+  document.querySelectorAll(".forward-item").forEach((el) => {
+    // Не хранит id юзера — пропускаем, обновится при следующем открытии
+  });
 }
 
 function subscribeToProfiles() {
   if (profilesChannel) return;
   profilesChannel = supabase.channel("profiles-changes")
-    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, async (payload) => {
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, (payload) => {
       const p = payload.new;
       profileCache.set(p.id, p);
+
       if (p.id === currentUser.id) {
         myProfile = { ...myProfile, ...p };
+        paintAvatar(document.getElementById("me-avatar"), myProfile);
+        document.getElementById("me-name").textContent = p.display_name;
+        document.getElementById("me-username").textContent = "@" + p.username;
+        // Обновим заголовок если чат с самим собой (на всякий)
       }
-      if (currentOtherUser && currentOtherUser.id === p.id) {
-        currentOtherUser = { ...currentOtherUser, ...p };
-        paintAvatar(document.getElementById("chat-avatar"), currentOtherUser);
-      }
-      if (!document.getElementById("search-input").value.trim()) {
-        await loadRecentChats();
-      } else {
-        const q = document.getElementById("search-input").value.trim();
-        if (q) await performSearch(q);
-      }
+
+      // Обновляем в списке без перезагрузки
+      updateUserEverywhere(p);
     }).subscribe();
 }
 
@@ -658,7 +782,6 @@ async function loadReactionsForVisibleMessages() {
     if (!reactionsCache.has(r.message_id)) reactionsCache.set(r.message_id, []);
     reactionsCache.get(r.message_id).push({ user_id: r.user_id, emoji: r.emoji });
   });
-  // Обновляем отображение в UI
   document.querySelectorAll(".msg").forEach((el) => {
     renderReactionsUI(el.dataset.id);
   });
@@ -716,11 +839,8 @@ async function appendMessage(msg) {
 
 function onMsgClick(e) {
   const replyEl = e.target.closest(".msg-reply");
-  if (replyEl) {
-    e.stopPropagation();
-    jumpToMessage(replyEl.dataset.scrollTo);
-    return;
-  }
+  if (replyEl) { e.stopPropagation(); jumpToMessage(replyEl.dataset.scrollTo); return; }
+
   const fwdEl = e.target.closest(".msg-fwd-link");
   if (fwdEl) {
     e.stopPropagation();
@@ -728,12 +848,14 @@ function onMsgClick(e) {
     if (uname) openChatByUsername(uname);
     return;
   }
+
   const addBtn = e.target.closest(".msg-add-reaction");
   if (addBtn) {
     e.stopPropagation();
     openReactionPickerFor(addBtn, addBtn.dataset.addReaction);
     return;
   }
+
   const chip = e.target.closest(".reaction-chip");
   if (chip) {
     e.stopPropagation();
@@ -816,7 +938,7 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
 });
 
 // ======================================================
-// 14. REALTIME: сообщения
+// 14. REALTIME сообщений
 // ======================================================
 
 function subscribeToChat(chatId) {
@@ -845,7 +967,7 @@ function subscribeToChat(chatId) {
 }
 
 // ======================================================
-// 15. REALTIME: реакции
+// 15. REALTIME реакций
 // ======================================================
 
 function subscribeToReactions() {
@@ -872,7 +994,7 @@ function renderReactionsUI(msgId) {
   const list = reactionsCache.get(msgId) || [];
   if (!list.length) { container.innerHTML = ""; return; }
 
-  const grouped = new Map(); // emoji -> {count, mine}
+  const grouped = new Map();
   list.forEach((r) => {
     if (!grouped.has(r.emoji)) grouped.set(r.emoji, { count: 0, mine: false });
     const g = grouped.get(r.emoji);
@@ -920,9 +1042,7 @@ function openReactionPickerFor(anchorEl, msgId) {
 }
 
 function closeReactionPickerOnClick(e) {
-  if (!e.target.closest("#reaction-picker")) {
-    closeReactionPicker();
-  }
+  if (!e.target.closest("#reaction-picker")) closeReactionPicker();
 }
 
 function closeReactionPicker() {
@@ -935,17 +1055,30 @@ async function toggleReaction(msgId, emoji) {
   const mine = list.find((r) => r.user_id === currentUser.id);
 
   if (mine && mine.emoji === emoji) {
-    await supabase.from("reactions").delete()
+    // Удаляем — оптимистично обновляем локально
+    reactionsCache.set(msgId, list.filter((r) => r.user_id !== currentUser.id));
+    renderReactionsUI(msgId);
+    const { error } = await supabase.from("reactions").delete()
       .eq("message_id", msgId).eq("user_id", currentUser.id);
+    if (error) { console.error(error); refreshReactionsFor(msgId); }
   } else if (mine) {
-    await supabase.from("reactions").update({ emoji })
+    // Меняем — оптимистично
+    const newList = list.map((r) => r.user_id === currentUser.id ? { ...r, emoji } : r);
+    reactionsCache.set(msgId, newList);
+    renderReactionsUI(msgId);
+    const { error } = await supabase.from("reactions").update({ emoji })
       .eq("message_id", msgId).eq("user_id", currentUser.id);
+    if (error) { console.error(error); refreshReactionsFor(msgId); }
   } else {
-    await supabase.from("reactions").insert({
+    // Добавляем — оптимистично
+    const newList = [...list, { user_id: currentUser.id, emoji }];
+    reactionsCache.set(msgId, newList);
+    renderReactionsUI(msgId);
+    const { error } = await supabase.from("reactions").insert({
       message_id: msgId, user_id: currentUser.id, emoji,
     });
+    if (error) { console.error(error); refreshReactionsFor(msgId); }
   }
-  await refreshReactionsFor(msgId);
 }
 
 // ======================================================
