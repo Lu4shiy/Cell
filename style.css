@@ -1012,3 +1012,124 @@ input:focus { border-color: var(--accent); }
   transition: background 0.12s;
 }
 .chat-header-text.clickable:hover { background: var(--bg-hover); }
+
+/* ====================================================== */
+/* Плашка дня рождения                                    */
+/* ====================================================== */
+
+.birthday-banner {
+  margin: 0 12px 8px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(255,140,66,0.18), rgba(255,140,66,0.08));
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.15s;
+}
+.birthday-banner:hover { background: linear-gradient(135deg, rgba(255,140,66,0.28), rgba(255,140,66,0.14)); }
+.birthday-banner:active { transform: scale(0.99); }
+.birthday-icon { font-size: 16px; }
+
+/* ====================================================== */
+/* Профиль собеседника (телеграм-стиль)                   */
+/* ====================================================== */
+
+.profile-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.profile-hero .avatar { margin-bottom: 14px; }
+
+.profile-hero-name {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.profile-hero-status {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.profile-hero-status.online { color: var(--accent); font-weight: 600; }
+
+.profile-info-list {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+  margin-bottom: 16px;
+}
+
+.profile-info-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 4px;
+  border-radius: 8px;
+}
+
+.pir-icon {
+  width: 26px;
+  text-align: center;
+  font-size: 16px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.pir-body { flex: 1; min-width: 0; }
+
+.pir-value {
+  font-size: 15px;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.pir-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* ====================================================== */
+/* Диалог ввода                                           */
+/* ====================================================== */
+
+#input-overlay .dialog { max-width: 380px; }
+#input-field {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
+  margin-bottom: 16px;
+  transition: border-color 0.15s;
+}
+#input-field:focus { border-color: var(--accent); }
+
+/* День рождения в своём профиле */
+#profile-birthday {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
+}
+#profile-birthday:focus { border-color: var(--accent); }

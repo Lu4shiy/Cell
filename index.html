@@ -58,6 +58,11 @@
         <input type="text" id="search-input" placeholder="Поиск людей...">
       </div>
 
+      <div id="birthday-banner" class="birthday-banner hidden">
+        <span class="birthday-icon">🎂</span>
+        <span id="birthday-banner-text"></span>
+      </div>
+
       <div class="section-title" id="section-title">Недавние чаты</div>
       <div id="users-list" class="users-list">
         <div class="empty">Загрузка...</div>
@@ -178,6 +183,12 @@
       </div>
 
       <div class="profile-section">
+        <div class="profile-label">День рождения</div>
+        <input type="date" id="profile-birthday">
+      </div>
+
+
+      <div class="profile-section">
         <div class="profile-label">Цвет приложения</div>
         <div class="accent-grid" id="accent-grid"></div>
       </div>
@@ -201,17 +212,43 @@
   <!-- Профиль другого пользователя -->
   <div id="user-profile-overlay" class="dialog-overlay hidden">
     <div class="dialog dialog-profile">
-      <div class="dialog-title">Профиль</div>
-      <div class="avatar-preview">
+      <div class="profile-hero">
         <div class="avatar avatar-large" id="user-profile-avatar">?</div>
+        <div class="profile-hero-name" id="user-profile-name">—</div>
+        <div class="profile-hero-status" id="user-profile-status">—</div>
       </div>
-      <div class="user-profile-info">
-        <div class="user-profile-row"><span class="up-label">Имя:</span><span class="up-value" id="user-profile-name">—</span></div>
-        <div class="user-profile-row"><span class="up-label">Юзернейм:</span><span class="up-value" id="user-profile-username">—</span></div>
-        <div class="user-profile-row"><span class="up-label">Аккаунт создан:</span><span class="up-value" id="user-profile-created">—</span></div>
-        <div class="user-profile-row"><span class="up-label">Сообщений в чате:</span><span class="up-value" id="user-profile-msgcount">—</span></div>
-        <div class="user-profile-row"><span class="up-label">Последний вход:</span><span class="up-value" id="user-profile-lastseen">—</span></div>
+
+      <div class="profile-info-list">
+        <div class="profile-info-row">
+          <span class="pir-icon">@</span>
+          <div class="pir-body">
+            <div class="pir-value" id="user-profile-username">—</div>
+            <div class="pir-label">Имя пользователя</div>
+          </div>
+        </div>
+        <div class="profile-info-row">
+          <span class="pir-icon">🎂</span>
+          <div class="pir-body">
+            <div class="pir-value" id="user-profile-birthday">—</div>
+            <div class="pir-label">День рождения</div>
+          </div>
+        </div>
+        <div class="profile-info-row">
+          <span class="pir-icon">💬</span>
+          <div class="pir-body">
+            <div class="pir-value" id="user-profile-msgcount">0</div>
+            <div class="pir-label">Сообщений в чате</div>
+          </div>
+        </div>
+        <div class="profile-info-row">
+          <span class="pir-icon">📅</span>
+          <div class="pir-body">
+            <div class="pir-value" id="user-profile-created">—</div>
+            <div class="pir-label">Дата регистрации аккаунта</div>
+          </div>
+        </div>
       </div>
+
       <div class="dialog-actions">
         <button class="dialog-btn dialog-cancel" id="user-profile-close">Закрыть</button>
       </div>
@@ -229,6 +266,20 @@
   <!-- Пикер реакций -->
   <div id="reaction-picker" class="reaction-picker hidden"></div>
 
+  <!-- Диалог ввода текста -->
+  <div id="input-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" id="input-title"></div>
+      <div class="dialog-text" id="input-text"></div>
+      <input type="text" id="input-field">
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="input-confirm">ОК</button>
+        <button class="dialog-btn dialog-cancel" id="input-cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+
   <!-- Диалог пересылки -->
   <div id="forward-overlay" class="dialog-overlay hidden">
     <div class="dialog">
@@ -245,49 +296,6 @@
       </div>
     </div>
   </div>
-
-<!-- ПКМ меню чата в списке -->
-<div id="chat-context-menu" class="context-menu hidden">
-  <button data-action="profile">Профиль</button>
-  <button data-action="rename">Переименовать</button>
-  <button data-action="clear">Очистить чат</button>
-  <button data-action="delete">Удалить чат</button>
-  <button data-action="block" class="danger">Заблокировать</button>
-</div>
-
-<!-- Модалка профиля другого пользователя -->
-<div id="user-profile-overlay" class="dialog-overlay hidden">
-  <div class="dialog dialog-profile-view">
-    <div class="profile-view-avatar-wrap">
-      <div class="avatar avatar-large" id="up-avatar">?</div>
-    </div>
-    <div class="profile-view-name" id="up-name">Имя</div>
-    <div class="profile-view-username" id="up-username">@username</div>
-
-    <div class="profile-view-info">
-      <div class="profile-view-row">
-        <span class="profile-view-label">Пол</span>
-        <span class="profile-view-value" id="up-gender">Не выбран</span>
-      </div>
-      <div class="profile-view-row">
-        <span class="profile-view-label">Дата регистрации</span>
-        <span class="profile-view-value" id="up-created">—</span>
-      </div>
-      <div class="profile-view-row">
-        <span class="profile-view-label">Сообщений в чате</span>
-        <span class="profile-view-value" id="up-msgcount">—</span>
-      </div>
-      <div class="profile-view-row">
-        <span class="profile-view-label">Последний вход</span>
-        <span class="profile-view-value" id="up-lastseen">—</span>
-      </div>
-    </div>
-
-    <div class="dialog-actions">
-      <button class="dialog-btn dialog-cancel" id="up-close">Закрыть</button>
-    </div>
-  </div>
-</div>
 
   <script type="module" src="app.js"></script>
 </body>
