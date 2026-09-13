@@ -1228,6 +1228,7 @@ function updateMessageStatusInUI(msg) {
   if (newHtml !== html) el.innerHTML = newHtml;
 }
 
+function onMsgClick(e) {
   const giftEl = e.target.closest(".msg-system.gift-msg");
   if (giftEl) {
     const msgId = giftEl.dataset.id;
@@ -1237,6 +1238,7 @@ function updateMessageStatusInUI(msg) {
     }
     return;
   }
+  const replyEl = e.target.closest(".msg-reply");
   if (replyEl) { e.stopPropagation(); jumpToMessage(replyEl.dataset.scrollTo); return; }
   const fwdEl = e.target.closest(".msg-fwd-link");
   if (fwdEl) {
