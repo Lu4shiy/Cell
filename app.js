@@ -61,48 +61,73 @@ loginForm.addEventListener("submit", async (e) => {
 document.getElementById("logout-btn").addEventListener("click", async () => { await supabase.auth.signOut(); showAuth(); });
 
 // ============ Форматирование текста ============
-const FORMAT_MARKERS = {
-  bold: ["**", "**"],
-  underline: ["__", "__"],
-  italic: ["*", "*"],
-  strike: ["~~", "~~"],
-  mono: ["`", "`"],
-  spoiler: ["||", "||"],
-};
 
-function wrapSelection(el, format) {
-  if (format === "quote") {
-    const s = el.selectionStart, e2 = el.selectionEnd;
-    const before = el.value.slice(0, s);
-    const sel = el.value.slice(s, e2);
-    const after = el.value.slice(e2);
-    if (!sel) {
-      el.value = before + "> " + after;
-      el.selectionStart = el.selectionEnd = s + 2;
-      el.focus();
-      return;
-    }
-    const lines = sel.split("\n").map((l) => "> " + l).join("\n");
-    el.value = before + lines + after;
-    el.selectionStart = s;
-    el.selectionEnd = s + lines.length;
-    el.focus();
-    return;
-  }
-  const [open, close] = FORMAT_MARKERS[format];
-  const s = el.selectionStart, e2 = el.selectionEnd;
-  const before = el.value.slice(0, s);
-  const sel = el.value.slice(s, e2);
-  const after = el.value.slice(e2);
-
-  el.value = before + open + sel + close + after;
-  if (sel) {
-    el.selectionStart = s + open.length;
-    el.selectionEnd = s + open.length + sel.length;
-  } else {
-    el.selectionStart = el.selectionEnd = s + open.length;
-  }
+function wrapSelection(format) {
+  const el = document.getElementById("message-input");
+  if (!el) return;
   el.focus();
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) return; // ничего не выделено
+
+  if (format === "bold") document.execCommand("bold");
+  else if (format === "italic") document.execCommand("italic");
+  else if (format === "underline") document.execCommand("underline");
+  else if (format === "strike") document.execCommand("strikeThrough");
+  else if (format === "mono") document.execCommand("insertHTML", false, "<code>" + escapeHtml(sel.toString()) + "</code>");
+  else if (format === "spoiler") document.execCommand("insertHTML", false, '<span class="spoiler">' + escapeHtml(sel.toString()) + "</span>");
+  else if (format === "quote") {
+    const txt = sel.toString();
+    const quoted = txt.split("\n").map((l) => "> " + l).join("\n");
+    document.execCommand("insertText", false, "\n" + quoted + "\n");
+  }
+}
+
+// HTML из contenteditable → markdown-строка
+function htmlToMarkdown(node) {
+  let out = "";
+  for (const child of node.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      out += child.textContent;
+    } else if (child.nodeType === Node.ELEMENT_NODE) {
+      const tag = child.tagName.toLowerCase();
+      const inner = htmlToMarkdown(child);
+      if (tag === "br") out += "\n";
+      else if (tag === "b" || tag === "strong") out += "**" + inner + "**";
+      else if (tag === "i" || tag === "em") out += "*" + inner + "*";
+      else if (tag === "u") out += "__" + inner + "__";
+      else if (tag === "s" || tag === "del" || tag === "strike") out += "~~" + inner + "~~";
+      else if (tag === "code") out += "`" + inner + "`";
+      else if (tag === "blockquote") out += "> " + inner.replace(/\n/g, "\n> ") + "\n";
+      else if (child.classList && child.classList.contains("spoiler")) out += "||" + inner + "||";
+      else if (tag === "div" || tag === "p") out += inner + "\n";
+      else out += inner;
+    }
+  }
+  return out.replace(/\n+$/, "");
+}
+
+function getInputText() {
+  const el = document.getElementById("message-input");
+  if (!el) return "";
+  let md = htmlToMarkdown(el);
+  // Не превращаем одиночные переносы в лишние
+  return md.trim();
+}
+
+function clearInput() {
+  const el = document.getElementById("message-input");
+  if (el) {
+    el.innerHTML = "";
+    el.style.height = "auto";
+  }
+}
+
+function setInputFromMarkdown(md) {
+  const el = document.getElementById("message-input");
+  if (!el) return;
+  el.innerHTML = applyFormatting(escapeHtml(md || "")).replace(/\n/g, "<br>");
 }
 
 function applyFormatting(escaped) {
@@ -129,6 +154,7 @@ let msgCache = new Map(), reactionsCache = new Map();
 let chatReads = new Map();
 let chatLastMsg = new Map();
 let chatIdByUser = new Map();
+const pendingChatAdds = new Set();
 let replyToMsg = null, editingMsgId = null;
 let selectionMode = false, selectedMsgIds = new Set();
 let contextMsgId = null, contextChatUser = null, contextChatCustomName = null;
@@ -204,9 +230,11 @@ async function initApp() {
 
   // Обновлять мой last_seen
   await updateMyLastSeen();
-  lastSeenInterval = setInterval(() => {
-    if (document.visibilityState === "visible") updateMyLastSeen();
-  }, 8000);
+  // Пингуем всегда, вне зависимости от видимости — иначе статус в другом окне не обновляется
+  lastSeenInterval = setInterval(updateMyLastSeen, 8000);
+  document.addEventListener("mousemove", updateMyLastSeen, { passive: true });
+  document.addEventListener("keydown", updateMyLastSeen);
+  document.addEventListener("click", updateMyLastSeen);
 
   // Обновлять статус собеседника
   otherUserInterval = setInterval(async () => {
@@ -227,13 +255,12 @@ async function initApp() {
   statusPollInterval = setInterval(pollMyMessageStatuses, 5000);
 
   document.addEventListener("visibilitychange", () => {
+    updateMyLastSeen();
     if (document.visibilityState === "visible") {
-      updateMyLastSeen();
       pollMyMessageStatuses();
       if (currentChatId) markChatRead(currentChatId);
     }
   });
-  window.addEventListener("focus", () => updateMyLastSeen());
 }
 
 async function pollMyMessageStatuses() {
@@ -915,43 +942,50 @@ function resortChatsList() {
 }
 
 async function addOrUpdateChatInList(chatId, otherUserId) {
-  // Если пользователь сейчас ищет — не мешаем
   if (document.getElementById("search-input").value.trim()) return;
-  // Уже есть в списке?
   if (document.querySelector(`.user-item[data-chat-id="${chatId}"]`)) return;
+  if (pendingChatAdds.has(chatId)) return;
+  pendingChatAdds.add(chatId);
 
-  const { data: profile } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, last_seen, gender, birthday")
-    .eq("id", otherUserId).single();
-  if (!profile) return;
-  profileCache.set(profile.id, profile);
-  chatIdByUser.set(otherUserId, chatId);
+  try {
+    const { data: profile } = await supabase.from("profiles")
+      .select("id, username, display_name, avatar_url, last_seen, gender, birthday")
+      .eq("id", otherUserId).single();
+    if (!profile) return;
 
-  // Custom name для этого чата
-  const { data: myMembership } = await supabase.from("chat_members")
-    .select("custom_name").eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle();
-  const customName = myMembership ? myMembership.custom_name : null;
+    // Ещё раз проверяем — пока грузили профиль, могли уже добавить
+    if (document.querySelector(`.user-item[data-chat-id="${chatId}"]`)) return;
 
-  const item = {
-    chat_id: chatId,
-    user_id: otherUserId,
-    lastMsg: null,
-    lastTime: Date.now(),
-    unread: 0,
-    customName,
-  };
-  chatLastMsg.set(chatId, { text: "", time: Date.now(), senderId: null, unread: 0 });
+    profileCache.set(profile.id, profile);
+    chatIdByUser.set(otherUserId, chatId);
 
-  const listEl = document.getElementById("users-list");
-  const empty = listEl.querySelector(".empty");
-  if (empty) empty.remove();
+    const { data: myMembership } = await supabase.from("chat_members")
+      .select("custom_name").eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle();
+    const customName = myMembership ? myMembership.custom_name : null;
 
-  const temp = document.createElement("div");
-  temp.innerHTML = renderChatItem(item, profile);
-  const itemEl = temp.firstElementChild;
-  paintAvatar(itemEl.querySelector(".avatar"), profile);
-  bindChatItemEvents(itemEl, profile);
-  listEl.insertBefore(itemEl, listEl.firstChild);
+    const item = {
+      chat_id: chatId,
+      user_id: otherUserId,
+      lastMsg: null,
+      lastTime: Date.now(),
+      unread: 0,
+      customName,
+    };
+    chatLastMsg.set(chatId, { text: "", time: Date.now(), senderId: null, unread: 0 });
+
+    const listEl = document.getElementById("users-list");
+    const empty = listEl.querySelector(".empty");
+    if (empty) empty.remove();
+
+    const temp = document.createElement("div");
+    temp.innerHTML = renderChatItem(item, profile);
+    const itemEl = temp.firstElementChild;
+    paintAvatar(itemEl.querySelector(".avatar"), profile);
+    bindChatItemEvents(itemEl, profile);
+    listEl.insertBefore(itemEl, listEl.firstChild);
+  } finally {
+    pendingChatAdds.delete(chatId);
+  }
 }
 
 function removeChatFromList(chatId) {
@@ -1463,8 +1497,7 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
     return;
   }
 
-  const input = document.getElementById("message-input");
-  const content = input.value.trim();
+  const content = getInputText();
   if (!content) return;
 
   // Режим редактирования
@@ -1472,14 +1505,14 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
     const { error } = await supabase.from("messages")
       .update({ content, edited_at: new Date().toISOString() }).eq("id", editingMsgId);
     if (error) { await showAlertDialog("Ошибка", error.message); return; }
-    input.value = "";
+    clearInput();
     cancelEdit();
     return;
   }
 
   // Если чата ещё нет — создаём при первом сообщении
   if (!currentChatId && currentOtherUser) {
-    input.value = "";
+    clearInput();
     const chatId = await createChatWith(currentOtherUser.id);
     if (!chatId) { await showAlertDialog("Ошибка", "Не удалось создать чат"); return; }
     currentChatId = chatId;
@@ -1492,7 +1525,7 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
   }
 
   if (!currentChatId) return;
-  input.value = "";
+  clearInput();
   await sendMessage(currentChatId, content);
 });
 
@@ -1856,9 +1889,9 @@ function setupMessageMenu() {
   });
   document.addEventListener("click", () => closeMsgContextMenu());
 
-  // === Textarea и форматирование ===
+  // === Contenteditable-инпут и форматирование ===
   const inputEl = document.getElementById("message-input");
-  if (inputEl && inputEl.tagName === "TEXTAREA") {
+  if (inputEl && inputEl.isContentEditable) {
     inputEl.addEventListener("keydown", (e) => {
       if (e.ctrlKey || e.metaKey) {
         const k = e.key.toLowerCase();
@@ -1875,7 +1908,7 @@ function setupMessageMenu() {
         }
         if (fmt) {
           e.preventDefault();
-          wrapSelection(inputEl, fmt);
+          wrapSelection(fmt);
           return;
         }
       }
@@ -1889,12 +1922,24 @@ function setupMessageMenu() {
       }, 0);
     });
 
+    inputEl.addEventListener("input", () => {
+      inputEl.style.height = "auto";
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + "px";
+    });
+
+    // Вставка — только чистый текст
+    inputEl.addEventListener("paste", (e) => {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData("text/plain");
+      document.execCommand("insertText", false, text);
+    });
+
     // ПКМ → меню форматирования
     const fmtMenu = document.getElementById("format-context-menu");
     if (fmtMenu) {
       inputEl.addEventListener("contextmenu", (e) => {
-        const s = inputEl.selectionStart, e2 = inputEl.selectionEnd;
-        if (s === e2) return;
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed) return;
         e.preventDefault();
         fmtMenu.classList.remove("hidden");
         fmtMenu.style.left = "0px"; fmtMenu.style.top = "0px";
@@ -1908,7 +1953,7 @@ function setupMessageMenu() {
       fmtMenu.addEventListener("click", (e) => {
         const btn = e.target.closest("button"); if (!btn) return;
         e.stopPropagation();
-        wrapSelection(inputEl, btn.dataset.format);
+        wrapSelection(btn.dataset.format);
         fmtMenu.classList.add("hidden");
       });
       document.addEventListener("click", () => fmtMenu.classList.add("hidden"));
@@ -2013,19 +2058,13 @@ function startEdit(msgId) {
   document.getElementById("reply-bar-text").textContent = (msg.content || "").slice(0, 80);
   document.getElementById("reply-bar-icon").textContent = "✎";
   document.getElementById("reply-bar").classList.remove("hidden");
-  const input = document.getElementById("message-input");
-  input.value = msg.content || "";
-  input.focus();
-  input.setSelectionRange(input.value.length, input.value.length);
+  setInputFromMarkdown(msg.content || "");
+  document.getElementById("message-input").focus();
 }
 
 function cancelEdit() {
   editingMsgId = null;
-  const input = document.getElementById("message-input");
-  if (input) {
-    input.value = "";
-    input.style.height = "auto";
-  }
+  clearInput();
   if (!replyToMsg) document.getElementById("reply-bar").classList.add("hidden");
 }
 
@@ -2391,8 +2430,14 @@ function isUserOnline(profile) {
 async function updateMyLastSeen() {
   if (!currentUser) return;
   try {
-    await supabase.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", currentUser.id);
-  } catch (e) { /* silent */ }
+    const { error } = await supabase.rpc("heartbeat");
+    if (error) throw error;
+  } catch (e) {
+    // Fallback: прямой UPDATE
+    try {
+      await supabase.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", currentUser.id);
+    } catch (e2) { /* silent */ }
+  }
 }
 
 // ======================================================
