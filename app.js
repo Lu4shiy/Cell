@@ -887,7 +887,10 @@ function subscribeToGlobalMessages() {
         resortChatsList();
       }
       if (currentChatId === m.chat_id && !isMine) {
-        setTimeout(() => markChatRead(m.chat_id), 300);
+        const isChannelChat = currentChannelObj && currentChannelObj.id === m.chat_id;
+        if (!isChannelChat || currentChannelIsSubscribed) {
+          setTimeout(() => markChatRead(m.chat_id), 300);
+        }
       }
     }).subscribe();
 }
@@ -1344,6 +1347,15 @@ function updateChatItemPreview(chatId) {
       badge.textContent = String(data.unread);
     } else if (badge) badge.remove();
   }
+  updateUnreadTitle();
+}
+
+// Обновляет document.title: «(N) Imaginer» при непрочитанных, иначе «Imaginer»
+function updateUnreadTitle() {
+  let total = 0;
+  chatLastMsg.forEach((data) => { if (data && data.unread > 0) total += data.unread; });
+  if (total > 0) document.title = `(${total}) Imaginer`;
+  else document.title = "Imaginer";
 }
 
 function resortChatsList() {
@@ -1537,7 +1549,30 @@ async function performSearch(query) {
   }
 
   allProfiles.forEach((p) => { p._customName = customNameByUserId.get(p.id) || null; });
-  renderSearchResultsUnified(allProfiles, channels);
+
+  // Реально вычисляем «моё» по БД, а не по кэшу:
+  // — какие каналы я действительно вижу (chat_id ∈ мои chat_members и есть в channels);
+  // — с кем у меня есть DM-чат (общий chat_id, который не канал).
+  const { data: myMembershipsAll } = await supabase.from("chat_members")
+    .select("chat_id").eq("user_id", currentUser.id);
+  const myChatIdSet = new Set((myMembershipsAll || []).map((m) => m.chat_id));
+
+  let myChannelIds = new Set();
+  if (myChatIdSet.size) {
+    const { data: myChans } = await supabase.from("channels")
+      .select("id").in("id", [...myChatIdSet]);
+    myChannelIds = new Set((myChans || []).map((c) => c.id));
+  }
+
+  const myDmChatIds = [...myChatIdSet].filter((id) => !myChannelIds.has(id));
+  const dmPartnerIds = new Set();
+  if (myDmChatIds.length) {
+    const { data: partners } = await supabase.from("chat_members")
+      .select("user_id").in("chat_id", myDmChatIds).neq("user_id", currentUser.id);
+    (partners || []).forEach((p) => dmPartnerIds.add(p.user_id));
+  }
+
+  renderSearchResultsUnified(allProfiles, channels, myChannelIds, dmPartnerIds);
 }
 
 // Строка результата: канал
@@ -1568,14 +1603,16 @@ function renderSearchUserHtml(u) {
     </div>`;
 }
 
-function renderSearchResultsUnified(users, channels) {
+function renderSearchResultsUnified(users, channels, myChannelIds, dmPartnerIds) {
   const listEl = document.getElementById("users-list");
+  myChannelIds = myChannelIds || new Set();
+  dmPartnerIds = dmPartnerIds || new Set();
 
-  // Разделяем результаты: "мои" (уже в списке чатов) и "новые" (не подписан / нет чата)
-  const myUsers    = users.filter((u) => chatIdByUser.has(u.id));
-  const myChannels = channels.filter((c) => channelCache.has(c.id));
-  const newUsers   = users.filter((u) => !chatIdByUser.has(u.id));
-  const newChannels = channels.filter((c) => !channelCache.has(c.id));
+  // Разделяем результаты по РЕАЛЬНОЙ принадлежности:
+  const myUsers    = users.filter((u) => dmPartnerIds.has(u.id));
+  const myChannels = channels.filter((c) => myChannelIds.has(c.id));
+  const newUsers   = users.filter((u) => !dmPartnerIds.has(u.id));
+  const newChannels = channels.filter((c) => !myChannelIds.has(c.id));
 
   // Топ-5 из новых: сначала каналы (поиск по @username/названию), потом юзеры.
   // Ограничим ровно пятью строками.
@@ -1864,6 +1901,7 @@ async function markChatRead(chatId) {
     chatReads.set(chatId, Date.now());
     const data = chatLastMsg.get(chatId);
     if (data) { data.unread = 0; chatLastMsg.set(chatId, data); }
+    updateUnreadTitle();
     const el = document.querySelector(`.user-item[data-chat-id="${chatId}"]`);
     if (el) {
       const badge = el.querySelector(".unread-badge"); if (badge) badge.remove();
@@ -2807,7 +2845,7 @@ function openMsgContextMenu(e, msgId) {
 
   if (isChannelMsg) {
     if (replyBtn) replyBtn.classList.remove("hidden");
-    if (fwdBtn) fwdBtn.classList.add("hidden");
+    if (fwdBtn) fwdBtn.classList.remove("hidden");
     if (editBtn && msg && msg.sender_id === currentUser.id && !msg.forwarded_from_name) editBtn.classList.remove("hidden");
   } else if (isGift) {
     if (replyBtn) replyBtn.classList.remove("hidden");
@@ -3217,28 +3255,68 @@ async function populateForwardList() {
   const chatIds = (myChats || []).map((c) => c.chat_id);
   if (!chatIds.length) { listEl.innerHTML = '<div class="empty">Нет чатов</div>'; return; }
 
+  // Каналы (только те, где я owner/admin — иначе отправка упадёт по RLS)
+  const { data: myChans } = await supabase.from("channels").select("*").in("id", chatIds);
+  const chanMap = new Map((myChans || []).map((c) => [c.id, c]));
+  const chanIds = new Set(chanMap.keys());
+
+  const { data: adminsRows } = await supabase.from("channel_admins")
+    .select("channel_id").eq("user_id", currentUser.id);
+  const adminChanIds = new Set((adminsRows || []).map((r) => r.channel_id));
+
+  const canPostChanIds = new Set();
+  chanIds.forEach((cid) => {
+    const ch = chanMap.get(cid);
+    if (ch && ch.owner_id === currentUser.id) canPostChanIds.add(cid);
+    else if (adminChanIds.has(cid)) canPostChanIds.add(cid);
+  });
+
+  // DM-партнёры
   const { data: others } = await supabase.from("chat_members")
     .select("chat_id, user_id").in("chat_id", chatIds).neq("user_id", currentUser.id);
-  const userIds = [...new Set((others || []).map((o) => o.user_id))];
-  const { data: profiles } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url").in("id", userIds);
-  const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+  const dmPairs = (others || []).filter((o) => !chanIds.has(o.chat_id));
 
-  const items = (others || []).map((o) => ({ chat_id: o.chat_id, user: profileMap.get(o.user_id) })).filter((x) => x.user);
+  const userIds = [...new Set(dmPairs.map((o) => o.user_id))];
+  let profiles = [];
+  if (userIds.length) {
+    const { data } = await supabase.from("profiles")
+      .select("id, username, display_name, avatar_url").in("id", userIds);
+    profiles = data || [];
+  }
+  const profileMap = new Map(profiles.map((p) => [p.id, p]));
+
+  const items = [];
+  dmPairs.forEach((o) => {
+    const u = profileMap.get(o.user_id);
+    if (u) items.push({ type: "dm", chat_id: o.chat_id, user: u });
+  });
+  canPostChanIds.forEach((cid) => {
+    items.push({ type: "channel", chat_id: cid, channel: chanMap.get(cid) });
+  });
+
   if (!items.length) { listEl.innerHTML = '<div class="empty">Нет чатов</div>'; return; }
 
-  listEl.innerHTML = items.map((x) =>
-    `<div class="forward-item" data-chat-id="${x.chat_id}">
-      <div class="avatar"></div>
-      <div class="fname">${escapeHtml(x.user.display_name)}</div>
-      <div class="fcheck hidden">✓</div>
-    </div>`
-  ).join("");
+  listEl.innerHTML = items.map((x) => {
+    const isCh = x.type === "channel";
+    const label = isCh
+      ? `${escapeHtml(x.channel.name)} <span style="color:var(--text-dim)">📢 @${escapeHtml(x.channel.username)}</span>`
+      : `${escapeHtml(x.user.display_name)} <span style="color:var(--text-dim)">@${escapeHtml(x.user.username)}</span>`;
+    return `
+      <div class="forward-item" data-chat-id="${x.chat_id}">
+        <div class="avatar"></div>
+        <div class="fname">${label}</div>
+        <div class="fcheck hidden">✓</div>
+      </div>`;
+  }).join("");
 
   listEl.querySelectorAll(".forward-item").forEach((el) => {
     const chatId = el.dataset.chatId;
     const item = items.find((x) => x.chat_id === chatId);
-    paintAvatar(el.querySelector(".avatar"), item.user);
+    if (item.type === "channel") {
+      paintAvatar(el.querySelector(".avatar"), { id: item.channel.id, display_name: item.channel.name, avatar_url: item.channel.avatar_url });
+    } else {
+      paintAvatar(el.querySelector(".avatar"), item.user);
+    }
     el.addEventListener("click", () => {
       const id = el.dataset.chatId;
       if (forwardSelectedChats.has(id)) {
@@ -3271,6 +3349,7 @@ function setupForwardDialog() {
 async function sendForward() {
   if (!forwardSelectedChats.size || !forwardSourceMsgs.length) return;
   const hideSender = document.getElementById("forward-hide-sender").checked;
+
   const senderMap = new Map();
   if (!hideSender) {
     for (const m of forwardSourceMsgs) {
@@ -3279,17 +3358,23 @@ async function sendForward() {
       senderMap.set(m.sender_id, p || { display_name: "?", username: "?" });
     }
   }
+
+  const payloads = [];
   for (const chatId of forwardSelectedChats) {
     for (const m of forwardSourceMsgs) {
-      const payload = { chat_id: chatId, sender_id: currentUser.id, content: m.content };
+      const payload = { chat_id: chatId, sender_id: currentUser.id, content: m.content || "" };
       if (!hideSender) {
         const s = senderMap.get(m.sender_id) || { display_name: "?", username: "?" };
         payload.forwarded_from_name = s.display_name;
         payload.forwarded_from_username = s.username;
       }
-      await supabase.from("messages").insert(payload);
+      payloads.push(payload);
     }
   }
+
+  const { error } = await supabase.from("messages").insert(payloads);
+  if (error) { await showAlertDialog("Ошибка", error.message); return; }
+
   document.getElementById("forward-overlay").classList.add("hidden");
   if (selectionMode) exitSelectionMode();
 }
