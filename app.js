@@ -378,6 +378,17 @@ async function initApp() {
     try { await refreshChannelRights(currentChannelObj.id); } catch (e) { /* silent */ }
   }, 8000);
 
+  // Страховочный опрос закрепов — если realtime не доставил событие (раз в 4 сек)
+  setInterval(async () => {
+    if (!currentChatId || !currentUser) return;
+    try {
+      const before = currentPinnedList.map((p) => p.id).sort().join(",");
+      await loadPinned(currentChatId);
+      const after = currentPinnedList.map((p) => p.id).sort().join(",");
+      if (before !== after) rerenderPinMarks();
+    } catch (e) { /* silent */ }
+  }, 4000);
+
   document.addEventListener("visibilitychange", () => {
     updateMyLastSeen();
     if (document.visibilityState === "visible") {
@@ -387,17 +398,6 @@ async function initApp() {
   });
   // Обработка приглашения из URL (#invite=CODE)
   setTimeout(() => { tryJoinFromInviteUrl(); }, 400);
-  // Страховочный опрос закрепов — если realtime не доставил событие
-  setInterval(async () => {
-    if (!currentChatId) return;
-    if (!currentUser) return;
-    try {
-      const before = currentPinnedList.map((p) => p.id).sort().join(",");
-      await loadPinned(currentChatId);
-      const after = currentPinnedList.map((p) => p.id).sort().join(",");
-      if (before !== after) rerenderPinMarks();
-    } catch (e) { /* silent */ }
-  }, 6000);
 }
 
 async function pollMyMessageStatuses() {
@@ -1112,6 +1112,7 @@ function bindChatItemEvents(el, user) {
   el.addEventListener("click", () => {
     listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
     el.classList.add("active");
+    // openSeq++ произойдёт внутри openChatWith — это отменит все висящие загрузки
     openChatWith(user);
   });
   el.addEventListener("contextmenu", (ev) => { ev.preventDefault(); openChatListContextMenu(ev, user, el); });
@@ -1361,7 +1362,7 @@ async function openChannel(chatId) {
   if (mySeq !== openSeq) return;
 
   currentChatId = chatId;
-  await loadMessages(chatId);
+  await loadMessages(chatId, mySeq);
   if (mySeq !== openSeq) return;
   await loadReactionsForVisibleMessages();
   if (mySeq !== openSeq) return;
@@ -1912,7 +1913,7 @@ async function openChatWith(otherUser) {
     return;
   }
   currentChatId = chatId;
-  await loadMessages(chatId);
+  await loadMessages(chatId, mySeq);
   if (mySeq !== openSeq) return;
   await loadReactionsForVisibleMessages();
   if (mySeq !== openSeq) return;
@@ -1960,23 +1961,28 @@ async function markChatRead(chatId) {
 }
 
 // ======================= 14. СООБЩЕНИЯ =======================
-async function loadMessages(chatId) {
+async function loadMessages(chatId, mySeq) {
   const box = document.getElementById("messages");
   box.innerHTML = '<div class="empty">Загрузка...</div>';
   msgCache.clear(); hiddenMsgIds = new Set(); reactionsCache.clear();
   currentChannelViewsMap = new Map();
 
-  // Два независимых запроса — параллельно
   const [hidesRes, clearRes] = await Promise.all([
     supabase.from("message_hides").select("message_id").eq("user_id", currentUser.id),
     supabase.from("chat_clears").select("cleared_at").eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle(),
   ]);
+  // Race-guard: если за это время переключились на другой чат — прерываемся
+  if (mySeq !== undefined && mySeq !== openSeq) return;
+  if (currentChatId !== chatId) return;
+
   hiddenMsgIds = new Set((hidesRes.data || []).map((h) => h.message_id));
   const clearRow = clearRes.data;
 
   let query = supabase.from("messages").select("*").eq("chat_id", chatId).order("created_at", { ascending: true });
   if (clearRow && clearRow.cleared_at) query = query.gt("created_at", clearRow.cleared_at);
   const { data, error } = await query;
+  if (mySeq !== undefined && mySeq !== openSeq) return;
+  if (currentChatId !== chatId) return;
   if (error) { box.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
 
   box.innerHTML = "";
@@ -1993,7 +1999,12 @@ async function loadMessages(chatId) {
     return;
   }
 
-  // Счётчики просмотров — параллельно с рендером
+  // Закрепы ЗАГРУЖАЕМ ДО рендера — чтобы значки 📌 сразу были
+  await loadPinned(chatId);
+  if (mySeq !== undefined && mySeq !== openSeq) return;
+  if (currentChatId !== chatId) return;
+
+  // Счётчики просмотров — параллельно
   let viewsPromise = null;
   if (isChannel) {
     const ids = visible.map((m) => m.id);
@@ -2002,17 +2013,20 @@ async function loadMessages(chatId) {
     }).catch(() => {});
   }
 
-  // Сначала загружаем закрепы, потом рендерим (чтобы сразу видеть 📌)
-  await loadPinned(chatId);
-  for (const m of visible) await appendMessage(m);
+  for (const m of visible) {
+    if (mySeq !== undefined && mySeq !== openSeq) return;
+    if (currentChatId !== chatId) return;
+    await appendMessage(m);
+  }
   scrollToBottom();
+  rerenderPinMarks();
 
   if (isChannel) {
     await viewsPromise;
-    // Перерисовать показатели на уже отрендеренных сообщениях
+    if (mySeq !== undefined && mySeq !== openSeq) return;
+    if (currentChatId !== chatId) return;
     currentChannelViewsMap.forEach((cnt, mid) => updateMessageViewsInUI(mid, cnt));
 
-    // В ФОНЕ: пометить свои просмотры и обновить счётчики (не блокирует UI)
     const ids = visible.map((m) => m.id);
     (async () => {
       const chunkSize = 20;
@@ -2125,13 +2139,7 @@ async function buildMsgHtml(msg) {
     if (vc > 0) viewsHtml = `<span class="msg-views">👁 ${vc}</span>`;
   }
 
-  // Значок пина — если сообщение в списке закрепов
-  let pinHtml = "";
-  if (currentPinnedList.some((p) => p.message_id === msg.id)) {
-    pinHtml = `<span class="msg-pin-mark" title="Закреплено">📌</span>`;
-  }
-
-  html += `<div class="msg-time">${pinHtml}${viewsHtml}${time}${renderMsgStatus(msg)}`;
+  html += `<div class="msg-time">${viewsHtml}${time}${renderMsgStatus(msg)}`;
   if (msg.edited_at) html += `<span class="msg-edited">изменено</span>`;
   html += `</div>`;
   html += `<button class="msg-add-reaction" data-add-reaction="${msg.id}" title="Реакция">😊</button>`;
@@ -2139,6 +2147,8 @@ async function buildMsgHtml(msg) {
 }
 
 async function appendMessage(msg) {
+  // Race-guard: не добавляем сообщения из чужого чата
+  if (msg.chat_id && currentChatId && msg.chat_id !== currentChatId) return;
   const box = document.getElementById("messages");
   if (document.querySelector(`[data-id="${msg.id}"]`)) return;
   const empty = box.querySelector(".empty");
@@ -2479,7 +2489,6 @@ function subscribeToChat(chatId) {
           if (currentPinnedIndex >= currentPinnedList.length) currentPinnedIndex = currentPinnedList.length - 1;
           renderPinBar();
           updatePinButtonCount(currentPinnedList.length);
-          rerenderPinMarks();
         }
         const el = document.querySelector(`[data-id="${id}"]`);
         if (el) el.remove();
@@ -5099,6 +5108,7 @@ function resetPinsUI() {
   const bar = document.getElementById("pin-bar");
   if (bar) bar.classList.add("hidden");
   updatePinButtonCount(0);
+  document.querySelectorAll("#messages .msg-pin-mark").forEach((el) => el.remove());
 }
 
 function updatePinButtonCount(n) {
@@ -5110,6 +5120,25 @@ function updatePinButtonCount(n) {
   } else {
     badge.classList.add("hidden");
   }
+}
+
+function rerenderPinMarks() {
+  const pinnedIds = new Set(currentPinnedList.map((p) => p.message_id));
+  document.querySelectorAll("#messages .msg, #messages .msg-system").forEach((msgEl) => {
+    const timeEl = msgEl.querySelector(".msg-time");
+    if (!timeEl) return;
+    const id = msgEl.dataset.id;
+    const existing = timeEl.querySelector(".msg-pin-mark");
+    if (pinnedIds.has(id) && !existing) {
+      const pin = document.createElement("span");
+      pin.className = "msg-pin-mark";
+      pin.title = "Закреплено";
+      pin.textContent = "📌";
+      timeEl.insertBefore(pin, timeEl.firstChild);
+    } else if (!pinnedIds.has(id) && existing) {
+      existing.remove();
+    }
+  });
 }
 
 async function loadPinned(chatId) {
@@ -5135,6 +5164,7 @@ async function loadPinned(chatId) {
   if (!currentPinnedList.length) { resetPinsUI(); return; }
   currentPinnedIndex = 0;
   renderPinBar();
+  rerenderPinMarks();
 }
 
 function renderPinBar() {
@@ -5143,9 +5173,6 @@ function renderPinBar() {
   const textEl = document.getElementById("pin-bar-text");
   if (!bar) return;
   if (!currentPinnedList.length) { bar.classList.add("hidden"); return; }
-  if (currentPinnedIndex < 0 || currentPinnedIndex >= currentPinnedList.length) {
-    currentPinnedIndex = 0;
-  }
   bar.classList.remove("hidden");
   const pin = currentPinnedList[currentPinnedIndex];
   if (!pin) { bar.classList.add("hidden"); return; }
@@ -5313,35 +5340,14 @@ function subscribeToPins() {
   pinsChannel = supabase.channel("pins-changes")
     .on("postgres_changes", { event: "*", schema: "public", table: "pinned_messages" }, async (payload) => {
       const row = payload.new || payload.old;
-      if (!row || !row.chat_id) return;
-      // Обновляем, если событие касается открытого чата
-      if (currentChatId === row.chat_id) {
-        await loadPinned(row.chat_id);
-        // Перерисовать значки пина у сообщений
-        rerenderPinMarks();
+      if (!row) return;
+      // Если chat_id не пришёл (DELETEs без REPLICA IDENTITY), перезагрузим для текущего чата
+      const cid = row.chat_id || currentChatId;
+      if (currentChatId && cid === currentChatId) {
+        await loadPinned(currentChatId);
       }
     })
     .subscribe();
-}
-
-// Перерисовывает значок пина у сообщений — без полной перезагрузки
-function rerenderPinMarks() {
-  const pinnedIds = new Set(currentPinnedList.map((p) => p.message_id));
-  document.querySelectorAll("#messages .msg-time").forEach((timeEl) => {
-    const msgEl = timeEl.closest("[data-id]");
-    if (!msgEl) return;
-    const id = msgEl.dataset.id;
-    const existing = timeEl.querySelector(".msg-pin-mark");
-    if (pinnedIds.has(id) && !existing) {
-      const pin = document.createElement("span");
-      pin.className = "msg-pin-mark";
-      pin.title = "Закреплено";
-      pin.textContent = "📌";
-      timeEl.insertBefore(pin, timeEl.firstChild);
-    } else if (!pinnedIds.has(id) && existing) {
-      existing.remove();
-    }
-  });
 }
 
 // ======================================================
