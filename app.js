@@ -4345,7 +4345,6 @@ function setupChannelCreate() {
 
   // Кнопка подписки — надёжный вариант через явный select → delete/insert
   const subBtn = document.getElementById("channel-subscribe-btn");
-  const subBtn = document.getElementById("channel-subscribe-btn");
   if (subBtn) subBtn.addEventListener("click", async () => {
     if (!currentChannelObj) return;
     subBtn.disabled = true;
