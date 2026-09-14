@@ -177,6 +177,10 @@ let currentChannelObj = null;
 let currentChannelIsAdmin = false;
 let currentChannelSubscribers = 0;
 let channelCreateAvatarUrl = "color:0";
+let channelEditAvatarUrl = null;
+let channelEditUsernameValidated = null;
+let channelEditUsernameTimeout = null;
+let channelEditReactions = new Set(REACTION_EMOJIS);
 let channelUsernameCheckTimeout = null;
 let channelUsernameValidated = null;
 let channelProfileChannelId = null;
@@ -288,7 +292,7 @@ function showAuth() {
 async function initApp() {
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
-  setupBirthdayClose(); setupTokensDialog(); setupChannelCreate();
+  setupBirthdayClose(); setupTokensDialog(); setupChannelCreate(); setupChannelEdit();
   supabase.from("profiles").select("id").limit(1).then(() => {});
   subscribeToBlocks(); subscribeToGlobalChanges(); subscribeToProfiles();
   subscribeToMemberships(); subscribeToReads(); subscribeToGlobalMessages();
@@ -2313,8 +2317,7 @@ function setupChatMenu() {
       updateBlockUI();
     } else if (action === "channel-configure") {
       if (!currentChannelObj) return;
-      // Этап 4 — редактирование. Пока заглушка.
-      await showAlertDialog("Настройки канала", "Редактирование канала — следующий этап");
+      openChannelEditDialog();
     } else if (action === "channel-delete") {
       await deleteChannelDialog();
     }
@@ -2345,7 +2348,8 @@ function setupChatMenu() {
     const action = btn.dataset.action;
     chMenu.classList.add("hidden");
     if (action === "edit") {
-      await showAlertDialog("Изменить канал", "Редактирование канала — следующий этап");
+      closeChannelProfileDialog();
+      openChannelEditDialog();
     } else if (action === "delete") {
       closeChannelProfileDialog();
       await deleteChannelDialog();
@@ -3972,4 +3976,248 @@ async function joinAndOpenChannel(ch) {
   // Список чатов догружаем ФОНОМ, не блокируя открытие канала
   loadRecentChats().catch(() => {});
   await openChannel(ch.id);
+}
+
+// ======================================================
+// 32. КАНАЛЫ: РЕДАКТОР
+// ======================================================
+
+function setupChannelEdit() {
+  document.getElementById("channel-edit-cancel").addEventListener("click", closeChannelEditDialog);
+  document.getElementById("channel-edit-save").addEventListener("click", saveChannelEdit);
+  document.getElementById("channel-edit-avatar-upload").addEventListener("change", handleChannelEditAvatarUpload);
+
+  document.getElementById("channel-edit-name-input").addEventListener("input", updateChannelEditSaveButton);
+
+  document.getElementById("channel-edit-username-input").addEventListener("input", (e) => {
+    clearTimeout(channelEditUsernameTimeout);
+    channelEditUsernameValidated = null;
+    updateChannelEditSaveButton();
+    const value = e.target.value;
+    channelEditUsernameTimeout = setTimeout(() => checkChannelEditUsernameLive(value), 350);
+  });
+}
+
+function updateChannelEditSaveButton() {
+  const name = document.getElementById("channel-edit-name-input").value.trim();
+  const uname = document.getElementById("channel-edit-username-input").value.trim();
+  const btn = document.getElementById("channel-edit-save");
+  // Кнопка активна если есть имя и юзернейм совпадает с валидированным (или с текущим)
+  const unameOk = uname && (uname === channelEditUsernameValidated || uname === currentChannelObj.username);
+  btn.disabled = !name || !unameOk;
+}
+
+function openChannelEditDialog() {
+  if (!currentChannelObj) return;
+  const ch = currentChannelObj;
+
+  // Аватар: подставляем текущий
+  channelEditAvatarUrl = ch.avatar_url || "color:0";
+  // Юзернейм: текущий валиден
+  channelEditUsernameValidated = ch.username;
+  // Реакции: копируем массив
+  channelEditReactions = new Set(
+    Array.isArray(ch.available_reactions) && ch.available_reactions.length
+      ? ch.available_reactions
+      : REACTION_EMOJIS
+  );
+
+  document.getElementById("channel-edit-name-input").value = ch.name || "";
+  document.getElementById("channel-edit-username-input").value = ch.username || "";
+  const hint = document.getElementById("channel-edit-username-hint");
+  hint.className = "username-hint";
+  hint.textContent = "";
+
+  renderChannelEditAvatarGrid();
+  renderChannelEditReactions();
+
+  updateChannelEditSaveButton();
+  document.getElementById("channel-edit-overlay").classList.remove("hidden");
+}
+
+function closeChannelEditDialog() {
+  document.getElementById("channel-edit-overlay").classList.add("hidden");
+  channelEditUsernameValidated = null;
+  channelEditAvatarUrl = null;
+}
+
+function renderChannelEditAvatarGrid() {
+  const grid = document.getElementById("channel-edit-avatar-grid");
+  grid.innerHTML = "";
+
+  // Кнопка "Свой цвет" из BASE_AVATARS
+  BASE_AVATARS.forEach((pair, idx) => {
+    const el = document.createElement("div");
+    el.className = "avatar-option";
+    el.dataset.idx = idx;
+    el.style.background = `linear-gradient(135deg, ${pair[0]}, ${pair[1]})`;
+    el.textContent = (currentChannelObj && currentChannelObj.name ? currentChannelObj.name[0] : "К").toUpperCase();
+    if (channelEditAvatarUrl === "color:" + idx) el.classList.add("selected");
+    el.addEventListener("click", () => {
+      channelEditAvatarUrl = "color:" + idx;
+      paintAvatar(document.getElementById("channel-edit-avatar-preview"), { display_name: "К", avatar_url: channelEditAvatarUrl });
+      renderChannelEditAvatarGrid();
+    });
+    grid.appendChild(el);
+  });
+
+  paintAvatar(document.getElementById("channel-edit-avatar-preview"), { display_name: "К", avatar_url: channelEditAvatarUrl });
+}
+
+async function handleChannelEditAvatarUpload(e) {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const dataUrl = await resizeImage(file, 200);
+  if (!dataUrl) return;
+  channelEditAvatarUrl = dataUrl;
+  paintAvatar(document.getElementById("channel-edit-avatar-preview"), { display_name: "К", avatar_url: dataUrl });
+  renderChannelEditAvatarGrid();
+}
+
+function renderChannelEditReactions() {
+  const grid = document.getElementById("channel-edit-reactions");
+  grid.innerHTML = "";
+  REACTION_EMOJIS.forEach((em) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "reaction-toggle " + (channelEditReactions.has(em) ? "on" : "off");
+    btn.textContent = em;
+    btn.addEventListener("click", () => {
+      if (channelEditReactions.has(em)) channelEditReactions.delete(em);
+      else channelEditReactions.add(em);
+      btn.className = "reaction-toggle " + (channelEditReactions.has(em) ? "on" : "off");
+    });
+    grid.appendChild(btn);
+  });
+}
+
+async function checkChannelEditUsernameLive(value) {
+  if (!currentChannelObj) return;
+  const hint = document.getElementById("channel-edit-username-hint");
+  const username = value.trim();
+  channelEditUsernameValidated = null;
+  updateChannelEditSaveButton();
+
+  if (!username) { hint.className = "username-hint"; hint.textContent = ""; return; }
+  if (username === currentChannelObj.username) {
+    hint.className = "username-hint ok";
+    hint.textContent = "Это текущий юзернейм";
+    channelEditUsernameValidated = username;
+    updateChannelEditSaveButton();
+    return;
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+    hint.className = "username-hint err"; hint.textContent = "Только a-z, 0-9, _ и -"; return;
+  }
+  if (username.length < 3) {
+    hint.className = "username-hint err"; hint.textContent = "Минимум 3 символа"; return;
+  }
+
+  hint.className = "username-hint"; hint.textContent = "Проверяю...";
+
+  const [pRes, cRes] = await Promise.all([
+    supabase.from("profiles").select("id").ilike("username", username).limit(1),
+    supabase.from("channels").select("id").ilike("username", username).neq("id", currentChannelObj.id).limit(1),
+  ]);
+
+  if (document.getElementById("channel-edit-username-input").value.trim() !== username) return;
+  if (pRes.error || cRes.error) {
+    hint.className = "username-hint err"; hint.textContent = "Ошибка проверки"; return;
+  }
+  if ((pRes.data && pRes.data.length > 0) || (cRes.data && cRes.data.length > 0)) {
+    hint.className = "username-hint err"; hint.textContent = `@${username} уже занят`;
+    channelEditUsernameValidated = null;
+  } else {
+    hint.className = "username-hint ok"; hint.textContent = `@${username} свободен`;
+    channelEditUsernameValidated = username;
+  }
+  updateChannelEditSaveButton();
+}
+
+async function saveChannelEdit() {
+  if (!currentChannelObj) return;
+  const ch = currentChannelObj;
+  const btn = document.getElementById("channel-edit-save");
+
+  const name = document.getElementById("channel-edit-name-input").value.trim();
+  const username = document.getElementById("channel-edit-username-input").value.trim();
+
+  if (!name) { await showAlertDialog("Ошибка", "Введите название"); return; }
+  if (!username) { await showAlertDialog("Ошибка", "Введите юзернейм"); return; }
+  if (username !== channelEditUsernameValidated && username !== ch.username) {
+    await showAlertDialog("Ошибка", "Проверьте юзернейм");
+    return;
+  }
+
+  const reactions = [...channelEditReactions];
+  if (!reactions.length) {
+    await showAlertDialog("Ошибка", "Выберите хотя бы одну реакцию");
+    return;
+  }
+
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = "Сохраняю...";
+
+  try {
+    // Двойная проверка username, если изменился
+    if (username !== ch.username) {
+      const [pRes, cRes] = await Promise.all([
+        supabase.from("profiles").select("id").ilike("username", username).limit(1),
+        supabase.from("channels").select("id").ilike("username", username).neq("id", ch.id).limit(1),
+      ]);
+      if ((pRes.data && pRes.data.length) || (cRes.data && cRes.data.length)) {
+        await showAlertDialog("Ошибка", "Юзернейм уже занят");
+        btn.disabled = false; btn.textContent = oldText;
+        return;
+      }
+    }
+
+    const payload = {
+      name,
+      username,
+      avatar_url: channelEditAvatarUrl,
+      available_reactions: reactions,
+    };
+
+    const { error } = await supabase.from("channels").update(payload).eq("id", ch.id);
+    if (error) {
+      await showAlertDialog("Ошибка", error.message);
+      btn.disabled = false; btn.textContent = oldText;
+      return;
+    }
+
+    // Обновляем локальный кэш
+    Object.assign(ch, payload);
+    channelCache.set(ch.id, ch);
+
+    // Обновляем UI чата, если он открыт
+    if (currentChannelObj && currentChannelObj.id === ch.id) {
+      paintAvatar(document.getElementById("chat-avatar"), { id: ch.id, display_name: name, avatar_url: payload.avatar_url });
+      document.getElementById("chat-title").textContent = name;
+    }
+
+    // Обновляем карточку в списке чатов
+    const itemEl = document.querySelector(`.user-item[data-chat-id="${ch.id}"][data-chat-type="channel"]`);
+    if (itemEl) {
+      const nameEl = itemEl.querySelector(".user-item-name");
+      if (nameEl) nameEl.innerHTML = escapeHtml(name) + '<span class="channel-mark">📢</span>';
+      paintAvatar(itemEl.querySelector(".avatar"), { id: ch.id, display_name: name, avatar_url: payload.avatar_url });
+    }
+
+    // Обновляем профиль канала, если открыт
+    if (channelProfileChannelId === ch.id) {
+      paintAvatar(document.getElementById("channel-profile-avatar"), { id: ch.id, display_name: name, avatar_url: payload.avatar_url });
+      document.getElementById("channel-profile-name").textContent = name;
+      document.getElementById("channel-profile-username").textContent = "@" + username;
+    }
+
+    closeChannelEditDialog();
+    btn.disabled = false; btn.textContent = oldText;
+  } catch (ex) {
+    console.error(ex);
+    await showAlertDialog("Ошибка", ex.message || String(ex));
+    btn.disabled = false; btn.textContent = oldText;
+  }
 }
