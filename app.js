@@ -198,6 +198,7 @@ let channelEditReactions = new Set(REACTION_EMOJIS);
 let channelUsernameCheckTimeout = null;
 let channelUsernameValidated = null;
 let channelProfileChannelId = null;
+let channelProfileUpdatesChannel = null;
 let currentChannelIsSubscribed = false;
 let currentChannelViewsMap = new Map();
 let currentChannelTotalViews = 0;
@@ -2392,7 +2393,11 @@ function setupScrollBottomButton() {
 function checkEmptyChat() {
   const box = document.getElementById("messages");
   if (box.children.length === 0) {
-    box.innerHTML = '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
+    if (currentChannelObj) {
+      box.innerHTML = '<div class="empty">В этом канале пока что нет сообщений.</div>';
+    } else {
+      box.innerHTML = '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
+    }
   }
 }
 
@@ -2989,6 +2994,18 @@ function setupMessageMenu() {
     const sp = e.target.closest(".spoiler");
     if (sp) { sp.classList.toggle("revealed"); e.stopPropagation(); }
   }, true);
+
+  // Ссылки-приглашения (#invite=...) открываем в ЭТОЙ ЖЕ вкладке
+  document.getElementById("messages").addEventListener("click", (e) => {
+    const a = e.target.closest("a");
+    if (!a) return;
+    const href = a.getAttribute("href") || "";
+    const m = /#invite=([A-Za-z0-9_-]+)/.exec(href);
+    if (!m) return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.location.hash = "invite=" + m[1];
+  }, true);
 }
 
 function openMsgContextMenu(e, msgId) {
@@ -3417,6 +3434,7 @@ async function handleForwardSelected() {
 // ======================================================
 
 let forwardPlainText = false;
+let inviteShareReturnToInvite = false;
 
 async function handleForwardOne(msgId) {
   const msg = msgCache.get(msgId);
@@ -3440,6 +3458,8 @@ async function openForwardDialog(msgs) {
 
 // Диалог «Переслать» для произвольного текста (например, ссылки-приглашения)
 async function openInviteShareDialog(text) {
+  inviteShareReturnToInvite = true;
+  document.getElementById("invite-overlay").classList.add("hidden");
   forwardSourceMsgs = [{ content: text, sender_id: currentUser.id, message_type: "text" }];
   forwardPlainText = true;
   forwardSelectedChats.clear();
@@ -3545,6 +3565,10 @@ function setupForwardDialog() {
   document.getElementById("forward-cancel").addEventListener("click", () => {
     document.getElementById("forward-overlay").classList.add("hidden");
     forwardPlainText = false;
+    if (inviteShareReturnToInvite) {
+      inviteShareReturnToInvite = false;
+      document.getElementById("invite-overlay").classList.remove("hidden");
+    }
     if (selectionMode) exitSelectionMode();
   });
   document.getElementById("forward-send").addEventListener("click", sendForward);
@@ -3566,6 +3590,10 @@ async function sendForward() {
     if (error) { await showAlertDialog("Ошибка", error.message); return; }
     document.getElementById("forward-overlay").classList.add("hidden");
     forwardPlainText = false;
+    if (inviteShareReturnToInvite) {
+      inviteShareReturnToInvite = false;
+      document.getElementById("invite-overlay").classList.remove("hidden");
+    }
     await showAlertDialog("Готово", "Ссылка отправлена.");
     return;
   }
@@ -4706,12 +4734,44 @@ async function openChannelProfileDialog() {
 
   document.getElementById("channel-profile-menu").classList.add("hidden");
   document.getElementById("channel-profile-overlay").classList.remove("hidden");
+  subscribeToChannelProfileUpdates(ch.id);
 }
 
 function closeChannelProfileDialog() {
   document.getElementById("channel-profile-overlay").classList.add("hidden");
   document.getElementById("channel-profile-menu").classList.add("hidden");
   channelProfileChannelId = null;
+  if (channelProfileUpdatesChannel) {
+    supabase.removeChannel(channelProfileUpdatesChannel);
+    channelProfileUpdatesChannel = null;
+  }
+}
+
+// Живое обновление счётчиков в открытом профиле канала
+function subscribeToChannelProfileUpdates(channelId) {
+  if (channelProfileUpdatesChannel) {
+    supabase.removeChannel(channelProfileUpdatesChannel);
+    channelProfileUpdatesChannel = null;
+  }
+  channelProfileUpdatesChannel = supabase.channel("channel-profile-" + channelId)
+    .on("postgres_changes", { event: "*", schema: "public", table: "chat_members", filter: `chat_id=eq.${channelId}` }, async () => {
+      if (channelProfileChannelId !== channelId) return;
+      const { data: cntData } = await supabase.rpc("channel_subscribers_count", { p_chat_id: channelId });
+      const cnt = Number(cntData) || 0;
+      const word = pluralRu(cnt, "подписчик", "подписчика", "подписчиков");
+      const statusEl = document.getElementById("channel-profile-subscribers-status");
+      if (statusEl) statusEl.textContent = `${cnt} ${word}`;
+      const subsEl = document.getElementById("channel-profile-subscribers");
+      if (subsEl) subsEl.textContent = String(cnt);
+    })
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "message_views" }, async () => {
+      if (channelProfileChannelId !== channelId) return;
+      const { data: totalViews } = await supabase.rpc("get_channel_total_views", { p_chat_id: channelId });
+      currentChannelTotalViews = Number(totalViews) || 0;
+      const el = document.getElementById("channel-profile-views");
+      if (el) el.textContent = String(currentChannelTotalViews);
+    })
+    .subscribe();
 }
 
 async function deleteChannelDialog() {
@@ -5596,7 +5656,7 @@ async function refreshInviteList() {
       <div class="invite-item" data-invite-id="${inv.id}">
         <span class="invite-item-code"><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></span>
         <button class="invite-item-open" data-open-code="${inv.code}" title="Открыть в этой вкладке">↗</button>
-        <button class="invite-item-share" data-share-code="${inv.code}" title="Переслать">📤</button>
+        <button class="invite-item-share" data-share-code="${inv.code}" title="Переслать">↪️</button>
         <button class="invite-item-copy" data-copy-code="${inv.code}" title="Скопировать">📋</button>
         <button class="invite-item-revoke" data-revoke-id="${inv.id}" title="Отозвать">✕</button>
       </div>`;
