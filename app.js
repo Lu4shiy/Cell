@@ -2915,32 +2915,48 @@ function openMsgContextMenu(e, msgId) {
   if (selectionMode) return;
   e.preventDefault(); e.stopPropagation();
   contextMsgId = msgId;
-  updatePinMenuLabel(msgId);
   const msg = msgCache.get(msgId);
-  const editBtn = document.querySelector('#msg-context-menu button[data-action="edit"]');
+  const editBtn  = document.querySelector('#msg-context-menu button[data-action="edit"]');
   const replyBtn = document.querySelector('#msg-context-menu button[data-action="reply"]');
-  const fwdBtn = document.querySelector('#msg-context-menu button[data-action="fwd"]');
+  const fwdBtn   = document.querySelector('#msg-context-menu button[data-action="fwd"]');
+  const pinBtn   = document.querySelector('#msg-context-menu button[data-action="pin"]');
+  const delBtn   = document.querySelector('#msg-context-menu button[data-action="del"]');
   const isGift = msg && msg.message_type === "gift";
   const isTokens = msg && msg.message_type === "tokens";
   const isChannelMsg = msg && msg.chat_id && channelCache.has(msg.chat_id);
 
-  if (editBtn) editBtn.classList.add("hidden");
+  // Все эти кнопки прячем по умолчанию, потом показываем только нужные
+  if (editBtn)  editBtn.classList.add("hidden");
+  if (pinBtn)   pinBtn.classList.add("hidden");
+  if (delBtn)   delBtn.classList.add("hidden");
+
+  const isChanAdmin = isChannelMsg && currentChannelIsAdmin;
 
   if (isChannelMsg) {
-    if (replyBtn) replyBtn.classList.remove("hidden");
+    // Пересылать из канала можно всем
     if (fwdBtn) fwdBtn.classList.remove("hidden");
-    if (editBtn && msg && msg.sender_id === currentUser.id && !msg.forwarded_from_name) editBtn.classList.remove("hidden");
+
+    // Остальное — только админам и владельцу
+    if (isChanAdmin) {
+      if (replyBtn) replyBtn.classList.remove("hidden");
+      if (pinBtn) pinBtn.classList.remove("hidden");
+      if (delBtn) delBtn.classList.remove("hidden");
+      if (editBtn && msg && msg.sender_id === currentUser.id && !msg.forwarded_from_name) editBtn.classList.remove("hidden");
+    }
   } else if (isGift) {
     if (replyBtn) replyBtn.classList.remove("hidden");
-    if (fwdBtn) fwdBtn.classList.add("hidden");
+    if (delBtn)   delBtn.classList.remove("hidden");
   } else if (isTokens) {
-    if (replyBtn) replyBtn.classList.add("hidden");
-    if (fwdBtn) fwdBtn.classList.add("hidden");
+    if (delBtn)   delBtn.classList.remove("hidden");
   } else {
+    // Обычный DM
     if (replyBtn) replyBtn.classList.remove("hidden");
-    if (fwdBtn) fwdBtn.classList.remove("hidden");
+    if (fwdBtn)   fwdBtn.classList.remove("hidden");
+    if (pinBtn)   pinBtn.classList.remove("hidden");
+    if (delBtn)   delBtn.classList.remove("hidden");
     if (editBtn && msg && msg.sender_id === currentUser.id && !msg.forwarded_from_name) editBtn.classList.remove("hidden");
   }
+
   const menu = document.getElementById("msg-context-menu");
   menu.classList.remove("hidden");
   menu.style.left = "0px"; menu.style.top = "0px";
@@ -3187,8 +3203,12 @@ function cancelEdit() {
 // ======================================================
 
 async function handleDeleteOne(msgId) {
-  // В канале — только "удалить у всех"
+  // В канале удалять могут только админы/владелец
   if (currentChannelObj) {
+    if (!currentChannelIsAdmin) {
+      await showAlertDialog("Нельзя", "Только администраторы могут удалять сообщения в канале");
+      return;
+    }
     await deleteMessageForBoth(msgId);
     return;
   }
@@ -5224,6 +5244,10 @@ async function handlePinAction(msgId) {
 
   // === КАНАЛ ===
   if (currentChannelObj) {
+    if (!currentChannelIsAdmin) {
+      await showAlertDialog("Нельзя", "Только администраторы могут закреплять сообщения в канале");
+      return;
+    }
     const existing = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "shared");
     if (existing) {
       const ok = await showConfirmDialog("Открепить", "Открепить это сообщение в канале?", "Открепить");
