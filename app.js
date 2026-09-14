@@ -738,11 +738,27 @@ function subscribeToGlobalChanges() {
     .on("postgres_changes", { event: "UPDATE", schema: "public", table: "channels" }, (payload) => {
       const ch = payload.new; if (!ch) return;
       channelCache.set(ch.id, ch);
+
+      // 1) Карточка в списке чатов
       const el = document.querySelector(`.user-item[data-chat-id="${ch.id}"][data-chat-type="channel"]`);
       if (el) {
         const nameEl = el.querySelector(".user-item-name");
         if (nameEl) nameEl.innerHTML = escapeHtml(ch.name) + '<span class="channel-mark">📢</span>';
         paintAvatar(el.querySelector(".avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
+      }
+
+      // 2) Открытая шапка канала
+      if (currentChannelObj && currentChannelObj.id === ch.id) {
+        Object.assign(currentChannelObj, ch);
+        paintAvatar(document.getElementById("chat-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
+        document.getElementById("chat-title").textContent = ch.name;
+      }
+
+      // 3) Открытый профиль канала
+      if (channelProfileChannelId === ch.id) {
+        paintAvatar(document.getElementById("channel-profile-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
+        document.getElementById("channel-profile-name").textContent = ch.name;
+        document.getElementById("channel-profile-username").textContent = "@" + (ch.username || "");
       }
     })
     .subscribe();
@@ -1750,6 +1766,7 @@ async function loadMessages(chatId) {
     const nonMyMsgs = visible.filter((m) => m.sender_id !== currentUser.id);
     for (const m of nonMyMsgs) {
       const { data: total, error: mvErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
+      console.log("[views] msg", m.id, "total:", total, "err:", mvErr);
       if (mvErr) { console.error("mark_message_viewed FAILED:", mvErr, "msgId:", m.id); continue; }
       if (total !== null && total !== undefined) {
         const cnt = Number(total) || 0;
@@ -4078,7 +4095,11 @@ async function handleChannelEditAvatarUpload(e) {
 function renderChannelEditReactions() {
   const grid = document.getElementById("channel-edit-reactions");
   grid.innerHTML = "";
-  REACTION_EMOJIS.forEach((em) => {
+  // Объединяем базовый список с уже добавленными эмодзи канала (могут быть свои)
+  const allEmojis = new Set(REACTION_EMOJIS);
+  channelEditReactions.forEach((em) => allEmojis.add(em));
+
+  [...allEmojis].forEach((em) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "reaction-toggle " + (channelEditReactions.has(em) ? "on" : "off");
