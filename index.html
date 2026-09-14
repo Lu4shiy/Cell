@@ -407,11 +407,11 @@
             <div class="pir-label">Юзернейм канала</div>
           </div>
         </div>
-        <div class="profile-info-row">
+        <div class="profile-info-row" id="channel-profile-subs-row" style="cursor:pointer;border-radius:8px;">
           <span class="pir-icon">👥</span>
           <div class="pir-body">
             <div class="pir-value" id="channel-profile-subscribers">0</div>
-            <div class="pir-label">Подписчиков</div>
+            <div class="pir-label">Подписчиков · нажми, чтобы посмотреть список</div>
           </div>
         </div>
         <div class="profile-info-row">
@@ -432,6 +432,16 @@
 
       <div class="dialog-actions">
         <button class="dialog-btn dialog-cancel" id="channel-profile-close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="channel-subs-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title" id="channel-subs-title">Подписчики</div>
+      <div id="channel-subs-list" class="admins-list" style="max-height:60vh;overflow-y:auto;"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="channel-subs-close">Закрыть</button>
       </div>
     </div>
   </div>
@@ -502,6 +512,18 @@
       <div class="profile-section">
         <div class="profile-label">Доступные реакции</div>
         <div class="reactions-grid" id="channel-edit-reactions"></div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Администраторы</div>
+        <div id="channel-edit-admins" class="admins-list"></div>
+        <button type="button" id="channel-edit-add-admin" class="dialog-btn" style="width:100%;margin-top:8px;">+ Добавить администратора</button>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Владелец канала</div>
+        <div id="channel-edit-owner" class="admins-list"></div>
+        <button type="button" id="channel-edit-transfer" class="dialog-btn" style="width:100%;margin-top:8px;">Передать владение</button>
       </div>
 
       <div class="dialog-actions">

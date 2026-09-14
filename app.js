@@ -1763,10 +1763,8 @@ async function loadMessages(chatId) {
   // Если запись реально создалась — локально +1, чтобы сразу увидеть свой просмотр.
   // Чужие просмотры прилетят через realtime (subscribeToChannelViews).
   if (isChannel) {
-    const nonMyMsgs = visible.filter((m) => m.sender_id !== currentUser.id);
-    for (const m of nonMyMsgs) {
+    for (const m of visible) {
       const { data: total, error: mvErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
-      console.log("[views] msg", m.id, "total:", total, "err:", mvErr);
       if (mvErr) { console.error("mark_message_viewed FAILED:", mvErr, "msgId:", m.id); continue; }
       if (total !== null && total !== undefined) {
         const cnt = Number(total) || 0;
@@ -2349,6 +2347,10 @@ function setupChatMenu() {
 
   // Профиль канала — открыть/закрыть
   document.getElementById("channel-profile-close").addEventListener("click", closeChannelProfileDialog);
+
+  // Клик по строке "Подписчиков" в профиле канала
+  const subsRow = document.getElementById("channel-profile-subs-row");
+  if (subsRow) subsRow.addEventListener("click", openChannelSubscribersDialog);
 
   const chMenuBtn = document.getElementById("channel-profile-menu-btn");
   const chMenu = document.getElementById("channel-profile-menu");
@@ -4013,6 +4015,15 @@ function setupChannelEdit() {
     const value = e.target.value;
     channelEditUsernameTimeout = setTimeout(() => checkChannelEditUsernameLive(value), 350);
   });
+
+  document.getElementById("channel-edit-add-admin").addEventListener("click", openAddAdminDialog);
+  document.getElementById("channel-edit-transfer").addEventListener("click", openTransferOwnerDialog);
+
+  document.getElementById("channel-subs-close").addEventListener("click", () => {
+    document.getElementById("channel-subs-overlay").classList.add("hidden");
+  });
+
+  subscribeToChannelAdmins();
 }
 
 function updateChannelEditSaveButton() {
@@ -4047,6 +4058,7 @@ function openChannelEditDialog() {
 
   renderChannelEditAvatarGrid();
   renderChannelEditReactions();
+  renderChannelEditAdmins();
 
   updateChannelEditSaveButton();
   document.getElementById("channel-edit-overlay").classList.remove("hidden");
@@ -4241,4 +4253,217 @@ async function saveChannelEdit() {
     await showAlertDialog("Ошибка", ex.message || String(ex));
     btn.disabled = false; btn.textContent = oldText;
   }
+}
+
+// ======================================================
+// 33. КАНАЛЫ: АДМИНЫ, ВЛАДЕНИЕ, ПОДПИСЧИКИ
+// ======================================================
+
+async function renderChannelEditAdmins() {
+  if (!currentChannelObj) return;
+  const ch = currentChannelObj;
+  const listEl = document.getElementById("channel-edit-admins");
+
+  // Владелец всегда один — рендерим в блоке "Владелец канала", здесь только админы
+  const { data: admins } = await supabase.rpc("get_channel_admins", { p_channel_id: ch.id });
+  const adminIds = (admins || []).map((a) => a.user_id).filter((id) => id !== ch.owner_id);
+
+  const profiles = [];
+  for (const id of adminIds) {
+    const p = await getProfile(id);
+    if (p) profiles.push(p);
+  }
+
+  if (!profiles.length) {
+    listEl.innerHTML = '<div class="empty" style="padding:10px;font-size:13px;">Нет администраторов</div>';
+  } else {
+    listEl.innerHTML = profiles.map((p) => `
+      <div class="admin-row" data-user-id="${p.id}">
+        <div class="avatar"></div>
+        <div class="admin-row-name">
+          ${escapeHtml(p.display_name)}
+          <div class="admin-row-username">@${escapeHtml(p.username)}</div>
+        </div>
+        <span class="admin-row-role admin">Админ</span>
+        <button type="button" class="admin-row-remove" data-remove-admin="${p.id}" title="Снять">✕</button>
+      </div>
+    `).join("");
+    listEl.querySelectorAll(".admin-row").forEach((row) => {
+      const p = profiles.find((x) => x.id === row.dataset.userId);
+      paintAvatar(row.querySelector(".avatar"), p);
+    });
+    listEl.querySelectorAll("[data-remove-admin]").forEach((btn) => {
+      btn.addEventListener("click", () => removeChannelAdmin(btn.dataset.removeAdmin));
+    });
+  }
+
+  // Владелец
+  const ownerProfile = await getProfile(ch.owner_id);
+  const ownerEl = document.getElementById("channel-edit-owner");
+  ownerEl.innerHTML = `
+    <div class="admin-row">
+      <div class="avatar"></div>
+      <div class="admin-row-name">
+        ${escapeHtml(ownerProfile ? ownerProfile.display_name : "—")}
+        <div class="admin-row-username">@${escapeHtml(ownerProfile ? ownerProfile.username : "")}</div>
+      </div>
+      <span class="admin-row-role owner">Владелец</span>
+    </div>`;
+  paintAvatar(ownerEl.querySelector(".avatar"), ownerProfile || { display_name: "?" });
+}
+
+async function removeChannelAdmin(userId) {
+  if (!currentChannelObj) return;
+  const ok = await showConfirmDialog("Снять администратора", "Снять с должности администратора?", "Снять");
+  if (!ok) return;
+  const { error } = await supabase.rpc("remove_channel_admin", {
+    p_channel_id: currentChannelObj.id,
+    p_user_id: userId,
+  });
+  if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  await renderChannelEditAdmins();
+}
+
+async function openAddAdminDialog() {
+  if (!currentChannelObj) return;
+  const ch = currentChannelObj;
+
+  const { data: mems } = await supabase.from("chat_members")
+    .select("user_id").eq("chat_id", ch.id).neq("user_id", currentUser.id);
+  const memberIds = (mems || []).map((m) => m.user_id);
+  if (!memberIds.length) {
+    await showAlertDialog("Пусто", "В канале нет других подписчиков");
+    return;
+  }
+
+  const { data: admins } = await supabase.rpc("get_channel_admins", { p_channel_id: ch.id });
+  const adminSet = new Set((admins || []).map((a) => a.user_id));
+  adminSet.add(ch.owner_id);
+
+  const candidates = memberIds.filter((id) => !adminSet.has(id));
+  if (!candidates.length) {
+    await showAlertDialog("Пусто", "Все подписчики уже администраторы");
+    return;
+  }
+
+  const { data: profiles } = await supabase.from("profiles")
+    .select("id, username, display_name, avatar_url").in("id", candidates);
+
+  const choice = await showChoiceDialog(
+    "Выбрать администратора",
+    "Кого назначить админом канала?",
+    (profiles || []).map((p) => ({ label: `${p.display_name} (@${p.username})`, value: p.id })),
+    "Назначить"
+  );
+  if (!choice) return;
+
+  const { error } = await supabase.rpc("add_channel_admin", {
+    p_channel_id: ch.id,
+    p_user_id: choice,
+  });
+  if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  await renderChannelEditAdmins();
+}
+
+async function openTransferOwnerDialog() {
+  if (!currentChannelObj) return;
+  const ch = currentChannelObj;
+
+  const { data: mems } = await supabase.from("chat_members")
+    .select("user_id").eq("chat_id", ch.id).neq("user_id", currentUser.id);
+  const memberIds = (mems || []).map((m) => m.user_id);
+  if (!memberIds.length) {
+    await showAlertDialog("Пусто", "Нет других подписчиков");
+    return;
+  }
+
+  const { data: profiles } = await supabase.from("profiles")
+    .select("id, username, display_name, avatar_url").in("id", memberIds);
+
+  const choice = await showChoiceDialog(
+    "Передать владение",
+    "Выберите нового владельца. Вы потеряете права владельца канала.",
+    (profiles || []).map((p) => ({ label: `${p.display_name} (@${p.username})`, value: p.id })),
+    "Передать"
+  );
+  if (!choice) return;
+
+  const confirm = await showConfirmDialog(
+    "Подтверждение",
+    "Точно передать владение? Действие необратимо.",
+    "Передать"
+  );
+  if (!confirm) return;
+
+  const { error } = await supabase.rpc("transfer_channel_owner", {
+    p_channel_id: ch.id,
+    p_new_owner: choice,
+  });
+  if (error) { await showAlertDialog("Ошибка", error.message); return; }
+
+  await showAlertDialog("Готово", "Владение передано. Канал закроется.");
+  closeChannelEditDialog();
+  closeChannelProfileDialog();
+  closeCurrentChat();
+}
+
+// Realtime: админы канала меняются → перерисовываем редактор
+let channelAdminsChannel = null;
+function subscribeToChannelAdmins() {
+  if (channelAdminsChannel) return;
+  channelAdminsChannel = supabase.channel("channel-admins-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "channel_admins" }, async (payload) => {
+      const row = payload.new || payload.old;
+      if (!row) return;
+      if (currentChannelObj && currentChannelObj.id === row.channel_id) {
+        if (!document.getElementById("channel-edit-overlay").classList.contains("hidden")) {
+          await renderChannelEditAdmins();
+        }
+      }
+    })
+    .subscribe();
+}
+
+// ======================================================
+// 34. СПИСОК ПОДПИСЧИКОВ КАНАЛА
+// ======================================================
+
+async function openChannelSubscribersDialog() {
+  if (!currentChannelObj) return;
+  const ch = currentChannelObj;
+  const overlay = document.getElementById("channel-subs-overlay");
+  const titleEl = document.getElementById("channel-subs-title");
+  const listEl = document.getElementById("channel-subs-list");
+
+  titleEl.textContent = "Подписчики";
+  listEl.innerHTML = '<div class="empty">Загрузка...</div>';
+  overlay.classList.remove("hidden");
+
+  const { data: subs, error } = await supabase.rpc("get_channel_subscribers", { p_channel_id: ch.id });
+  if (error) { listEl.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
+  if (!subs || !subs.length) { listEl.innerHTML = '<div class="empty">Нет подписчиков</div>'; return; }
+
+  const profiles = [];
+  for (const s of subs) {
+    const p = await getProfile(s.user_id);
+    if (p) profiles.push({ ...p, _role: s.role });
+  }
+
+  const roleLabel = (r) => r === "owner" ? "Владелец" : r === "admin" ? "Админ" : "Подписчик";
+
+  listEl.innerHTML = profiles.map((p) => `
+    <div class="admin-row" data-user-id="${p.id}">
+      <div class="avatar"></div>
+      <div class="admin-row-name">
+        ${escapeHtml(p.display_name)}
+        <div class="admin-row-username">@${escapeHtml(p.username)}</div>
+      </div>
+      <span class="admin-row-role ${p._role}">${roleLabel(p._role)}</span>
+    </div>
+  `).join("");
+
+  listEl.querySelectorAll(".admin-row").forEach((row) => {
+    const p = profiles.find((x) => x.id === row.dataset.userId);
+    paintAvatar(row.querySelector(".avatar"), p);
+  });
 }
