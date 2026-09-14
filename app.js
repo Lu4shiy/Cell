@@ -6,7 +6,15 @@ const SUPABASE_URL = "https://uiktqkxfsoewjpgjpizf.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpa3Rxa3hmc29ld2pwZ2pwaXpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyODY5MjksImV4cCI6MjEwNDg2MjkyOX0.2OC3vrfusHK6Lqv1Yh5KfZ42Ypm02sE1XAloTSUxo2k";
 
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    storage: window.sessionStorage,
+    storageKey: "imaginer-auth",
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: false,
+  },
+});
 
 const ACCENTS = ["orange", "blue", "green", "red", "purple", "pink", "teal", "gray"];
 const ACCENT_COLORS = { orange:"#ff8c42",blue:"#2196f3",green:"#4caf50",red:"#f44336",purple:"#9c27b0",pink:"#e91e63",teal:"#009688",gray:"#607d8b" };
@@ -456,7 +464,8 @@ function showInputDialog(title, text, defaultValue) {
   });
 }
 
-function showChoiceDialog(title, text, options, confirmLabel) {
+function showChoiceDialog(title, text, options, confirmLabel, opts) {
+  opts = opts || {};
   return new Promise((resolve) => {
     const overlay = document.getElementById("dialog-overlay");
     const optionsEl = document.getElementById("dialog-options");
@@ -464,20 +473,73 @@ function showChoiceDialog(title, text, options, confirmLabel) {
     const cancelBtn = document.getElementById("dialog-cancel");
     document.getElementById("dialog-title").textContent = title;
     document.getElementById("dialog-text").textContent = text;
-    confirmBtn.textContent = confirmLabel || "Подтвердить"; confirmBtn.disabled = true;
+    confirmBtn.textContent = confirmLabel || "Подтвердить";
+    confirmBtn.disabled = true;
     cancelBtn.style.display = "";
-    let selected = null; optionsEl.innerHTML = "";
-    options.forEach((opt) => {
-      const b = document.createElement("button");
-      b.className = "dialog-option"; b.textContent = opt.label;
-      b.addEventListener("click", () => {
-        optionsEl.querySelectorAll(".dialog-option").forEach((x) => x.classList.remove("selected"));
-        b.classList.add("selected"); selected = opt.value; confirmBtn.disabled = false;
+    optionsEl.innerHTML = "";
+    optionsEl.style.flexDirection = "column";
+
+    const searchable = !!opts.searchable;
+    const searchPlaceholder = opts.searchPlaceholder || "Поиск...";
+    let selected = null;
+    let rendered = options.slice();
+
+    let searchInput = null;
+    if (searchable) {
+      searchInput = document.createElement("input");
+      searchInput.type = "text";
+      searchInput.placeholder = searchPlaceholder;
+      searchInput.className = "dialog-search";
+      searchInput.addEventListener("input", () => {
+        const q = searchInput.value.trim().toLowerCase();
+        rendered = !q ? options.slice() : options.filter((o) => {
+          const label = String(o.label || "").toLowerCase();
+          const extra = String(o.search || "").toLowerCase();
+          return label.indexOf(q) !== -1 || extra.indexOf(q) !== -1;
+        });
+        renderOptions();
       });
-      optionsEl.appendChild(b);
-    });
+      optionsEl.appendChild(searchInput);
+    }
+
+    const listEl = document.createElement("div");
+    listEl.className = "dialog-options-list";
+    optionsEl.appendChild(listEl);
+
+    function renderOptions() {
+      listEl.innerHTML = "";
+      if (!rendered.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.style.padding = "10px";
+        empty.textContent = "Ничего не найдено";
+        listEl.appendChild(empty);
+        return;
+      }
+      rendered.forEach((opt) => {
+        const b = document.createElement("button");
+        b.className = "dialog-option";
+        if (opt.value === selected) b.classList.add("selected");
+        b.textContent = opt.label;
+        b.addEventListener("click", () => {
+          listEl.querySelectorAll(".dialog-option").forEach((x) => x.classList.remove("selected"));
+          b.classList.add("selected");
+          selected = opt.value;
+          confirmBtn.disabled = false;
+        });
+        listEl.appendChild(b);
+      });
+    }
+    renderOptions();
+
     overlay.classList.remove("hidden");
-    function cleanup() { overlay.classList.add("hidden"); confirmBtn.onclick = null; cancelBtn.onclick = null; }
+    if (searchInput) setTimeout(() => searchInput.focus(), 60);
+
+    function cleanup() {
+      overlay.classList.add("hidden");
+      confirmBtn.onclick = null;
+      cancelBtn.onclick = null;
+    }
     confirmBtn.onclick = () => { if (selected === null) return; cleanup(); resolve(selected); };
     cancelBtn.onclick = () => { cleanup(); resolve(null); };
   });
@@ -3778,28 +3840,30 @@ function setupChannelCreate() {
   if (subBtn) subBtn.addEventListener("click", async () => {
     if (!currentChannelObj) return;
     subBtn.disabled = true;
+    const chId = currentChannelObj.id;
     try {
-      const { data: existing, error: checkErr } = await supabase.from("chat_members")
-        .select("chat_id").eq("chat_id", currentChannelObj.id).eq("user_id", currentUser.id).maybeSingle();
-      if (checkErr) { await showAlertDialog("Ошибка", checkErr.message); return; }
-      const isSubscribed = !!existing;
+      const { data: existing } = await supabase.from("chat_members")
+        .select("chat_id").eq("chat_id", chId).eq("user_id", currentUser.id).limit(1);
+      const isSubscribed = !!(existing && existing.length);
+
       if (isSubscribed) {
         const { error } = await supabase.from("chat_members")
-          .delete().eq("chat_id", currentChannelObj.id).eq("user_id", currentUser.id);
+          .delete().eq("chat_id", chId).eq("user_id", currentUser.id);
         if (error) { await showAlertDialog("Ошибка отписки", error.message); return; }
         currentChannelIsSubscribed = false;
-        removeChatFromList(currentChannelObj.id);
+        removeChatFromList(chId);
       } else {
         const { error } = await supabase.from("chat_members").insert({
-          chat_id: currentChannelObj.id, user_id: currentUser.id,
+          chat_id: chId, user_id: currentUser.id,
         });
-        if (error && !String(error.message || "").toLowerCase().includes("duplicate")) {
-          await showAlertDialog("Ошибка подписки", error.message); return;
+        if (error && error.code !== "23505") {
+          await showAlertDialog("Ошибка подписки", error.message);
+          return;
         }
         currentChannelIsSubscribed = true;
-        await addOrUpdateChannelInList(currentChannelObj.id, currentChannelObj);
+        await addOrUpdateChannelInList(chId, currentChannelObj);
       }
-      await updateChannelSubtitle(currentChannelObj.id);
+      await updateChannelSubtitle(chId);
       await updateChannelComposerState();
       configureChatMenuForChannel(currentChannelObj);
     } catch (ex) {
@@ -4405,12 +4469,13 @@ async function openAddAdminDialog() {
   const ch = currentChannelObj;
 
   const { data: mems } = await supabase.from("chat_members")
-    .select("user_id").eq("chat_id", ch.id).neq("user_id", currentUser.id);
+    .select("user_id, custom_name").eq("chat_id", ch.id).neq("user_id", currentUser.id);
   const memberIds = (mems || []).map((m) => m.user_id);
   if (!memberIds.length) {
     await showAlertDialog("Пусто", "В канале нет других подписчиков");
     return;
   }
+  const customByUser = new Map((mems || []).map((m) => [m.user_id, m.custom_name]));
 
   const { data: admins } = await supabase.rpc("get_channel_admins", { p_channel_id: ch.id });
   const adminSet = new Set((admins || []).map((a) => a.user_id));
@@ -4425,11 +4490,22 @@ async function openAddAdminDialog() {
   const { data: profiles } = await supabase.from("profiles")
     .select("id, username, display_name, avatar_url").in("id", candidates);
 
+  const opts = (profiles || []).map((p) => {
+    const custom = customByUser.get(p.id);
+    const displayLabel = custom ? `${custom} (${p.display_name})` : p.display_name;
+    return {
+      label: `${displayLabel} — @${p.username}`,
+      value: p.id,
+      search: `${p.display_name} ${p.username} ${custom || ""}`,
+    };
+  });
+
   const choice = await showChoiceDialog(
     "Выбрать администратора",
-    "Кого назначить админом канала?",
-    (profiles || []).map((p) => ({ label: `${p.display_name} (@${p.username})`, value: p.id })),
-    "Назначить"
+    "Кого назначить админом канала? Можно искать по имени или @username.",
+    opts,
+    "Назначить",
+    { searchable: true, searchPlaceholder: "Поиск по имени или @username" }
   );
   if (!choice) return;
 
@@ -4446,21 +4522,33 @@ async function openTransferOwnerDialog() {
   const ch = currentChannelObj;
 
   const { data: mems } = await supabase.from("chat_members")
-    .select("user_id").eq("chat_id", ch.id).neq("user_id", currentUser.id);
+    .select("user_id, custom_name").eq("chat_id", ch.id).neq("user_id", currentUser.id);
   const memberIds = (mems || []).map((m) => m.user_id);
   if (!memberIds.length) {
     await showAlertDialog("Пусто", "Нет других подписчиков");
     return;
   }
+  const customByUser = new Map((mems || []).map((m) => [m.user_id, m.custom_name]));
 
   const { data: profiles } = await supabase.from("profiles")
     .select("id, username, display_name, avatar_url").in("id", memberIds);
 
+  const opts = (profiles || []).map((p) => {
+    const custom = customByUser.get(p.id);
+    const displayLabel = custom ? `${custom} (${p.display_name})` : p.display_name;
+    return {
+      label: `${displayLabel} — @${p.username}`,
+      value: p.id,
+      search: `${p.display_name} ${p.username} ${custom || ""}`,
+    };
+  });
+
   const choice = await showChoiceDialog(
     "Передать владение",
-    "Выберите нового владельца. Вы потеряете права владельца канала.",
-    (profiles || []).map((p) => ({ label: `${p.display_name} (@${p.username})`, value: p.id })),
-    "Передать"
+    "Выберите нового владельца. Можно искать по имени или @username. Вы потеряете права владельца.",
+    opts,
+    "Передать",
+    { searchable: true, searchPlaceholder: "Поиск по имени или @username" }
   );
   if (!choice) return;
 
