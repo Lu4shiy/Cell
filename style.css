@@ -753,6 +753,24 @@ input:focus { border-color: var(--accent); }
   font-size: 13px;
 }
 
+/* Флаги-эмодзи, заменённые на SVG */
+.emoji-flag-inline {
+  width: 28px;
+  height: auto;
+  display: block;
+  pointer-events: none;
+  border-radius: 2px;
+}
+
+.emoji-flag {
+  width: 1.3em;
+  height: auto;
+  display: inline-block;
+  vertical-align: -0.2em;
+  border-radius: 2px;
+  user-select: none;
+}
+
 /* ============ БАННЕР БЛОКИРОВКИ ============ */
 
 .block-banner {

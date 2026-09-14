@@ -2221,10 +2221,10 @@ async function buildMsgHtml(msg) {
   if (msg.message_type === "attachment") {
     html += `<div class="msg-attachment">${buildAttachmentHtml(msg)}</div>`;
     if (msg.content) {
-      html += `<div class="msg-text" style="margin-top:6px;">${applyFormatting(escapeHtml(msg.content || ""))}</div>`;
+      html += `<div class="msg-text" style="margin-top:6px;">${replaceFlagsInHtml(applyFormatting(escapeHtml(msg.content || "")))}</div>`;
     }
   } else {
-    html += `<div class="msg-text">${applyFormatting(escapeHtml(msg.content || ""))}</div>`;
+    html += `<div class="msg-text">${replaceFlagsInHtml(applyFormatting(escapeHtml(msg.content || "")))}</div>`;
   }
   html += `<div class="msg-reactions" data-reactions-for="${msg.id}"></div>`;
 
@@ -2433,6 +2433,29 @@ function checkEmptyChat() {
 const EMOJI_RECENT_KEY = "cell_emoji_recent";
 const EMOJI_MAX_RECENT = 24;
 
+// Windows не умеет показывать цветные эмодзи-флаги — заменяем их на SVG Twemoji
+function isFlagEmoji(emoji) {
+  if (!emoji || emoji.length < 2) return false;
+  const cp = emoji.codePointAt(0);
+  return cp >= 0x1F1E6 && cp <= 0x1F1FF;
+}
+
+function twemojiUrl(emoji) {
+  const codepoints = [...emoji]
+    .map((c) => c.codePointAt(0).toString(16))
+    .filter((cp) => cp !== "fe0f")
+    .join("-");
+  return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codepoints}.svg`;
+}
+
+// Заменяет флаги-эмодзи в готовом HTML на <img>
+function replaceFlagsInHtml(html) {
+  if (!html) return html;
+  return html.replace(/[\u{1F1E6}-\u{1F1FF}]{2}/gu, (match) => {
+    return `<img class="emoji-flag" src="${twemojiUrl(match)}" alt="${match}" draggable="false">`;
+  });
+}
+
 const EMOJI_SETS = {
   smileys: "😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘 😗 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 🤥 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 🤯 🤠 🥳 😎 🤓 🧐 😕 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 💩 🤡 👹 👺 👻 👽 👾 🤖".split(" "),
   gestures: "👍 👎 👌 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ ✋ 🤚 🖐️ 🖖 👋 🤝 🙏 ✍️ 💅 🤳 💪 🦾 🦵 🦶 👂 🦻 👃 🧠 🦷 🦴 👀 👁️ 👅 👄 💋".split(" "),
@@ -2575,9 +2598,12 @@ function renderEmojiGrid() {
     grid.innerHTML = `<div class="emoji-picker-empty">Здесь появятся недавно использованные эмодзи</div>`;
     return;
   }
-  grid.innerHTML = list.map((em) =>
-    `<button type="button" class="emoji-item" data-emoji="${escapeHtml(em)}">${em}</button>`
-  ).join("");
+  grid.innerHTML = list.map((em) => {
+    const inner = isFlagEmoji(em)
+      ? `<img class="emoji-flag-inline" src="${twemojiUrl(em)}" alt="${escapeHtml(em)}" draggable="false">`
+      : em;
+    return `<button type="button" class="emoji-item" data-emoji="${escapeHtml(em)}">${inner}</button>`;
+  }).join("");
   grid.querySelectorAll(".emoji-item").forEach((b) => {
     b.addEventListener("click", (e) => {
       e.stopPropagation();
