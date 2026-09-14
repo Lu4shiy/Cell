@@ -250,8 +250,10 @@ async function initApp() {
   await loadRecentChats();
 
   // Отметить все входящие как доставленные
-  supabase.rpc("mark_all_delivered").catch(() => {});
-  deliveredInterval = setInterval(() => supabase.rpc("mark_all_delivered").catch(() => {}), 30000);
+  try { await supabase.rpc("mark_all_delivered"); } catch (e) {}
+  deliveredInterval = setInterval(async () => {
+    try { await supabase.rpc("mark_all_delivered"); } catch (e) {}
+  }, 30000);
 
   // Обновлять мой last_seen
   await updateMyLastSeen();
@@ -1094,6 +1096,12 @@ async function openChannel(chatId) {
   document.getElementById("composer").classList.add("hidden");
   document.getElementById("channel-action-bar").classList.add("hidden");
 
+  // Чистим поле поиска и крестик — чтобы поиск не оставался активным
+  const _sInput = document.getElementById("search-input");
+  const _sClear = document.getElementById("search-clear");
+  if (_sInput && _sInput.value.trim()) _sInput.value = "";
+  if (_sClear) _sClear.classList.add("hidden");
+
   const { data: ch } = await supabase.from("channels").select("*").eq("id", chatId).maybeSingle();
   if (!ch) { await showAlertDialog("Ошибка", "Канал не найден"); return; }
   channelCache.set(chatId, ch);
@@ -1106,13 +1114,6 @@ async function openChannel(chatId) {
   exitSelectionMode(); cancelReply(); cancelEdit(); closeReactionPicker();
   document.getElementById("composer").classList.add("hidden");
   document.getElementById("channel-action-bar").classList.add("hidden");
-
-  const searchInput = document.getElementById("search-input");
-  if (searchInput && searchInput.value.trim()) {
-    searchInput.value = "";
-    // НЕ перезагружаем список при открытии канала
-    setTimeout(() => { if (!currentChannelObj) loadRecentChats(); }, 50);
-  }
 
   paintAvatar(document.getElementById("chat-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
   document.getElementById("chat-title").textContent = ch.name;
@@ -1224,7 +1225,8 @@ async function addOrUpdateChatInList(chatId, otherUserId) {
 
 async function addOrUpdateChannelInList(chatId, channel) {
   if (document.getElementById("search-input").value.trim()) return;
-  if (document.querySelector(`.user-item[data-chat-id="${chatId}"][data-chat-type="channel"]`)) return;
+  // Универсальная проверка: и channel, и channel-search
+  if (document.querySelector(`.user-item[data-chat-id="${chatId}"]`)) return;
 
   if (!channel) {
     const { data } = await supabase.from("channels").select("*").eq("id", chatId).maybeSingle();
@@ -1268,9 +1270,20 @@ function removeChatFromList(chatId) {
 // ======================= 11. ПОИСК =======================
 function setupSearch() {
   const input = document.getElementById("search-input");
+  const clearBtn = document.getElementById("search-clear");
+
   input.addEventListener("input", () => {
+    const hasText = input.value.trim().length > 0;
+    clearBtn.classList.toggle("hidden", !hasText);
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => performSearch(input.value.trim()), 250);
+  });
+
+  clearBtn.addEventListener("click", async () => {
+    input.value = "";
+    clearBtn.classList.add("hidden");
+    input.focus();
+    await loadRecentChats();
   });
 }
 
@@ -1279,6 +1292,8 @@ let searchReqId = 0;
 async function performSearch(query) {
   const listEl = document.getElementById("users-list");
   const titleEl = document.getElementById("section-title");
+  const clearBtn = document.getElementById("search-clear");
+  if (clearBtn) clearBtn.classList.toggle("hidden", !query);
   if (!query) { await loadRecentChats(); return; }
   titleEl.textContent = "Поиск";
   const clean = query.replace(/^@+/, "").trim().toLowerCase();
@@ -3715,5 +3730,12 @@ async function deleteChannelDialog() {
 }
 
 async function joinAndOpenChannel(ch) {
+  // Очищаем поиск, чтобы не остался "channel-search" в DOM
+  const searchInput = document.getElementById("search-input");
+  const clearBtn = document.getElementById("search-clear");
+  if (searchInput) searchInput.value = "";
+  if (clearBtn) clearBtn.classList.add("hidden");
+  // Перезагружаем список чатов (там появится канал, если я подписан)
+  await loadRecentChats();
   await openChannel(ch.id);
 }

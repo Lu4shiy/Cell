@@ -1760,3 +1760,38 @@ button:not(:disabled):active { transform: scale(0.97); }
   opacity: 0.7;
   user-select: none;
 }
+
+/* ====================================================== */
+/* Кнопка очистки поиска                                  */
+/* ====================================================== */
+
+.search-wrap {
+  position: relative;
+}
+
+.search-wrap input {
+  padding-right: 38px;
+}
+
+.search-clear {
+  position: absolute;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  color: var(--text-sub);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+  padding: 0;
+}
+.search-clear:hover { background: var(--bg-active); color: var(--text); }
