@@ -404,6 +404,10 @@ async function initApp() {
   });
   // Обработка приглашения из URL (#invite=CODE)
   setTimeout(() => { tryJoinFromInviteUrl(); }, 400);
+  // Реакция на смену #invite=... в текущей вкладке
+  window.addEventListener("hashchange", () => {
+    if (currentUser) tryJoinFromInviteUrl();
+  });
 }
 
 async function pollMyMessageStatuses() {
@@ -870,6 +874,17 @@ function subscribeToMemberships() {
       await refreshChannelRights(payload.new.chat_id);
       if (payload.new.user_id === currentUser.id) {
         const chatId = payload.new.chat_id;
+        // Если это наш открытый канал — перезагружаем сообщения без перезапуска
+        if (currentChatId === chatId && currentChannelObj && currentChannelObj.id === chatId) {
+          currentChannelHasRequest = false;
+          currentChannelIsSubscribed = true;
+          await updateChannelComposerState();
+          configureChatMenuForChannel(currentChannelObj);
+          await loadMessages(chatId, openSeq);
+          await loadReactionsForVisibleMessages();
+          await markChatRead(chatId);
+          return;
+        }
         if (document.querySelector(`.user-item[data-chat-id="${chatId}"]`)) return;
         const { data: ch } = await supabase.from("channels").select("*").eq("id", chatId).maybeSingle();
         if (ch) { await addOrUpdateChannelInList(chatId, ch); return; }
@@ -879,12 +894,21 @@ function subscribeToMemberships() {
       }
     })
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_members" }, async (payload) => {
-      await refreshChannelRights(payload.old.chat_id);
+      const chatId = payload.old && payload.old.chat_id;
+      if (!chatId) return;
+      await refreshChannelRights(chatId);
       if (payload.old && payload.old.user_id === currentUser.id) {
-        const chatId = payload.old.chat_id;
-        if (currentChatId === chatId) closeCurrentChat();
-        removeChatFromList(chatId);
-        channelCache.delete(chatId);
+        const { data: ch } = await supabase.from("channels").select("id").eq("id", chatId).maybeSingle();
+        if (ch) {
+          // Канал: не закрываем и не убираем из списка — можно просматривать дальше.
+          // refreshChannelRights уже обновил composer и меню.
+          currentChannelIsSubscribed = false;
+        } else {
+          // DM: как раньше — закрываем и удаляем
+          if (currentChatId === chatId) closeCurrentChat();
+          removeChatFromList(chatId);
+          channelCache.delete(chatId);
+        }
       }
     }).subscribe();
 }
@@ -1826,13 +1850,16 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
     const { error } = await supabase.from("chat_members")
       .delete().eq("chat_id", ch.id).eq("user_id", currentUser.id);
     if (error) { await showAlertDialog("Ошибка", error.message); return; }
-    removeChatFromList(ch.id);
-    channelCache.delete(ch.id);
+    // Если канал открыт — оставляем его открытым (просто без подписки).
+    // Если не открыт — убираем из списка, чтобы не мозолил глаза.
     if (currentChannelObj && currentChannelObj.id === ch.id) {
       currentChannelIsSubscribed = false;
       await updateChannelComposerState();
       await updateChannelSubtitle(ch.id);
       configureChatMenuForChannel(currentChannelObj);
+    } else {
+      removeChatFromList(ch.id);
+      channelCache.delete(ch.id);
     }
     return;
   }
@@ -2699,12 +2726,13 @@ function setupChatMenu() {
       if (!currentChannelObj) return;
       const ok = await showConfirmDialog("Отписаться", `Отписаться от канала «${currentChannelObj.name}»?`, "Отписаться");
       if (!ok) return;
+      const chId = currentChannelObj.id;
       const { error } = await supabase.from("chat_members")
-        .delete().eq("chat_id", currentChannelObj.id).eq("user_id", currentUser.id);
+        .delete().eq("chat_id", chId).eq("user_id", currentUser.id);
       if (error) { await showAlertDialog("Ошибка", error.message); return; }
       currentChannelIsSubscribed = false;
-      removeChatFromList(currentChannelObj.id);
-      await updateChannelSubtitle(currentChannelObj.id);
+      // Не закрываем канал и не убираем его из списка — просто снимаем подписку
+      await updateChannelSubtitle(chId);
       await updateChannelComposerState();
       configureChatMenuForChannel(currentChannelObj);
     }
@@ -3388,6 +3416,8 @@ async function handleForwardSelected() {
 // 24. ПЕРЕСЫЛКА
 // ======================================================
 
+let forwardPlainText = false;
+
 async function handleForwardOne(msgId) {
   const msg = msgCache.get(msgId);
   if (!msg) return;
@@ -3397,12 +3427,29 @@ async function handleForwardOne(msgId) {
 
 async function openForwardDialog(msgs) {
   forwardSourceMsgs = msgs;
+  forwardPlainText = false;
   forwardSelectedChats.clear();
   document.getElementById("forward-hide-sender").checked = false;
+  const hideRow = document.querySelector("#forward-overlay .toggle-row");
+  if (hideRow) hideRow.classList.remove("hidden");
   document.getElementById("forward-overlay").classList.remove("hidden");
   document.getElementById("forward-list").innerHTML = '<div class="empty">Загрузка...</div>';
   await populateForwardList();
   updateForwardInfo();
+}
+
+// Диалог «Переслать» для произвольного текста (например, ссылки-приглашения)
+async function openInviteShareDialog(text) {
+  forwardSourceMsgs = [{ content: text, sender_id: currentUser.id, message_type: "text" }];
+  forwardPlainText = true;
+  forwardSelectedChats.clear();
+  document.getElementById("forward-hide-sender").checked = false;
+  const hideRow = document.querySelector("#forward-overlay .toggle-row");
+  if (hideRow) hideRow.classList.add("hidden");
+  document.getElementById("forward-overlay").classList.remove("hidden");
+  document.getElementById("forward-list").innerHTML = '<div class="empty">Загрузка...</div>';
+  await populateForwardList();
+  document.getElementById("forward-info").textContent = `Выбрано чатов: 0 / 10`;
 }
 
 async function populateForwardList() {
@@ -3497,6 +3544,7 @@ function updateForwardInfo() {
 function setupForwardDialog() {
   document.getElementById("forward-cancel").addEventListener("click", () => {
     document.getElementById("forward-overlay").classList.add("hidden");
+    forwardPlainText = false;
     if (selectionMode) exitSelectionMode();
   });
   document.getElementById("forward-send").addEventListener("click", sendForward);
@@ -3506,6 +3554,23 @@ async function sendForward() {
   if (!forwardSelectedChats.size || !forwardSourceMsgs.length) return;
   const hideSender = document.getElementById("forward-hide-sender").checked;
 
+  // Режим «просто текст» — ссылка-приглашение и т.п.
+  if (forwardPlainText) {
+    const payloads = [];
+    for (const chatId of forwardSelectedChats) {
+      for (const m of forwardSourceMsgs) {
+        payloads.push({ chat_id: chatId, sender_id: currentUser.id, content: m.content || "" });
+      }
+    }
+    const { error } = await supabase.from("messages").insert(payloads);
+    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    document.getElementById("forward-overlay").classList.add("hidden");
+    forwardPlainText = false;
+    await showAlertDialog("Готово", "Ссылка отправлена.");
+    return;
+  }
+
+  // Обычная пересылка
   const senderMap = new Map();
   if (!hideSender) {
     for (const m of forwardSourceMsgs) {
@@ -4622,10 +4687,11 @@ async function openChannelProfileDialog() {
   const menuBtn = document.getElementById("channel-profile-menu-btn");
   menuBtn.classList.toggle("hidden", !isOwner);
 
-  // Вкладка «Заявки» — только для владельца и админов
+  // Вкладка «Заявки» — только для владельца/админов И только для каналов «по заявке»
   const requestsRow = document.getElementById("channel-profile-requests-row");
   if (requestsRow) {
-    if (isOwner || isAdmin) {
+    const visibility = ch.visibility || "public";
+    if ((isOwner || isAdmin) && visibility === "request") {
       requestsRow.classList.remove("hidden");
       const { data: cnt } = await supabase.rpc("count_pending_requests", { p_chat_id: ch.id });
       const n = Number(cnt) || 0;
@@ -4685,19 +4751,7 @@ async function joinAndOpenChannel(ch) {
   if (searchInput) searchInput.value = "";
   if (clearBtn) clearBtn.classList.add("hidden");
   loadRecentChats().catch(() => {});
-
-  // Для «по заявке» и «приватный» — не подписываем автоматически
-  const vis = ch.visibility || "public";
-  if (vis !== "public") {
-    await openChannel(ch.id);
-    return;
-  }
-
-  // Публичный — автоподписка, затем открытие
-  await supabase.from("chat_members").upsert(
-    { chat_id: ch.id, user_id: currentUser.id },
-    { ignoreDuplicates: true }
-  );
+  // Просто открываем канал — не подписываем автоматически
   await openChannel(ch.id);
 }
 
@@ -5540,12 +5594,21 @@ async function refreshInviteList() {
     const url = `${baseUrl}#invite=${inv.code}`;
     return `
       <div class="invite-item" data-invite-id="${inv.id}">
-        <span class="invite-item-code"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></span>
-        <button class="invite-item-open" data-open-code="${inv.code}" title="Открыть">↗</button>
+        <span class="invite-item-code"><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></span>
+        <button class="invite-item-open" data-open-code="${inv.code}" title="Открыть в этой вкладке">↗</button>
+        <button class="invite-item-share" data-share-code="${inv.code}" title="Переслать">📤</button>
         <button class="invite-item-copy" data-copy-code="${inv.code}" title="Скопировать">📋</button>
         <button class="invite-item-revoke" data-revoke-id="${inv.id}" title="Отозвать">✕</button>
       </div>`;
   }).join("");
+
+  listEl.querySelectorAll("[data-share-code]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const url = `${baseUrl}#invite=${btn.dataset.shareCode}`;
+      openInviteShareDialog(url);
+    });
+  });
 
   listEl.querySelectorAll("[data-copy-code]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -5564,8 +5627,8 @@ async function refreshInviteList() {
   listEl.querySelectorAll("[data-open-code]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const url = `${baseUrl}#invite=${btn.dataset.openCode}`;
-      window.open(url, "_blank", "noopener");
+      // В этой же вкладке — сессия не потеряется
+      window.location.hash = "invite=" + btn.dataset.openCode;
     });
   });
   listEl.querySelectorAll("[data-revoke-id]").forEach((btn) => {

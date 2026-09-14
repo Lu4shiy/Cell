@@ -2467,6 +2467,19 @@ mark.search-hl {
 }
 .invite-item-open:hover { background: var(--bg-hover); color: var(--text); }
 
+.invite-item-share {
+  background: transparent;
+  border: none;
+  color: var(--text-sub);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+.invite-item-share:hover { background: var(--bg-hover); color: var(--text); }
+
 /* Значок пина у закреплённого сообщения */
 .msg-pin-mark {
   font-size: 10px;
