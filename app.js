@@ -335,6 +335,7 @@ function showAuth() {
 // ======================= 5. ИНИЦИАЛИЗАЦИЯ =======================
 async function initApp() {
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
+  setupAttachments();
   setupChatSearch(); setupScrollBottomButton();
   setupChatPins(); setupInviteUI();
   subscribeToPins();
@@ -940,6 +941,7 @@ function subscribeToGlobalMessages() {
       chatLastMsg.set(m.chat_id, {
         text: m.message_type === "tokens" ? `🧩 +${m.tokens_amount}`
              : m.message_type === "gift" ? "🎁 Подарок"
+             : m.message_type === "attachment" ? (m.file_kind === "image" ? "📷 Фото" : m.file_kind === "video" ? "🎥 Видео" : "📎 Файл")
              : (m.content || ""),
         time, senderId: m.sender_id,
         unread: isMine ? (prev.unread || 0) : (prev.unread || 0) + 1,
@@ -1093,6 +1095,7 @@ async function loadRecentChats() {
     const preview = it.lastMsg
       ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
         : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
+        : it.lastMsg.message_type === "attachment" ? (it.lastMsg.file_kind === "image" ? "📷 Фото" : it.lastMsg.file_kind === "video" ? "🎥 Видео" : "📎 Файл")
         : stripMarkdown(it.lastMsg.content || ""))
       : "";
     chatLastMsg.set(it.chat_id, { text: preview, time: it.lastTime, senderId: it.lastMsg ? it.lastMsg.sender_id : null, unread: it.unread });
@@ -1101,6 +1104,7 @@ async function loadRecentChats() {
     const preview = it.lastMsg
       ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
         : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
+        : it.lastMsg.message_type === "attachment" ? (it.lastMsg.file_kind === "image" ? "📷 Фото" : it.lastMsg.file_kind === "video" ? "🎥 Видео" : "📎 Файл")
         : stripMarkdown(it.lastMsg.content || ""))
       : "";
     chatLastMsg.set(it.chat_id, { text: preview, time: it.lastTime, senderId: null, unread: it.unread });
@@ -1180,11 +1184,16 @@ function renderDmItemHtml(it, profileMap) {
   const blocked = isBlockedByMe(user.id) ? " 🚫" : "";
   const name = it.customName || user.display_name;
   const time = it.lastTime ? formatChatTime(it.lastTime) : "";
-  const preview = it.lastMsg
-    ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
-      : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
-      : ((it.lastMsg.sender_id === currentUser.id ? "Вы: " : "") + stripMarkdown(it.lastMsg.content || "")))
-    : "Нет сообщений";
+  let preview = "";
+  if (it.lastMsg) {
+    const m = it.lastMsg;
+    if (m.message_type === "tokens") preview = `🧩 +${m.tokens_amount}`;
+    else if (m.message_type === "gift") preview = "🎁 Подарок";
+    else if (m.message_type === "attachment") preview = m.file_kind === "image" ? "📷 Фото" : m.file_kind === "video" ? "🎥 Видео" : "📎 Файл";
+    else preview = (m.sender_id === currentUser.id ? "Вы: " : "") + stripMarkdown(m.content || "");
+  } else {
+    preview = "Нет сообщений";
+  }
   const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
   return `
     <div class="user-item" data-user-id="${user.id}" data-chat-id="${it.chat_id}" data-chat-type="dm" data-custom-name="${it.customName ? escapeHtml(it.customName) : ""}">
@@ -1205,11 +1214,16 @@ function renderDmItemHtml(it, profileMap) {
 function renderChannelItemHtml(it) {
   const ch = it.channel;
   const time = it.lastTime ? formatChatTime(it.lastTime) : "";
-  const preview = it.lastMsg
-    ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
-      : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
-      : stripMarkdown(it.lastMsg.content || ""))
-    : "Нет сообщений";
+  let preview = "";
+  if (it.lastMsg) {
+    const m = it.lastMsg;
+    if (m.message_type === "tokens") preview = `🧩 +${m.tokens_amount}`;
+    else if (m.message_type === "gift") preview = "🎁 Подарок";
+    else if (m.message_type === "attachment") preview = m.file_kind === "image" ? "📷 Фото" : m.file_kind === "video" ? "🎥 Видео" : "📎 Файл";
+    else preview = stripMarkdown(m.content || "");
+  } else {
+    preview = "Нет сообщений";
+  }
   const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
   return `
     <div class="user-item" data-chat-id="${it.chat_id}" data-chat-type="channel">
@@ -1436,7 +1450,8 @@ function updateChatItemPreview(chatId) {
   const previewEl = el.querySelector(".user-item-preview");
   const timeEl = el.querySelector(".user-item-time");
   let preview = stripMarkdown(data.text) || "Нет сообщений";
-  if (!isChannel && preview && !preview.startsWith("🧩") && !preview.startsWith("🎁") && data.senderId === currentUser.id) {
+  const isSpecialPreview = preview.startsWith("🧩") || preview.startsWith("🎁") || preview.startsWith("📷") || preview.startsWith("🎥") || preview.startsWith("📎");
+  if (!isChannel && preview && !isSpecialPreview && data.senderId === currentUser.id) {
     preview = "Вы: " + preview;
   }
   if (previewEl) { previewEl.textContent = preview.slice(0, 60); previewEl.classList.toggle("unread", data.unread > 0); }
@@ -2195,13 +2210,22 @@ async function buildMsgHtml(msg) {
     const orig = msgCache.get(msg.reply_to_id);
     const origProfile = await getProfile(orig.sender_id);
     const origName = orig.sender_id === currentUser.id ? "Ты" : (origProfile ? origProfile.display_name : "?");
-    const preview = (orig.content || "").slice(0, 60);
+    const origPreview = orig.message_type === "attachment"
+      ? (orig.file_kind === "image" ? "📷 Фото" : orig.file_kind === "video" ? "🎥 Видео" : "📎 Файл")
+      : (orig.content || "").slice(0, 60);
     html += `<div class="msg-reply" data-scroll-to="${msg.reply_to_id}">
       <span class="msg-reply-name">В ответ ${escapeHtml(origName)}</span>
-      <span class="msg-reply-text">${escapeHtml(preview)}</span>
+      <span class="msg-reply-text">${escapeHtml(origPreview)}</span>
     </div>`;
   }
-  html += `<div class="msg-text">${applyFormatting(escapeHtml(msg.content || ""))}</div>`;
+  if (msg.message_type === "attachment") {
+    html += `<div class="msg-attachment">${buildAttachmentHtml(msg)}</div>`;
+    if (msg.content) {
+      html += `<div class="msg-text" style="margin-top:6px;">${applyFormatting(escapeHtml(msg.content || ""))}</div>`;
+    }
+  } else {
+    html += `<div class="msg-text">${applyFormatting(escapeHtml(msg.content || ""))}</div>`;
+  }
   html += `<div class="msg-reactions" data-reactions-for="${msg.id}"></div>`;
 
   let viewsHtml = "";
@@ -2402,8 +2426,193 @@ function checkEmptyChat() {
 }
 
 // ======================================================
-// 15. КОМПОЗЕР
+// 15. КОМПОЗЕР + ВЛОЖЕНИЯ
 // ======================================================
+
+const ATTACH_MAX_SIZE = 50 * 1024 * 1024; // 50 МБ
+const ATTACH_MAX_FILES = 5;
+
+function setupAttachments() {
+  const btn = document.getElementById("attach-btn");
+  const input = document.getElementById("attach-input");
+  if (!btn || !input) return;
+
+  btn.addEventListener("click", () => input.click());
+
+  input.addEventListener("change", async (e) => {
+    const files = [...e.target.files];
+    e.target.value = "";
+    if (!files.length) return;
+    await handleAttachments(files);
+  });
+}
+
+function detectFileKind(file) {
+  const t = file.type || "";
+  if (t.startsWith("image/")) return "image";
+  if (t.startsWith("video/")) return "video";
+  return "file";
+}
+
+function formatFileSize(bytes) {
+  if (!bytes && bytes !== 0) return "";
+  if (bytes < 1024) return bytes + " Б";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " КБ";
+  if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " МБ";
+  return (bytes / 1024 / 1024 / 1024).toFixed(2) + " ГБ";
+}
+
+function buildAttachmentHtml(msg) {
+  const url = msg.image_url || "";
+  const name = msg.file_name || "файл";
+  const size = msg.file_size || 0;
+  const kind = msg.file_kind || "file";
+  if (!url) {
+    return `<div class="msg-attachment-uploading">⏳ Загрузка…</div>`;
+  }
+  if (kind === "image") {
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">
+      <img src="${escapeHtml(url)}" class="msg-attachment-image" alt="">
+    </a>`;
+  }
+  if (kind === "video") {
+    return `<video src="${escapeHtml(url)}" class="msg-attachment-video" controls preload="metadata"></video>`;
+  }
+  return `<a class="msg-attachment-file" href="${escapeHtml(url)}" target="_blank" rel="noopener" download="${escapeHtml(name)}">
+    <span class="maf-icon">📎</span>
+    <span style="flex:1;min-width:0;">
+      <span class="maf-name">${escapeHtml(name)}</span>
+      <span class="maf-size">${escapeHtml(formatFileSize(size))}</span>
+    </span>
+  </a>`;
+}
+
+async function handleAttachments(files) {
+  if (currentChannelObj) {
+    if (!currentChannelIsAdmin) {
+      await showAlertDialog("Нельзя", "Только администраторы могут прикреплять файлы в этом канале");
+      return;
+    }
+  }
+  if (currentOtherUser && (isBlockedByMe(currentOtherUser.id) || hasBlockedMe(currentOtherUser.id))) {
+    await showAlertDialog("Не отправлено", "Есть блокировка — вложение не отправлено.");
+    return;
+  }
+  if (files.length > ATTACH_MAX_FILES) {
+    await showAlertDialog("Слишком много файлов", `Максимум ${ATTACH_MAX_FILES} файлов за раз.`);
+    return;
+  }
+  for (const f of files) {
+    if (f.size > ATTACH_MAX_SIZE) {
+      await showAlertDialog("Файл слишком большой", `«${f.name}» больше ${formatFileSize(ATTACH_MAX_SIZE)}.`);
+      return;
+    }
+  }
+
+  // Если чата ещё нет (новый DM) — создаём
+  if (!currentChatId && currentOtherUser) {
+    const chatId = await createChatWith(currentOtherUser.id);
+    if (!chatId) return;
+    currentChatId = chatId;
+    pendingOtherUser = null;
+    document.getElementById("messages").innerHTML = "";
+    subscribeToChat(chatId);
+    subscribeToReactions();
+  }
+  if (!currentChatId) return;
+
+  for (const file of files) {
+    await uploadAndSendAttachment(file, currentChatId);
+  }
+}
+
+async function uploadAndSendAttachment(file, chatId) {
+  const kind = detectFileKind(file);
+  const rawExt = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const ext = rawExt.slice(0, 8) || "bin";
+  const path = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+  const tempId = "tmp_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+  const tempMsg = {
+    id: tempId, chat_id: chatId, sender_id: currentUser.id,
+    content: "", created_at: new Date().toISOString(),
+    message_type: "attachment",
+    image_url: null,
+    file_name: file.name,
+    file_size: file.size,
+    file_mime: file.type,
+    file_kind: kind,
+    delivered_at: null, read_at: null,
+  };
+  msgCache.set(tempId, tempMsg);
+  await appendMessage(tempMsg);
+  scrollToBottom();
+
+  let upErr = null;
+  try {
+    const res = await supabase.storage.from("attachments").upload(path, file, {
+      cacheControl: "3600",
+      upsert: false,
+      contentType: file.type || "application/octet-stream",
+    });
+    upErr = res.error;
+  } catch (ex) {
+    upErr = ex;
+  }
+
+  const tempEl = document.querySelector(`[data-id="${tempId}"]`);
+
+  if (upErr) {
+    if (tempEl) tempEl.remove();
+    msgCache.delete(tempId);
+    await showAlertDialog("Ошибка загрузки", upErr.message || String(upErr));
+    return;
+  }
+
+  const pub = supabase.storage.from("attachments").getPublicUrl(path);
+  const url = pub && pub.data ? pub.data.publicUrl : null;
+
+  const payload = {
+    chat_id: chatId,
+    sender_id: currentUser.id,
+    content: "",
+    message_type: "attachment",
+    image_url: url,
+    file_name: file.name,
+    file_size: file.size,
+    file_mime: file.type,
+    file_kind: kind,
+  };
+  if (replyToMsg) payload.reply_to_id = replyToMsg.id;
+  cancelReply();
+
+  let result;
+  try {
+    result = await supabase.from("messages").insert(payload).select().single();
+  } catch (ex) {
+    result = { error: ex };
+  }
+  const { data, error } = result;
+
+  if (tempEl) tempEl.remove();
+  msgCache.delete(tempId);
+
+  if (error) {
+    await showAlertDialog("Не отправлено", error.message || "Ошибка сети");
+    return;
+  }
+
+  await appendMessage(data);
+  scrollToBottom();
+
+  const preview = kind === "image" ? "📷 Фото" : kind === "video" ? "🎥 Видео" : "📎 Файл";
+  chatLastMsg.set(chatId, {
+    text: preview, time: new Date(data.created_at).getTime(),
+    senderId: currentUser.id, unread: 0,
+  });
+  updateChatItemPreview(chatId);
+  resortChatsList();
+}
 
 document.getElementById("composer").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -3052,7 +3261,9 @@ function openMsgContextMenu(e, msgId) {
     if (fwdBtn)   fwdBtn.classList.remove("hidden");
     if (pinBtn)   pinBtn.classList.remove("hidden");
     if (delBtn)   delBtn.classList.remove("hidden");
-    if (editBtn && msg && msg.sender_id === currentUser.id && !msg.forwarded_from_name) editBtn.classList.remove("hidden");
+    if (editBtn && msg && msg.sender_id === currentUser.id && !msg.forwarded_from_name && msg.message_type !== "attachment") {
+      editBtn.classList.remove("hidden");
+    }
   }
 
   const menu = document.getElementById("msg-context-menu");
@@ -3440,6 +3651,10 @@ async function handleForwardOne(msgId) {
   const msg = msgCache.get(msgId);
   if (!msg) return;
   if (msg.message_type === "tokens" || msg.message_type === "gift") return;
+  if (msg.message_type === "attachment") {
+    await showAlertDialog("Пересылка", "Вложения пока нельзя пересылать.");
+    return;
+  }
   await openForwardDialog([msg]);
 }
 
@@ -4754,8 +4969,10 @@ function subscribeToChannelProfileUpdates(channelId) {
     channelProfileUpdatesChannel = null;
   }
   channelProfileUpdatesChannel = supabase.channel("channel-profile-" + channelId)
-    .on("postgres_changes", { event: "*", schema: "public", table: "chat_members", filter: `chat_id=eq.${channelId}` }, async () => {
+    .on("postgres_changes", { event: "*", schema: "public", table: "chat_members" }, async (payload) => {
       if (channelProfileChannelId !== channelId) return;
+      const row = payload.new || payload.old;
+      if (!row || row.chat_id !== channelId) return;
       const { data: cntData } = await supabase.rpc("channel_subscribers_count", { p_chat_id: channelId });
       const cnt = Number(cntData) || 0;
       const word = pluralRu(cnt, "подписчик", "подписчика", "подписчиков");
