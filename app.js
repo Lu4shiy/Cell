@@ -806,31 +806,10 @@ function subscribeToGlobalChanges() {
       removeChatFromList(id);
       channelCache.delete(id);
     })
-    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "channels" }, (payload) => {
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "channels" }, async (payload) => {
       const ch = payload.new; if (!ch) return;
       channelCache.set(ch.id, ch);
-
-      // 1) Карточка в списке чатов
-      const el = document.querySelector(`.user-item[data-chat-id="${ch.id}"][data-chat-type="channel"]`);
-      if (el) {
-        const nameEl = el.querySelector(".user-item-name");
-        if (nameEl) nameEl.innerHTML = escapeHtml(ch.name) + '<span class="channel-mark">📢</span>';
-        paintAvatar(el.querySelector(".avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
-      }
-
-      // 2) Открытая шапка канала
-      if (currentChannelObj && currentChannelObj.id === ch.id) {
-        Object.assign(currentChannelObj, ch);
-        paintAvatar(document.getElementById("chat-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
-        document.getElementById("chat-title").textContent = ch.name;
-      }
-
-      // 3) Открытый профиль канала
-      if (channelProfileChannelId === ch.id) {
-        paintAvatar(document.getElementById("channel-profile-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
-        document.getElementById("channel-profile-name").textContent = ch.name;
-        document.getElementById("channel-profile-username").textContent = "@" + (ch.username || "");
-      }
+      await refreshChannelRights(ch.id);
     })
     .subscribe();
 }
@@ -839,14 +818,7 @@ function subscribeToMemberships() {
   if (membershipChannel) return;
   membershipChannel = supabase.channel("membership-changes")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_members" }, async (payload) => {
-      if (currentChannelObj && currentChannelObj.id === payload.new.chat_id) {
-        await updateChannelSubtitle(payload.new.chat_id);
-        if (payload.new.user_id === currentUser.id) {
-          currentChannelIsSubscribed = true;
-          await updateChannelComposerState();
-          configureChatMenuForChannel(currentChannelObj);
-        }
-      }
+      await refreshChannelRights(payload.new.chat_id);
       if (payload.new.user_id === currentUser.id) {
         const chatId = payload.new.chat_id;
         if (document.querySelector(`.user-item[data-chat-id="${chatId}"]`)) return;
@@ -857,15 +829,8 @@ function subscribeToMemberships() {
         if (others && others.length) await addOrUpdateChatInList(chatId, others[0].user_id);
       }
     })
-    .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_members" }, (payload) => {
-      if (currentChannelObj && currentChannelObj.id === payload.old.chat_id) {
-        updateChannelSubtitle(payload.old.chat_id);
-        if (payload.old.user_id === currentUser.id) {
-          currentChannelIsSubscribed = false;
-          updateChannelComposerState();
-          configureChatMenuForChannel(currentChannelObj);
-        }
-      }
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_members" }, async (payload) => {
+      await refreshChannelRights(payload.old.chat_id);
       if (payload.old && payload.old.user_id === currentUser.id) {
         const chatId = payload.old.chat_id;
         if (currentChatId === chatId) closeCurrentChat();
@@ -1203,6 +1168,61 @@ async function checkChannelAdmin(channelId, userId) {
   const { data } = await supabase.from("channel_admins")
     .select("user_id").eq("channel_id", channelId).eq("user_id", userId).maybeSingle();
   return !!data;
+}
+
+// Полностью пересчитывает права на канал и обновляет UI без перезагрузки.
+// Вызывается: при realtime-изменениях channels/channel_admins/chat_members,
+// а также сразу после RPC add/remove_channel_admin и transfer_channel_owner.
+async function refreshChannelRights(channelId) {
+  if (!channelId) return;
+  // Если этот канал не открыт — обновим только кэш и карточку в списке.
+  const isOpen = currentChannelObj && currentChannelObj.id === channelId;
+  const { data: ch } = await supabase.from("channels").select("*").eq("id", channelId).maybeSingle();
+  if (ch) channelCache.set(channelId, ch);
+
+  // Обновляем карточку в списке чатов (имя, аватар)
+  if (ch) {
+    const el = document.querySelector(`.user-item[data-chat-id="${channelId}"][data-chat-type="channel"]`);
+    if (el) {
+      const nameEl = el.querySelector(".user-item-name");
+      if (nameEl) nameEl.innerHTML = escapeHtml(ch.name) + '<span class="channel-mark">📢</span>';
+      paintAvatar(el.querySelector(".avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
+    }
+  }
+
+  if (!isOpen) return;
+
+  // Обновляем шапку открытого канала
+  if (ch) {
+    Object.assign(currentChannelObj, ch);
+    paintAvatar(document.getElementById("chat-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
+    document.getElementById("chat-title").textContent = ch.name;
+  }
+
+  // Пересчёт прав
+  currentChannelIsAdmin = await checkChannelAdmin(channelId, currentUser.id);
+  const { data: mem } = await supabase.from("chat_members")
+    .select("chat_id").eq("chat_id", channelId).eq("user_id", currentUser.id).maybeSingle();
+  currentChannelIsSubscribed = !!mem;
+
+  await updateChannelSubtitle(channelId);
+  await updateChannelComposerState();
+  configureChatMenuForChannel(currentChannelObj);
+
+  // Обновляем открытый профиль канала
+  if (channelProfileChannelId === channelId && ch) {
+    paintAvatar(document.getElementById("channel-profile-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
+    document.getElementById("channel-profile-name").textContent = ch.name;
+    document.getElementById("channel-profile-username").textContent = "@" + (ch.username || "");
+    const menuBtn = document.getElementById("channel-profile-menu-btn");
+    menuBtn.classList.toggle("hidden", ch.owner_id !== currentUser.id);
+  }
+
+  // Если открыт редактор — перерисуем админов/владельца
+  const editOverlay = document.getElementById("channel-edit-overlay");
+  if (editOverlay && !editOverlay.classList.contains("hidden")) {
+    await renderChannelEditAdmins();
+  }
 }
 
 async function updateChannelSubtitle(chatId) {
@@ -3866,6 +3886,7 @@ function setupChannelCreate() {
       await updateChannelSubtitle(chId);
       await updateChannelComposerState();
       configureChatMenuForChannel(currentChannelObj);
+      await refreshChannelRights(chId);
     } catch (ex) {
       console.error(ex);
       await showAlertDialog("Ошибка", ex.message || String(ex));
@@ -4462,6 +4483,7 @@ async function removeChannelAdmin(userId) {
   });
   if (error) { await showAlertDialog("Ошибка", error.message); return; }
   await renderChannelEditAdmins();
+  await refreshChannelRights(currentChannelObj.id);
 }
 
 async function openAddAdminDialog() {
@@ -4515,6 +4537,7 @@ async function openAddAdminDialog() {
   });
   if (error) { await showAlertDialog("Ошибка", error.message); return; }
   await renderChannelEditAdmins();
+  await refreshChannelRights(ch.id);
 }
 
 async function openTransferOwnerDialog() {
@@ -4565,10 +4588,17 @@ async function openTransferOwnerDialog() {
   });
   if (error) { await showAlertDialog("Ошибка", error.message); return; }
 
-  await showAlertDialog("Готово", "Владение передано. Канал закроется.");
+  // Пересчитываем права мгновенно, до realtime
+  await refreshChannelRights(ch.id);
+
+  await showAlertDialog("Готово", "Владение передано.");
   closeChannelEditDialog();
   closeChannelProfileDialog();
-  closeCurrentChat();
+  // Если ты больше не владелец и не админ — канал останется открытым,
+  // но composer скроется, а меню перестроится. Если ты и не подписчик — закроем.
+  if (!currentChannelIsAdmin && !currentChannelIsSubscribed) {
+    closeCurrentChat();
+  }
 }
 
 // Realtime: админы канала меняются → перерисовываем редактор
@@ -4577,12 +4607,8 @@ function subscribeToChannelAdmins() {
   channelAdminsChannel = supabase.channel("channel-admins-changes")
     .on("postgres_changes", { event: "*", schema: "public", table: "channel_admins" }, async (payload) => {
       const row = payload.new || payload.old;
-      if (!row) return;
-      if (currentChannelObj && currentChannelObj.id === row.channel_id) {
-        if (!document.getElementById("channel-edit-overlay").classList.contains("hidden")) {
-          await renderChannelEditAdmins();
-        }
-      }
+      if (!row || !row.channel_id) return;
+      await refreshChannelRights(row.channel_id);
     })
     .subscribe();
 }
