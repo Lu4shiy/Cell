@@ -347,6 +347,12 @@ async function initApp() {
 
   // Опрос статусов своих сообщений
   statusPollInterval = setInterval(pollMyMessageStatuses, 5000);
+  // Страховочный опрос прав в открытом канале — на случай, если realtime не доставил событие
+  setInterval(async () => {
+    if (!currentChannelObj || !currentChannelObj.id) return;
+    if (!currentUser) return;
+    try { await refreshChannelRights(currentChannelObj.id); } catch (e) { /* silent */ }
+  }, 8000);
 
   document.addEventListener("visibilitychange", () => {
     updateMyLastSeen();
