@@ -2466,3 +2466,12 @@ mark.search-hl {
   font-family: inherit;
 }
 .invite-item-open:hover { background: var(--bg-hover); color: var(--text); }
+
+/* Значок пина у закреплённого сообщения */
+.msg-pin-mark {
+  font-size: 10px;
+  margin-right: 4px;
+  opacity: 0.85;
+  user-select: none;
+  vertical-align: middle;
+}

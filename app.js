@@ -387,6 +387,17 @@ async function initApp() {
   });
   // Обработка приглашения из URL (#invite=CODE)
   setTimeout(() => { tryJoinFromInviteUrl(); }, 400);
+  // Страховочный опрос закрепов — если realtime не доставил событие
+  setInterval(async () => {
+    if (!currentChatId) return;
+    if (!currentUser) return;
+    try {
+      const before = currentPinnedList.map((p) => p.id).sort().join(",");
+      await loadPinned(currentChatId);
+      const after = currentPinnedList.map((p) => p.id).sort().join(",");
+      if (before !== after) rerenderPinMarks();
+    } catch (e) { /* silent */ }
+  }, 6000);
 }
 
 async function pollMyMessageStatuses() {
@@ -1991,10 +2002,10 @@ async function loadMessages(chatId) {
     }).catch(() => {});
   }
 
+  // Сначала загружаем закрепы, потом рендерим (чтобы сразу видеть 📌)
+  await loadPinned(chatId);
   for (const m of visible) await appendMessage(m);
   scrollToBottom();
-
-  await loadPinned(chatId);
 
   if (isChannel) {
     await viewsPromise;
@@ -2114,7 +2125,13 @@ async function buildMsgHtml(msg) {
     if (vc > 0) viewsHtml = `<span class="msg-views">👁 ${vc}</span>`;
   }
 
-  html += `<div class="msg-time">${viewsHtml}${time}${renderMsgStatus(msg)}`;
+  // Значок пина — если сообщение в списке закрепов
+  let pinHtml = "";
+  if (currentPinnedList.some((p) => p.message_id === msg.id)) {
+    pinHtml = `<span class="msg-pin-mark" title="Закреплено">📌</span>`;
+  }
+
+  html += `<div class="msg-time">${pinHtml}${viewsHtml}${time}${renderMsgStatus(msg)}`;
   if (msg.edited_at) html += `<span class="msg-edited">изменено</span>`;
   html += `</div>`;
   html += `<button class="msg-add-reaction" data-add-reaction="${msg.id}" title="Реакция">😊</button>`;
@@ -2462,6 +2479,7 @@ function subscribeToChat(chatId) {
           if (currentPinnedIndex >= currentPinnedList.length) currentPinnedIndex = currentPinnedList.length - 1;
           renderPinBar();
           updatePinButtonCount(currentPinnedList.length);
+          rerenderPinMarks();
         }
         const el = document.querySelector(`[data-id="${id}"]`);
         if (el) el.remove();
@@ -5125,6 +5143,9 @@ function renderPinBar() {
   const textEl = document.getElementById("pin-bar-text");
   if (!bar) return;
   if (!currentPinnedList.length) { bar.classList.add("hidden"); return; }
+  if (currentPinnedIndex < 0 || currentPinnedIndex >= currentPinnedList.length) {
+    currentPinnedIndex = 0;
+  }
   bar.classList.remove("hidden");
   const pin = currentPinnedList[currentPinnedIndex];
   if (!pin) { bar.classList.add("hidden"); return; }
@@ -5288,16 +5309,39 @@ function openPinnedListDialog() {
 }
 
 function subscribeToPins() {
-  if (pinsChannel) return;
+  if (pinsChannel) { supabase.removeChannel(pinsChannel); pinsChannel = null; }
   pinsChannel = supabase.channel("pins-changes")
     .on("postgres_changes", { event: "*", schema: "public", table: "pinned_messages" }, async (payload) => {
       const row = payload.new || payload.old;
       if (!row || !row.chat_id) return;
+      // Обновляем, если событие касается открытого чата
       if (currentChatId === row.chat_id) {
         await loadPinned(row.chat_id);
+        // Перерисовать значки пина у сообщений
+        rerenderPinMarks();
       }
     })
     .subscribe();
+}
+
+// Перерисовывает значок пина у сообщений — без полной перезагрузки
+function rerenderPinMarks() {
+  const pinnedIds = new Set(currentPinnedList.map((p) => p.message_id));
+  document.querySelectorAll("#messages .msg-time").forEach((timeEl) => {
+    const msgEl = timeEl.closest("[data-id]");
+    if (!msgEl) return;
+    const id = msgEl.dataset.id;
+    const existing = timeEl.querySelector(".msg-pin-mark");
+    if (pinnedIds.has(id) && !existing) {
+      const pin = document.createElement("span");
+      pin.className = "msg-pin-mark";
+      pin.title = "Закреплено";
+      pin.textContent = "📌";
+      timeEl.insertBefore(pin, timeEl.firstChild);
+    } else if (!pinnedIds.has(id) && existing) {
+      existing.remove();
+    }
+  });
 }
 
 // ======================================================
