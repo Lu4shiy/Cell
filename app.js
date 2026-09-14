@@ -209,8 +209,53 @@ function paintAvatar(el, user) {
   el.textContent = ((user && user.display_name || "?")[0] || "?").toUpperCase();
 }
 
+function resetAppState() {
+  // Закрываем открытый чат/канал: сбрасывает currentChatId, каналы, state
+  try { closeCurrentChat(); } catch (e) { /* silent */ }
+  // Чистим DOM чата и оверлеи
+  const msgs = document.getElementById("messages");
+  if (msgs) msgs.innerHTML = "";
+  document.querySelectorAll(".dialog-overlay").forEach((el) => el.classList.add("hidden"));
+  // Сбрасываем поиск
+  const searchInput = document.getElementById("search-input");
+  if (searchInput) searchInput.value = "";
+  const searchClear = document.getElementById("search-clear");
+  if (searchClear) searchClear.classList.add("hidden");
+  // Список чатов к дефолту
+  const list = document.getElementById("users-list");
+  if (list) list.innerHTML = '<div class="empty">Загрузка...</div>';
+  document.getElementById("section-title").textContent = "Чаты";
+  // Заголовок чата к дефолту
+  const title = document.getElementById("chat-title");
+  if (title) title.textContent = "Имя";
+  const subtitle = document.getElementById("chat-subtitle");
+  if (subtitle) subtitle.textContent = "@username";
+  paintAvatar(document.getElementById("chat-avatar"), { display_name: "?" });
+  // Прячем контент чата, показываем плейсхолдер
+  const content = document.getElementById("chat-content");
+  if (content) content.classList.add("hidden");
+  const placeholder = document.getElementById("chat-placeholder");
+  if (placeholder) placeholder.classList.remove("hidden");
+  // Кэши
+  msgCache.clear(); reactionsCache.clear(); profileCache.clear();
+  chatLastMsg.clear(); chatIdByUser.clear(); chatReads.clear();
+  channelCache.clear();
+  myBlockedIds = new Set(); blockedMeIds = new Set();
+  hiddenMsgIds = new Set();
+  currentOtherUser = null; pendingOtherUser = null;
+  currentChannelObj = null; currentChannelIsAdmin = false;
+  currentChannelIsSubscribed = false;
+  currentChannelViewsMap = new Map();
+  currentChannelTotalViews = 0;
+  // Останавливаем таймеры, если были
+  [lastSeenInterval, otherUserInterval, statusPollInterval, deliveredInterval].forEach((i) => i && clearInterval(i));
+  lastSeenInterval = otherUserInterval = statusPollInterval = deliveredInterval = null;
+}
+
 // ======================= 4. ЭКРАНЫ =======================
 function showApp(user) {
+  // Чистим ВСЁ от предыдущего аккаунта, если был
+  resetAppState();
   currentUser = user;
   document.getElementById("auth-screen").classList.add("hidden");
   document.getElementById("app-screen").classList.remove("hidden");
@@ -218,6 +263,7 @@ function showApp(user) {
 }
 
 function showAuth() {
+  resetAppState();
   currentUser = null; myProfile = null;
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
   myBlockedIds = new Set(); blockedMeIds = new Set();
@@ -461,6 +507,36 @@ function setupProfilePanel() {
   document.getElementById("profile-birthday").addEventListener("input", (e) => {
     draftProfile.birthday = e.target.value.trim() || null; markProfileDirty();
   });
+
+  // Календарик: открывает нативный date-picker и подставляет выбранную дату
+  const bdCalendarBtn = document.getElementById("profile-birthday-calendar");
+  const bdPicker = document.getElementById("profile-birthday-picker");
+  if (bdCalendarBtn && bdPicker) {
+    bdCalendarBtn.addEventListener("click", () => {
+      // Синхронизируем с текущим текстом, если он в валидном формате
+      const cur = document.getElementById("profile-birthday").value.trim();
+      const norm = normalizeBirthday(cur);
+      if (norm) {
+        const parts = norm.split(".");
+        if (parts.length === 3) {
+          const y = parts[2].length === 2 ? "20" + parts[2] : parts[2];
+          bdPicker.value = `${y}-${parts[1]}-${parts[0]}`;
+        } else if (parts.length === 2) {
+          bdPicker.value = `2000-${parts[1]}-${parts[0]}`;
+        }
+      }
+      if (bdPicker.showPicker) bdPicker.showPicker();
+      else bdPicker.click();
+    });
+    bdPicker.addEventListener("change", () => {
+      const v = bdPicker.value; if (!v) return;
+      const [y, m, d] = v.split("-");
+      const inp = document.getElementById("profile-birthday");
+      inp.value = `${d}.${m}.${y}`;
+      draftProfile.birthday = inp.value;
+      markProfileDirty();
+    });
+  }
   document.getElementById("profile-apply").addEventListener("click", applyProfileChanges);
   document.getElementById("profile-gifts-btn").addEventListener("click", () => openGiftsOverlay(currentUser.id));
 }
@@ -474,8 +550,13 @@ async function applyProfileChanges() {
     const hint = document.getElementById("username-hint");
     hint.className = "username-hint err"; hint.textContent = "Проверьте юзернейм"; return;
   }
-  if (draftProfile.birthday && !/^\d{2}\.\d{2}(\.\d{2,4})?$/.test(draftProfile.birthday)) {
-    await showAlertDialog("Ошибка", "Дата рождения в формате ДД.ММ или ДД.ММ.ГГГГ"); return;
+  if (draftProfile.birthday) {
+    const normalized = normalizeBirthday(draftProfile.birthday);
+    if (!normalized) {
+      await showAlertDialog("Ошибка", "Дата рождения в формате ДД.ММ или ДД.ММ.ГГГГ");
+      return;
+    }
+    draftProfile.birthday = normalized; // сохраняем нормализованную
   }
   if (unameVal && unameVal !== myProfile.username) {
     const { error } = await supabase.from("profiles").update({ username: unameVal }).eq("id", currentUser.id);
@@ -1692,7 +1773,11 @@ async function loadMessages(chatId) {
     const nonMyMsgs = visible.filter((m) => m.sender_id !== currentUser.id);
     for (const m of nonMyMsgs) {
       const { data: wasInserted, error: mvErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
-      if (mvErr) { console.error("mark_message_viewed:", mvErr); continue; }
+      if (mvErr) {
+        console.error("mark_message_viewed FAILED:", mvErr, "msgId:", m.id);
+        continue;
+      }
+      console.log("[views] msg", m.id, "inserted:", wasInserted);
       if (wasInserted) {
         const cur = currentChannelViewsMap.get(m.id) || 0;
         currentChannelViewsMap.set(m.id, cur + 1);
@@ -2912,16 +2997,27 @@ function formatDateTime(iso) {
 
 function parseBirthdayMD(str) {
   if (!str) return null;
-  const m = /^(\d{2})\.(\d{2})(?:\.(\d{2,4}))?$/.exec(str);
+  const m = /^(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?$/.exec(str);
   if (!m) return null;
   const d = parseInt(m[1], 10), mo = parseInt(m[2], 10);
   if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
   return mo * 100 + d;
 }
 
+function normalizeBirthday(str) {
+  if (!str) return null;
+  const m = /^(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?$/.exec(String(str).trim());
+  if (!m) return null;
+  const d = parseInt(m[1], 10), mo = parseInt(m[2], 10);
+  if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+  let res = String(d).padStart(2, "0") + "." + String(mo).padStart(2, "0");
+  if (m[3]) res += "." + m[3];
+  return res;
+}
+
 function formatBirthday(str) {
   if (!str) return "—";
-  const m = /^(\d{2})\.(\d{2})(?:\.(\d{2,4}))?$/.exec(str);
+  const m = /^(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?$/.exec(str);
   if (!m) return "—";
   const day = parseInt(m[1], 10), mo = parseInt(m[2], 10), year = m[3];
   const months = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];

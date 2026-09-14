@@ -1795,3 +1795,55 @@ button:not(:disabled):active { transform: scale(0.97); }
   padding: 0;
 }
 .search-clear:hover { background: var(--bg-active); color: var(--text); }
+
+/* ====================================================== */
+/* Системные диалоги поверх ВСЕГО                         */
+/* ====================================================== */
+
+#dialog-overlay,
+#input-overlay {
+  z-index: 5000;
+}
+
+/* ====================================================== */
+/* День рождения: обёртка с календариком                  */
+/* ====================================================== */
+
+.birthday-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.birthday-input-wrap input[type="text"] {
+  width: 100%;
+  padding: 14px 44px 14px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.birthday-input-wrap input[type="text"]:focus { border-color: var(--accent); }
+
+.birthday-calendar-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.birthday-calendar-btn:hover { background: var(--bg-hover); color: var(--text); }

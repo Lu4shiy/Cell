@@ -183,7 +183,11 @@
 
       <div class="profile-section">
         <div class="profile-label">День рождения</div>
-        <input type="text" id="profile-birthday" placeholder="ДД.ММ или ДД.ММ.ГГГГ" maxlength="10">
+        <div class="birthday-input-wrap">
+          <input type="text" id="profile-birthday" placeholder="ДД.ММ или ДД.ММ.ГГГГ" maxlength="10">
+          <button type="button" id="profile-birthday-calendar" class="birthday-calendar-btn" title="Выбрать дату">📅</button>
+          <input type="date" id="profile-birthday-picker" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none;">
+        </div>
       </div>
 
       <div class="profile-section">
