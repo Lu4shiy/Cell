@@ -50,6 +50,7 @@
         </div>
         <div class="sidebar-actions">
           <button id="create-channel-btn" class="icon-btn" title="Создать канал">＋</button>
+          <button id="about-btn" class="icon-btn" title="О приложении">ℹ</button>
           <button id="logout-btn" class="icon-btn" title="Выйти">⎋</button>
         </div>
       </header>
@@ -137,8 +138,14 @@
           <button type="button" id="attach-btn" class="attach-btn" title="Прикрепить файл">📎</button>
           <input type="file" id="attach-input" multiple hidden>
           <div id="message-input" class="message-input" contenteditable="true" data-placeholder="Написать сообщение..." role="textbox" spellcheck="false"></div>
+          <button type="button" id="emoji-btn" class="emoji-btn" title="Эмодзи">😊</button>
           <button type="submit" class="send-btn" id="send-btn" title="Отправить">➤</button>
         </form>
+
+        <div id="emoji-picker" class="emoji-picker hidden">
+          <div class="emoji-picker-tabs" id="emoji-picker-tabs"></div>
+          <div class="emoji-picker-grid" id="emoji-picker-grid"></div>
+        </div>
 
         <div id="channel-action-bar" class="channel-action-bar hidden">
           <button id="channel-subscribe-btn" class="channel-action-btn">Подписаться</button>
@@ -620,6 +627,58 @@
       <div id="channel-requests-list" class="admins-list" style="max-height:60vh;overflow-y:auto;"></div>
       <div class="dialog-actions">
         <button class="dialog-btn dialog-cancel" id="channel-requests-close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="about-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-about">
+      <div class="about-logo">
+        <div class="about-logo-cell">
+          <svg viewBox="0 0 100 100" width="64" height="64">
+            <polygon points="50,5 93,27 93,73 50,95 7,73 7,27" fill="currentColor"/>
+            <circle cx="50" cy="50" r="14" fill="var(--bg-card)"/>
+          </svg>
+        </div>
+        <div class="about-app-name">Cell</div>
+        <div class="about-app-tagline">Собираемся по кусочкам</div>
+      </div>
+
+      <div class="about-section">
+        <div class="about-section-title">О приложении</div>
+        <div class="about-text">
+          Cell — семейный мессенджер. Каждый чат — это ячейка, а вместе они
+          собираются в улей твоих близких. Здесь нет публичного шума: только ты,
+          твоя семья и те, кому ты доверяешь.
+        </div>
+      </div>
+
+      <div class="about-section">
+        <div class="about-section-title">Возможности</div>
+        <div class="about-text">
+          Личные чаты и каналы, вложения и подарки, закрепы и поиск, реакции
+          и пересылка — всё, чтобы быть на связи.
+        </div>
+      </div>
+
+      <div class="about-section">
+        <div class="about-section-title">Благодарности</div>
+        <!-- ▼▼▼ ЗДЕСЬ РЕДАКТИРУЙ ТЕКСТ БЛАГОДАРНОСТЕЙ ▼▼▼ -->
+        <div class="about-text">
+          Часть иконок взята с сайта
+          <a href="https://www.flaticon.com/" target="_blank" rel="noopener">Flaticon</a>.
+          Спасибо авторам за бесплатные наборы.
+        </div>
+        <!-- ▲▲▲ ЗДЕСЬ РЕДАКТИРУЙ ТЕКСТ БЛАГОДАРНОСТЕЙ ▲▲▲ -->
+      </div>
+
+      <div class="about-section">
+        <div class="about-section-title">Версия</div>
+        <div class="about-text">v3 · 2026</div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="about-close">Закрыть</button>
       </div>
     </div>
   </div>

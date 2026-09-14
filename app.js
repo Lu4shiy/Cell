@@ -335,7 +335,7 @@ function showAuth() {
 // ======================= 5. ИНИЦИАЛИЗАЦИЯ =======================
 async function initApp() {
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
-  setupAttachments(); setupMediaViewer();
+  setupAttachments(); setupMediaViewer(); setupEmojiPicker(); setupAboutDialog();
   setupChatSearch(); setupScrollBottomButton();
   setupChatPins(); setupInviteUI();
   subscribeToPins();
@@ -2426,9 +2426,174 @@ function checkEmptyChat() {
 }
 
 // ======================================================
-// 15. КОМПОЗЕР + ВЛОЖЕНИЯ
+// 15. КОМПОЗЕР + ВЛОЖЕНИЯ + ЭМОДЗИ
 // ======================================================
 
+// ---- Эмодзи-пикер ----
+const EMOJI_RECENT_KEY = "cell_emoji_recent";
+const EMOJI_MAX_RECENT = 24;
+
+const EMOJI_SETS = {
+  smileys: "😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘 😗 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 🤥 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 🤯 🤠 🥳 😎 🤓 🧐 😕 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 💩 🤡 👹 👺 👻 👽 👾 🤖".split(" "),
+  gestures: "👍 👎 👌 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ ✋ 🤚 🖐️ 🖖 👋 🤝 🙏 ✍️ 💅 🤳 💪 🦾 🦵 🦶 👂 🦻 👃 🧠 🦷 🦴 👀 👁️ 👅 👄 💋".split(" "),
+  nature: "🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🙈 🙉 🙊 🐒 🐔 🐧 🐦 🐤 🐣 🦆 🦅 🦉 🦇 🐺 🐗 🐴 🦄 🐝 🐛 🦋 🐌 🐞 🐜 🦟 🦗 🕷️ 🕸️ 🐢 🐍 🦎 🦂 🦀 🦞 🦐 🦑 🐙 🐠 🐟 🐡 🐬 🦈 🐳 🐋 🐊 🐅 🐆 🦓 🦍 🦧 🐘 🦛 🦏 🐪 🐫 🦒 🦘 🐃 🐂 🐄 🐎 🐖 🐏 🐑 🦙 🐐 🦌 🐕 🐩 🦮 🐈 🐓 🦃 🦚 🦜 🦢 🦩 🕊️ 🐇 🦝 🦨 🦡 🦦 🦥 🐁 🐀 🐿️ 🦔 🌸 🌺 🌻 🌷 🌹 🥀 🌼 🌾 🌿 ☘️ 🍀 🍁 🍂 🍃".split(" "),
+  food: "🍇 🍈 🍉 🍊 🍋 🍌 🍍 🥭 🍎 🍏 🍐 🍑 🍒 🍓 🥝 🍅 🥥 🥑 🍆 🥔 🥕 🌽 🌶️ 🥒 🥬 🥦 🧄 🧅 🍄 🥜 🌰 🍞 🥐 🥖 🥨 🥯 🥞 🧇 🧀 🍖 🍗 🥩 🥓 🍔 🍟 🍕 🌭 🥪 🌮 🌯 🥙 🧆 🥚 🍳 🥘 🍲 🥣 🥗 🍿 🧈 🧂 🥫 🍱 🍘 🍙 🍚 🍛 🍜 🍝 🍠 🍢 🍣 🍤 🍥 🥮 🍡 🥟 🥠 🥡 🦪 🍦 🍧 🍨 🍩 🍪 🎂 🍰 🧁 🥧 🍫 🍬 🍭 🍮 🍯 🍼 🥛 ☕ 🍵 🍶 🍾 🍷 🍸 🍹 🍺 🍻 🥂 🥃 🥤 🧃 🧉 🧊".split(" "),
+  activities: "⚽ 🏀 🏈 ⚾ 🥎 🎾 🏐 🏉 🥏 🎱 🪀 🏓 🏸 🏒 🏑 🥍 🏏 🥅 ⛳ 🪁 🏹 🎣 🤿 🥊 🥋 🎽 🛹 🛼 🛷 ⛸️ 🥌 🎿 ⛷️ 🏂 🪂 🏋️ 🤼 🤸 ⛹️ 🤺 🤾 🏌️ 🏇 🧘 🏄 🏊 🤽 🚣 🧗 🚵 🚴 🏆 🥇 🥈 🥉 🏅 🎖️ 🏵️ 🎗️ 🎫 🎟️ 🎪 🤹 🎭 🩰 🎨 🎬 🎤 🎧 🎼 🎹 🥁 🎷 🎺 🎸 🪕 🎻 🎲 ♟️ 🎯 🎳 🎮 🎰 🧩".split(" "),
+  objects: "⌚ 📱 📲 💻 ⌨️ 🖥️ 🖨️ 🖱️ 🖲️ 🕹️ 🗜️ 💽 💾 💿 📀 📼 📷 📸 📹 🎥 📽️ 🎞️ 📞 ☎️ 📟 📠 📺 📻 🎙️ 🎚️ 🎛️ 🧭 ⏱️ ⏲️ ⏰ 🕰️ ⌛ ⏳ 📡 🔋 🔌 💡 🔦 🕯️ 🪔 🧯 🛢️ 💸 💵 💴 💶 💷 💰 💳 💎 ⚖️ 🧰 🔧 🔨 ⚒️ 🛠️ ⛏️ 🔩 ⚙️ 🧱 ⛓️ 🧲 🔫 💣 🧨 🪓 🔪 🗡️ ⚔️ 🛡️ 🚬 ⚰️ 🪦 ⚱️ 🏺 🔮 📿 🧿 💈 ⚗️ 🔭 🔬 🕳️ 🩹 🩺 💊 💉 🩸 🧬 🦠 🧫 🧪 🌡️ 🧹 🪠 🧺 🧻 🚽 🚰 🚿 🛁 🛀 🧼 🪥 🪒 🧽 🪣 🧴 🛎️ 🔑 🗝️ 🚪 🪑 🛋️ 🛏️ 🛌 🧸 🪆 🖼️ 🪞 🪟 🛍️ 🛒 🎁 🎈 🎏 🎀 🪄 🪅 🎊 🎉 🎎 🏮 🎐 🧧 ✉️ 📩 📨 📧 💌 📥 📤 📦 🏷️ 📪 📫 📬 📭 📮 📯 📜 📃 📄 📑 🧾 📊 📈 📉 🗒️ 🗓️ 📆 📅 🗑️ 📇 🗃️ 🗳️ 🗄️ 📋 📁 📂 🗂️ 🗞️ 📰 📓 📔 📒 📕 📗 📘 📙 📚 📖 🔖 🧷 🔗 📎 🖇️ 📐 📏 🧮 📌 📍 ✂️ 🖊️ 🖋️ ✒️ 🖌️ 🖍️ 📝 ✏️ 🔍 🔎 🔏 🔐 🔒 🔓".split(" "),
+  symbols: "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 ☮️ ✝️ ☪️ 🕉️ ☸️ ✡️ 🔯 🕎 ☯️ ☦️ 🛐 ⛎ ♈ ♉ ♊ ♋ ♌ ♍ ♎ ♏ ♐ ♑ ♒ ♓ 🆔 ⚛️ 🉑 ☢️ ☣️ 📴 📳 🈶 🈚 🈸 🈺 🈷️ ✴️ 🆚 💮 🉐 ㊙️ ㊗️ 🈴 🈵 🈹 🈲 🅰️ 🅱️ 🆎 🆑 🅾️ 🆘 ❌ ⭕ 🛑 ⛔ 📛 🚫 💯 💢 ♨️ 🚷 🚯 🚳 🚱 🔞 📵 🚭 ❗ ❕ ❓ ❔ ‼️ ⁉️ 🔅 🔆 〽️ ⚠️ 🚸 🔱 ⚜️ 🔰 ♻️ ✅ 🈯 💹 ❇️ ✳️ ❎ 🌐 💠 Ⓜ️ 🌀 💤 🏧 🚾 ♿ 🅿️ 🈳 🈂️ 🛂 🛃 🛄 🛅 🚹 🚺 🚼 🚻 🚮 🎦 📶 🈁 🔣 ℹ️ 🔤 🔡 🔠 🆖 🆗 🆙 🆒 🆕 🆓 0️⃣ 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ 6️⃣ 7️⃣ 8️⃣ 9️⃣ 🔟 🔢 #️⃣ *️⃣ ⏏️ ▶️ ⏸️ ⏯️ ⏹️ ⏺️ ⏭️ ⏮️ ⏩ ⏪ ⏫ ⏬ ◀️ 🔼 🔽 ➡️ ⬅️ ⬆️ ⬇️ ↗️ ↘️ ↙️ ↖️ ↕️ ↔️ ↪️ ↩️ ⤴️ ⤵️ 🔀 🔁 🔂 🔄 🔃 🎵 🎶 ➕ ➖ ➗ ✖️ ♾️ 💲 💱 ™️ ©️ ®️ 〰️ ➰ ➿ 🔚 🔙 🔛 🔝 🔜 ✔️ ☑️ 🔘 🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🟤 🔺 🔻 🔸 🔹 🔶 🔷 🔳 🔲 ▪️ ▫️ ◾ ◽ ◼️ ◻️ 🟥 🟧 🟨 🟩 🟦 🟪 ⬛ ⬜ 🟫 🔈 🔇 🔉 🔊 🔔 🔕 📣 📢 👁️‍🗨️ 💬 💭 🗯️ ♠️ ♣️ ♥️ ♦️ 🃏 🎴 🀄 🕐 🕑 🕒 🕓 🕔 🕕 🕖 🕗 🕘 🕙 🕚 🕛".split(" "),
+  flags: "🏳️ 🏴 🏴‍☠️ 🏁 🚩 🏳️‍🌈 🏳️‍⚧️ 🇺🇳 🇦🇫 🇦🇽 🇦🇱 🇩🇿 🇦🇸 🇦🇩 🇦🇴 🇦🇮 🇦🇶 🇦🇬 🇦🇷 🇦🇲 🇦🇼 🇦🇺 🇦🇹 🇦🇿 🇧🇸 🇧🇭 🇧🇩 🇧🇧 🇧🇾 🇧🇪 🇧🇿 🇧🇯 🇧🇲 🇧🇹 🇧🇴 🇧🇦 🇧🇼 🇧🇷 🇻🇬 🇧🇳 🇧🇬 🇧🇫 🇧🇮 🇰🇭 🇨🇲 🇨🇦 🇮🇨 🇨🇻 🇧🇶 🇰🇾 🇨🇫 🇹🇩 🇮🇴 🇨🇱 🇨🇳 🇨🇽 🇨🇨 🇨🇴 🇰🇲 🇨🇬 🇨🇩 🇨🇰 🇨🇷 🇨🇮 🇭🇷 🇨🇺 🇨🇼 🇨🇾 🇨🇿 🇩🇰 🇩🇯 🇩🇲 🇩🇴 🇪🇨 🇪🇬 🇸🇻 🇬🇶 🇪🇷 🇪🇪 🇸🇿 🇪🇹 🇪🇺 🇫🇰 🇫🇴 🇫🇯 🇫🇮 🇫🇷 🇬🇫 🇵🇫 🇹🇫 🇬🇦 🇬🇲 🇬🇪 🇩🇪 🇬🇭 🇬🇮 🇬🇷 🇬🇱 🇬🇩 🇬🇵 🇬🇺 🇬🇹 🇬🇬 🇬🇳 🇬🇼 🇬🇾 🇭🇹 🇭🇳 🇭🇰 🇭🇺 🇮🇸 🇮🇳 🇮🇩 🇮🇷 🇮🇶 🇮🇪 🇮🇲 🇮🇱 🇮🇹 🇯🇲 🇯🇵 🎌 🇯🇪 🇯🇴 🇰🇿 🇰🇪 🇰🇮 🇽🇰 🇰🇼 🇰🇬 🇱🇦 🇱🇻 🇱🇧 🇱🇸 🇱🇷 🇱🇾 🇱🇮 🇱🇹 🇱🇺 🇲🇴 🇲🇬 🇲🇼 🇲🇾 🇲🇻 🇲🇱 🇲🇹 🇲🇭 🇲🇶 🇲🇷 🇲🇺 🇾🇹 🇲🇽 🇫🇲 🇲🇩 🇲🇨 🇲🇳 🇲🇪 🇲🇸 🇲🇦 🇲🇿 🇲🇲 🇳🇦 🇳🇷 🇳🇵 🇳🇱 🇳🇨 🇳🇿 🇳🇮 🇳🇪 🇳🇬 🇳🇺 🇳🇫 🇰🇵 🇲🇰 🇲🇵 🇳🇴 🇴🇲 🇵🇰 🇵🇼 🇵🇸 🇵🇦 🇵🇬 🇵🇾 🇵🇪 🇵🇭 🇵🇳 🇵🇱 🇵🇹 🇵🇷 🇶🇦 🇷🇪 🇷🇴 🇷🇺 🇷🇼 🇼🇸 🇸🇲 🇸🇹 🇨🇶 🇸🇦 🇸🇳 🇷🇸 🇸🇨 🇸🇱 🇸🇬 🇸🇽 🇸🇰 🇸🇮 🇬🇸 🇸🇧 🇸🇴 🇿🇦 🇰🇷 🇸🇸 🇪🇸 🇱🇰 🇧🇱 🇸🇭 🇰🇳 🇱🇨 🇵🇲 🇻🇨 🇸🇩 🇸🇷 🇸🇪 🇨🇭 🇸🇾 🇹🇼 🇹🇯 🇹🇿 🇹🇭 🇹🇱 🇹🇬 🇹🇰 🇹🇴 🇹🇹 🇹🇳 🇹🇷 🇹🇲 🇹🇨 🇹🇻 🇺🇬 🇺🇦 🇦🇪 🇬🇧 🏴󠁧󠁢󠁥󠁮󠁧󠁿 🏴󠁧󠁢󠁳󠁣󠁴󠁿 🏴󠁧󠁢󠁷󠁬󠁳󠁿 🇺🇸 🇺🇾 🇻🇮 🇺🇿 🇻🇺 🇻🇦 🇻🇪 🇻🇳 🇼🇫 🇪🇭 🇾🇪 🇿🇲 🇿🇼".split(" ")
+};
+
+let emojiPickerOpen = false;
+let emojiCurrentCategory = "smileys";
+let emojiSavedRange = null;
+
+function setupEmojiPicker() {
+  const btn = document.getElementById("emoji-btn");
+  const picker = document.getElementById("emoji-picker");
+  if (!btn || !picker) return;
+
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (emojiPickerOpen) closeEmojiPicker();
+    else openEmojiPicker();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!emojiPickerOpen) return;
+    if (picker.contains(e.target)) return;
+    if (e.target.closest("#emoji-btn")) return;
+    closeEmojiPicker();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && emojiPickerOpen) {
+      closeEmojiPicker();
+    }
+  });
+
+  const input = document.getElementById("message-input");
+  if (input) {
+    input.addEventListener("input", saveEmojiSelection);
+    input.addEventListener("keyup", saveEmojiSelection);
+    input.addEventListener("mouseup", saveEmojiSelection);
+    input.addEventListener("blur", saveEmojiSelection);
+  }
+}
+
+function saveEmojiSelection() {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  const input = document.getElementById("message-input");
+  if (!input || !input.contains(range.commonAncestorContainer)) return;
+  emojiSavedRange = range.cloneRange();
+}
+
+function restoreEmojiSelection() {
+  const input = document.getElementById("message-input");
+  if (!input) return;
+  input.focus();
+  if (!emojiSavedRange) return;
+  try {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(emojiSavedRange);
+  } catch (e) { /* silent */ }
+}
+
+function openEmojiPicker() {
+  emojiPickerOpen = true;
+  saveEmojiSelection();
+  const picker = document.getElementById("emoji-picker");
+  picker.classList.remove("hidden");
+  renderEmojiTabs();
+  renderEmojiGrid();
+}
+
+function closeEmojiPicker() {
+  emojiPickerOpen = false;
+  const picker = document.getElementById("emoji-picker");
+  if (picker) picker.classList.add("hidden");
+}
+
+function renderEmojiTabs() {
+  const tabsEl = document.getElementById("emoji-picker-tabs");
+  if (!tabsEl) return;
+  const cats = [
+    { id: "recent", label: "🕒" },
+    { id: "smileys", label: "😀" },
+    { id: "gestures", label: "👍" },
+    { id: "nature", label: "🌸" },
+    { id: "food", label: "🍔" },
+    { id: "activities", label: "⚽" },
+    { id: "objects", label: "💡" },
+    { id: "symbols", label: "❤️" },
+  ];
+  tabsEl.innerHTML = cats.map((c) =>
+    `<button type="button" class="emoji-tab ${emojiCurrentCategory === c.id ? "active" : ""}" data-cat="${c.id}" title="${c.id}">${c.label}</button>`
+  ).join("");
+  tabsEl.querySelectorAll(".emoji-tab").forEach((b) => {
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      emojiCurrentCategory = b.dataset.cat;
+      renderEmojiTabs();
+      renderEmojiGrid();
+    });
+  });
+}
+
+function loadRecentEmojis() {
+  try {
+    const raw = localStorage.getItem(EMOJI_RECENT_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) { return []; }
+}
+
+function saveRecentEmojis(arr) {
+  try { localStorage.setItem(EMOJI_RECENT_KEY, JSON.stringify(arr)); } catch (e) { /* silent */ }
+}
+
+function addRecentEmoji(emoji) {
+  const list = loadRecentEmojis().filter((x) => x !== emoji);
+  list.unshift(emoji);
+  if (list.length > EMOJI_MAX_RECENT) list.length = EMOJI_MAX_RECENT;
+  saveRecentEmojis(list);
+}
+
+function renderEmojiGrid() {
+  const grid = document.getElementById("emoji-picker-grid");
+  if (!grid) return;
+  let list;
+  if (emojiCurrentCategory === "recent") list = loadRecentEmojis();
+  else list = EMOJI_SETS[emojiCurrentCategory] || [];
+
+  if (!list.length) {
+    grid.innerHTML = `<div class="emoji-picker-empty">Здесь появятся недавно использованные эмодзи</div>`;
+    return;
+  }
+  grid.innerHTML = list.map((em) =>
+    `<button type="button" class="emoji-item" data-emoji="${escapeHtml(em)}">${em}</button>`
+  ).join("");
+  grid.querySelectorAll(".emoji-item").forEach((b) => {
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      insertEmoji(b.dataset.emoji);
+    });
+  });
+}
+
+function insertEmoji(emoji) {
+  restoreEmojiSelection();
+  document.execCommand("insertText", false, emoji);
+  addRecentEmoji(emoji);
+  saveEmojiSelection();
+  // Пикер не закрываем — можно накликать несколько, как в Телеграме
+}
+
+// ---- Вложения ----
 const ATTACH_MAX_SIZE = 50 * 1024 * 1024; // 50 МБ
 const ATTACH_MAX_FILES = 5;
 
@@ -2444,6 +2609,19 @@ function setupAttachments() {
     e.target.value = "";
     if (!files.length) return;
     await handleAttachments(files);
+  });
+}
+
+function setupAboutDialog() {
+  const btn = document.getElementById("about-btn");
+  const overlay = document.getElementById("about-overlay");
+  const closeBtn = document.getElementById("about-close");
+  if (!btn || !overlay) return;
+
+  btn.addEventListener("click", () => overlay.classList.remove("hidden"));
+  if (closeBtn) closeBtn.addEventListener("click", () => overlay.classList.add("hidden"));
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) overlay.classList.add("hidden");
   });
 }
 

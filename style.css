@@ -635,6 +635,124 @@ input:focus { border-color: var(--accent); }
 .send-btn:active { transform: scale(0.94); }
 .send-btn:disabled { background: var(--accent-dark); cursor: default; }
 
+/* ============ ЭМОДЗИ-ПИКЕР ============ */
+
+.emoji-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+  padding: 0;
+}
+.emoji-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+.emoji-picker {
+  position: absolute;
+  bottom: 76px;
+  right: 20px;
+  width: 360px;
+  max-width: calc(100vw - 40px);
+  height: 420px;
+  max-height: calc(100vh - 120px);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popIn 0.15s ease-out;
+}
+
+.emoji-picker-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 6px 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.emoji-picker-tabs::-webkit-scrollbar { display: none; }
+
+.emoji-tab {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  padding: 0;
+  font-family: inherit;
+  position: relative;
+}
+.emoji-tab:hover { background: var(--bg-hover); }
+.emoji-tab.active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+.emoji-picker-grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  align-content: start;
+}
+
+.emoji-item {
+  width: 100%;
+  aspect-ratio: 1;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, transform 0.1s;
+  padding: 0;
+  font-family: inherit;
+}
+.emoji-item:hover { background: var(--bg-hover); transform: scale(1.15); }
+.emoji-item:active { transform: scale(0.95); }
+
+.emoji-picker-empty {
+  grid-column: 1 / -1;
+  padding: 30px 10px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
 /* ============ БАННЕР БЛОКИРОВКИ ============ */
 
 .block-banner {
@@ -2661,3 +2779,60 @@ mark.search-hl {
 .request-approve:hover { background: rgba(76,175,80,0.12); }
 .request-reject { color: var(--danger); }
 .request-reject:hover { background: rgba(255,91,91,0.12); }
+
+/* ====================================================== */
+/* О приложении                                           */
+/* ====================================================== */
+
+.dialog-about { max-width: 460px; }
+
+.about-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 18px;
+}
+
+.about-logo-cell {
+  color: var(--accent);
+  margin-bottom: 10px;
+  line-height: 0;
+}
+
+.about-app-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 1px;
+}
+
+.about-app-tagline {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.about-section { margin-bottom: 16px; }
+
+.about-section-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.about-text {
+  font-size: 14px;
+  color: var(--text-sub);
+  line-height: 1.55;
+}
+
+.about-text a {
+  color: var(--accent-light);
+  text-decoration: underline;
+}
+.about-text a:hover { filter: brightness(1.15); }
