@@ -1662,16 +1662,12 @@ async function loadMessages(chatId) {
   for (const m of visible) await appendMessage(m);
   scrollToBottom();
 
-  // Отправляем свои просмотры — только для канала, только для чужих сообщений
+  // Отправляем свои просмотры — только для канала, только для чужих сообщений.
+  // Счётчик обновится через realtime (subscribeToChannelViews), не локально.
   if (isChannel) {
     const nonMyMsgs = visible.filter((m) => m.sender_id !== currentUser.id);
     for (const m of nonMyMsgs) {
-      const { error: viewErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
-      if (viewErr) { console.error("mark_message_viewed:", viewErr); continue; }
-      // Локально сразу +1, чтобы юзер увидел свой просмотр
-      const cur = currentChannelViewsMap.get(m.id) || 0;
-      currentChannelViewsMap.set(m.id, cur + 1);
-      updateMessageViewsInUI(m.id, cur + 1);
+      await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
     }
   }
 }
@@ -2046,12 +2042,7 @@ function subscribeToChat(chatId) {
         if (currentChannelObj) {
           if (currentChannelIsSubscribed) markChatRead(chatId);
           if (m.sender_id !== currentUser.id) {
-            const { error: viewErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
-            if (!viewErr) {
-              const cur = currentChannelViewsMap.get(m.id) || 0;
-              currentChannelViewsMap.set(m.id, cur + 1);
-              updateMessageViewsInUI(m.id, cur + 1);
-            }
+            await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
           }
         } else {
           markChatRead(chatId);
