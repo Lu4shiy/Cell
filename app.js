@@ -159,6 +159,12 @@ function applyFormatting(escaped) {
   html = html.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, "$1<i>$2</i>");
   html = html.replace(/~~([^~]+)~~/g, "<s>$1</s>");
   html = html.replace(/(^|\n)&gt; (.+?)(?=\n|$)/g, "$1<blockquote>$2</blockquote>");
+  // Автолинковка http/https ссылок (текст уже экранирован, так что &amp; — это &
+  // но мы уже находимся в экранированном виде, поэтому восстанавливаем & в URL)
+  html = html.replace(/(^|[\s>])(https?:\/\/[^\s<]+)/g, (m, pre, url) => {
+    const cleanUrl = url.replace(/&amp;/g, "&");
+    return `${pre}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+  });
   return html;
 }
 
@@ -212,6 +218,10 @@ let currentPinnedIndex = -1;
 let pinsChannel = null;
 // Ссылки-приглашения
 let currentInvitesList = [];
+// Race-guard при быстром переключении чатов
+let openSeq = 0;
+// Заморозка авто-переключения закрепа при jump (мс)
+let pinBarFrozenUntil = 0;
 
 // ======================= 3. АКЦЕНТ / АВАТАРЫ =======================
 function applyAccent(accent) { document.documentElement.setAttribute("data-accent", accent || "orange"); }
@@ -1283,6 +1293,7 @@ async function updateChannelComposerState() {
 }
 
 async function openChannel(chatId) {
+  const mySeq = ++openSeq;
   // СРАЗУ скрываем composer синхронно, до любых await — иначе мелькнёт
   document.getElementById("composer").classList.add("hidden");
   document.getElementById("channel-action-bar").classList.add("hidden");
@@ -1294,6 +1305,7 @@ async function openChannel(chatId) {
   if (_sClear) _sClear.classList.add("hidden");
 
   const { data: ch } = await supabase.from("channels").select("*").eq("id", chatId).maybeSingle();
+  if (mySeq !== openSeq) return;
   if (!ch) { await showAlertDialog("Ошибка", "Канал не найден"); return; }
   channelCache.set(chatId, ch);
   currentChannelObj = ch;
@@ -1305,7 +1317,6 @@ async function openChannel(chatId) {
   const sbBtn = document.getElementById("scroll-bottom-btn");
   if (sbBtn) sbBtn.classList.remove("visible");
 
-  // ВАЖНО: сброс состояний ДО скрытия composer, потому что exitSelectionMode() его показывает
   exitSelectionMode(); cancelReply(); cancelEdit(); closeReactionPicker();
   document.getElementById("composer").classList.add("hidden");
   document.getElementById("channel-action-bar").classList.add("hidden");
@@ -1316,24 +1327,33 @@ async function openChannel(chatId) {
   document.getElementById("chat-content").classList.remove("hidden");
   document.getElementById("chat-menu").classList.add("hidden");
 
-  // Подписан ли я?
-  const { data: mem } = await supabase.from("chat_members")
-    .select("chat_id").eq("chat_id", ch.id).eq("user_id", currentUser.id).maybeSingle();
-  currentChannelIsSubscribed = !!mem;
+  // Подписан ли я? + админ ли я? — параллельно
+  const [memRes, isAdmin] = await Promise.all([
+    supabase.from("chat_members").select("chat_id").eq("chat_id", ch.id).eq("user_id", currentUser.id).maybeSingle(),
+    checkChannelAdmin(ch.id, currentUser.id),
+  ]);
+  if (mySeq !== openSeq) return;
+  currentChannelIsSubscribed = !!memRes.data;
+  currentChannelIsAdmin = !!isAdmin;
 
-  currentChannelIsAdmin = await checkChannelAdmin(ch.id, currentUser.id);
-  await updateChannelSubtitle(ch.id);
-  await updateChannelComposerState();
-  configureChatMenuForChannel(ch);
-
-  currentChatId = chatId;
-  // Подписку на просмотры — ДО loadMessages, чтобы catch-нуть чужие просмотры,
-  // которые могут прийти пока мы рендерим сообщения
+  // Подписки realtime — как можно раньше
   subscribeToChannelViews(chatId);
-  await loadMessages(chatId);
-  await loadReactionsForVisibleMessages();
   subscribeToChat(chatId);
   subscribeToReactions();
+
+  // Параллельно: подзаголовок, состояние composer, меню
+  await Promise.all([
+    updateChannelSubtitle(ch.id),
+    updateChannelComposerState(),
+  ]).catch(() => {});
+  configureChatMenuForChannel(ch);
+  if (mySeq !== openSeq) return;
+
+  currentChatId = chatId;
+  await loadMessages(chatId);
+  if (mySeq !== openSeq) return;
+  await loadReactionsForVisibleMessages();
+  if (mySeq !== openSeq) return;
 
   if (currentChannelIsSubscribed) await markChatRead(chatId);
 }
@@ -1831,6 +1851,7 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
 
 // ======================= 13. ОТКРЫТИЕ ЧАТА =======================
 async function openChatWith(otherUser) {
+  const mySeq = ++openSeq;
   currentOtherUser = otherUser; pendingOtherUser = null;
   currentChannelObj = null; currentChannelIsAdmin = false;
   closeChatSearch();
@@ -1861,13 +1882,16 @@ async function openChatWith(otherUser) {
   let chatId = chatIdByUser.get(otherUser.id) || null;
   if (!chatId) {
     const { data: myMemberships } = await supabase.from("chat_members").select("chat_id").eq("user_id", currentUser.id);
+    if (mySeq !== openSeq) return;
     const myChatIds = (myMemberships || []).map((m) => m.chat_id);
     if (myChatIds.length) {
       const { data: shared } = await supabase.from("chat_members")
         .select("chat_id").eq("user_id", otherUser.id).in("chat_id", myChatIds).limit(1);
+      if (mySeq !== openSeq) return;
       if (shared && shared.length) { chatId = shared[0].chat_id; chatIdByUser.set(otherUser.id, chatId); }
     }
   }
+  if (mySeq !== openSeq) return;
   if (!chatId) {
     currentChatId = null; pendingOtherUser = otherUser;
     document.getElementById("messages").innerHTML = '<div class="empty">Здесь пока нет сообщений. Напишите первым!</div>';
@@ -1878,7 +1902,9 @@ async function openChatWith(otherUser) {
   }
   currentChatId = chatId;
   await loadMessages(chatId);
+  if (mySeq !== openSeq) return;
   await loadReactionsForVisibleMessages();
+  if (mySeq !== openSeq) return;
   subscribeToChat(chatId); subscribeToReactions();
   await markChatRead(chatId);
 }
@@ -1929,10 +1955,13 @@ async function loadMessages(chatId) {
   msgCache.clear(); hiddenMsgIds = new Set(); reactionsCache.clear();
   currentChannelViewsMap = new Map();
 
-  const { data: hides } = await supabase.from("message_hides").select("message_id").eq("user_id", currentUser.id);
-  hiddenMsgIds = new Set((hides || []).map((h) => h.message_id));
-  const { data: clearRow } = await supabase.from("chat_clears").select("cleared_at")
-    .eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle();
+  // Два независимых запроса — параллельно
+  const [hidesRes, clearRes] = await Promise.all([
+    supabase.from("message_hides").select("message_id").eq("user_id", currentUser.id),
+    supabase.from("chat_clears").select("cleared_at").eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle(),
+  ]);
+  hiddenMsgIds = new Set((hidesRes.data || []).map((h) => h.message_id));
+  const clearRow = clearRes.data;
 
   let query = supabase.from("messages").select("*").eq("chat_id", chatId).order("created_at", { ascending: true });
   if (clearRow && clearRow.cleared_at) query = query.gt("created_at", clearRow.cleared_at);
@@ -1943,56 +1972,55 @@ async function loadMessages(chatId) {
   const all = data || [];
   all.forEach((m) => msgCache.set(m.id, m));
   const visible = all.filter((m) => !hiddenMsgIds.has(m.id));
-
-  // ВАЖНО: используем currentChannelObj, а не channelCache
   const isChannel = currentChannelObj && currentChannelObj.id === chatId;
 
   if (visible.length === 0) {
     box.innerHTML = isChannel
       ? '<div class="empty">В этом канале пока что нет сообщений.</div>'
       : '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
+    await loadPinned(chatId);
     return;
   }
 
-  // Счётчики просмотров — только для канала
+  // Счётчики просмотров — параллельно с рендером
+  let viewsPromise = null;
   if (isChannel) {
     const ids = visible.map((m) => m.id);
-    for (let i = 0; i < ids.length; i += 500) {
-      const chunk = ids.slice(i, i + 500);
-      const { data: views } = await supabase.rpc("get_message_view_counts", { p_message_ids: chunk });
+    viewsPromise = supabase.rpc("get_message_view_counts", { p_message_ids: ids }).then(({ data: views }) => {
       (views || []).forEach((v) => currentChannelViewsMap.set(v.message_id, Number(v.views) || 0));
-    }
+    }).catch(() => {});
   }
 
   for (const m of visible) await appendMessage(m);
   scrollToBottom();
 
-  // Отправляем свои просмотры — только для канала. Батчами по 10, параллельно.
-  // После пометки отдельно запрашиваем актуальные счётчики — не полагаемся на
-  // возвращаемое значение RPC (оно может быть null/undefined).
-  if (isChannel) {
-    const ids = visible.map((m) => m.id);
-    const chunkSize = 10;
-    for (let i = 0; i < ids.length; i += chunkSize) {
-      const chunk = ids.slice(i, i + chunkSize);
-      await Promise.all(chunk.map(async (id) => {
-        try {
-          const { error: mvErr } = await supabase.rpc("mark_message_viewed", { p_message_id: id });
-          if (mvErr) console.warn("mark_message_viewed:", mvErr.message || mvErr);
-        } catch (e) { console.warn(e); }
-      }));
-    }
-    try {
-      const { data: views, error: vErr } = await supabase.rpc("get_message_view_counts", { p_message_ids: ids });
-      if (vErr) console.warn("get_message_view_counts:", vErr.message || vErr);
-      (views || []).forEach((v) => {
-        const cnt = Number(v.views) || 0;
-        currentChannelViewsMap.set(v.message_id, cnt);
-        updateMessageViewsInUI(v.message_id, cnt);
-      });
-    } catch (e) { console.warn(e); }
-  }
   await loadPinned(chatId);
+
+  if (isChannel) {
+    await viewsPromise;
+    // Перерисовать показатели на уже отрендеренных сообщениях
+    currentChannelViewsMap.forEach((cnt, mid) => updateMessageViewsInUI(mid, cnt));
+
+    // В ФОНЕ: пометить свои просмотры и обновить счётчики (не блокирует UI)
+    const ids = visible.map((m) => m.id);
+    (async () => {
+      const chunkSize = 20;
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const chunk = ids.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async (id) => {
+          try { await supabase.rpc("mark_message_viewed", { p_message_id: id }); } catch (e) {}
+        }));
+      }
+      try {
+        const { data: views } = await supabase.rpc("get_message_view_counts", { p_message_ids: ids });
+        (views || []).forEach((v) => {
+          const cnt = Number(v.views) || 0;
+          currentChannelViewsMap.set(v.message_id, cnt);
+          updateMessageViewsInUI(v.message_id, cnt);
+        });
+      } catch (e) {}
+    })();
+  }
 }
 
 async function loadReactionsForVisibleMessages() {
@@ -2212,8 +2240,10 @@ function onMsgClick(e) {
 }
 
 function jumpToMessage(id) {
-  const target = document.querySelector(`.msg[data-id="${id}"]`);
+  const target = document.querySelector(`[data-id="${id}"]`);
   if (!target) return;
+  // Замораживаем авто-переключение активного закрепа, чтобы не «прыгал»
+  pinBarFrozenUntil = Date.now() + 900;
   target.scrollIntoView({ behavior: "smooth", block: "center" });
   const prev = target.style.background;
   target.style.transition = "background 0.4s";
@@ -2719,6 +2749,7 @@ async function deleteChatForBoth() {
 }
 
 function closeCurrentChat() {
+  openSeq++;
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
   currentChannelObj = null; currentChannelIsAdmin = false;
   currentChannelIsSubscribed = false;
@@ -5108,16 +5139,20 @@ function renderPinBar() {
 
 function updateCurrentPinnedByScroll() {
   if (!currentPinnedList.length) return;
+  if (Date.now() < pinBarFrozenUntil) return;
   const box = document.getElementById("messages");
   if (!box) return;
-  const scrollTop = box.scrollTop;
+  const boxRect = box.getBoundingClientRect();
   let bestIdx = 0;
+  let found = false;
   for (let i = 0; i < currentPinnedList.length; i++) {
     const el = document.querySelector(`[data-id="${currentPinnedList[i].message_id}"]`);
     if (!el) continue;
-    if (el.offsetTop <= scrollTop + 60) bestIdx = i;
+    const elTopInBox = el.getBoundingClientRect().top - boxRect.top;
+    if (elTopInBox <= 60) { bestIdx = i; found = true; }
     else break;
   }
+  if (!found) bestIdx = 0;
   if (bestIdx !== currentPinnedIndex) {
     currentPinnedIndex = bestIdx;
     renderPinBar();
@@ -5129,10 +5164,8 @@ function updatePinMenuLabel(msgId) {
   if (!pinBtn) return;
   const myPin = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "personal" && p.pinned_by === currentUser.id);
   const sharedPin = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "shared");
-  if (myPin && sharedPin) pinBtn.textContent = "📌 Открепить";
-  else if (myPin) pinBtn.textContent = "📌 Открепить (у меня)";
-  else if (sharedPin) pinBtn.textContent = "📌 Открепить (у обоих)";
-  else pinBtn.textContent = "📌 Закрепить";
+  if (myPin || sharedPin) pinBtn.textContent = "Открепить";
+  else pinBtn.textContent = "Закрепить";
 }
 
 async function handlePinAction(msgId) {
@@ -5141,7 +5174,7 @@ async function handlePinAction(msgId) {
   if (!msg) return;
   if (msg.message_type === "tokens") return;
 
-  // Канал: только shared
+  // === КАНАЛ ===
   if (currentChannelObj) {
     const existing = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "shared");
     if (existing) {
@@ -5159,37 +5192,62 @@ async function handlePinAction(msgId) {
     return;
   }
 
-  // DM: personal / shared
+  // === DM ===
   const myPin = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "personal" && p.pinned_by === currentUser.id);
   const sharedPin = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "shared");
 
-  const opts = [];
-  if (!myPin) opts.push({ label: "📌 Закрепить у меня", value: "pin_me" });
-  else opts.push({ label: "📌 Открепить у меня", value: "unpin_me" });
-  if (!sharedPin) opts.push({ label: "📌 Закрепить у обоих", value: "pin_both" });
-  else opts.push({ label: "📌 Открепить у обоих", value: "unpin_both" });
+  // Если уже shared — только «открепить»
+  if (sharedPin && !myPin) {
+    const ok = await showConfirmDialog("Открепить", "Открепить это сообщение у обоих?", "Открепить");
+    if (!ok) return;
+    const { error } = await supabase.from("pinned_messages").delete().eq("id", sharedPin.id);
+    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    await loadPinned(currentChatId);
+    return;
+  }
 
-  const choice = await showChoiceDialog("Закрепление", "Что сделать?", opts, "ОК");
-  if (!choice) return;
+  // Если только личный — только «открепить у меня»
+  if (myPin && !sharedPin) {
+    const ok = await showConfirmDialog("Открепить", "Открепить это сообщение у себя?", "Открепить");
+    if (!ok) return;
+    const { error } = await supabase.from("pinned_messages").delete().eq("id", myPin.id);
+    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    await loadPinned(currentChatId);
+    return;
+  }
 
-  if (choice === "pin_me") {
+  // Если оба закрепа — предложить снять любой
+  if (myPin && sharedPin) {
+    const choice = await showChoiceDialog("Открепление", "Что снять?", [
+      { label: "У меня", value: "unpin_me" },
+      { label: "У обоих", value: "unpin_both" },
+    ], "Открепить");
+    if (!choice) return;
+    const id = choice === "unpin_me" ? myPin.id : sharedPin.id;
+    const { error } = await supabase.from("pinned_messages").delete().eq("id", id);
+    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    await loadPinned(currentChatId);
+    return;
+  }
+
+  // Ничего нет — предлагаем закрепить
+  const choice2 = await showChoiceDialog("Закрепление", "Как закрепить?", [
+    { label: "У меня", value: "pin_me" },
+    { label: "У обоих", value: "pin_both" },
+  ], "Закрепить");
+  if (!choice2) return;
+
+  if (choice2 === "pin_me") {
     const { error } = await supabase.from("pinned_messages").insert({
       chat_id: currentChatId, message_id: msgId, pinned_by: currentUser.id, scope: "personal",
     });
     if (error) { await showAlertDialog("Ошибка", error.message); return; }
-  } else if (choice === "unpin_me" && myPin) {
-    const { error } = await supabase.from("pinned_messages").delete().eq("id", myPin.id);
-    if (error) { await showAlertDialog("Ошибка", error.message); return; }
-  } else if (choice === "pin_both") {
+  } else {
     const { error } = await supabase.from("pinned_messages").insert({
       chat_id: currentChatId, message_id: msgId, pinned_by: currentUser.id, scope: "shared",
     });
     if (error) { await showAlertDialog("Ошибка", error.message); return; }
-  } else if (choice === "unpin_both" && sharedPin) {
-    const { error } = await supabase.from("pinned_messages").delete().eq("id", sharedPin.id);
-    if (error) { await showAlertDialog("Ошибка", error.message); return; }
   }
-
   await loadPinned(currentChatId);
 }
 
@@ -5286,7 +5344,8 @@ async function refreshInviteList() {
     const url = `${baseUrl}#invite=${inv.code}`;
     return `
       <div class="invite-item" data-invite-id="${inv.id}">
-        <span class="invite-item-code">${escapeHtml(url)}</span>
+        <span class="invite-item-code"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></span>
+        <button class="invite-item-open" data-open-code="${inv.code}" title="Открыть">↗</button>
         <button class="invite-item-copy" data-copy-code="${inv.code}" title="Скопировать">📋</button>
         <button class="invite-item-revoke" data-revoke-id="${inv.id}" title="Отозвать">✕</button>
       </div>`;
@@ -5304,6 +5363,13 @@ async function refreshInviteList() {
       }
       btn.textContent = "✓";
       setTimeout(() => { btn.textContent = "📋"; }, 1200);
+    });
+  });
+  listEl.querySelectorAll("[data-open-code]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const url = `${baseUrl}#invite=${btn.dataset.openCode}`;
+      window.open(url, "_blank", "noopener");
     });
   });
   listEl.querySelectorAll("[data-revoke-id]").forEach((btn) => {

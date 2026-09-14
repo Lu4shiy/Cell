@@ -2429,3 +2429,40 @@ mark.search-hl {
 }
 .invite-item-copy:hover { background: var(--bg-hover); color: var(--text); }
 .invite-item-revoke:hover { background: rgba(255,91,91,0.12); color: var(--danger); }
+
+/* pin-bar теперь над messages — граница снизу, лёгкая тень сверху */
+.pin-bar {
+  border-bottom: 1px solid var(--border);
+  border-top: none;
+}
+
+/* Кликабельные ссылки в сообщениях */
+.msg-text a,
+.msg-system-text a {
+  color: var(--accent-light);
+  text-decoration: underline;
+  word-break: break-all;
+  cursor: pointer;
+}
+.msg.mine .msg-text a { color: rgba(255,255,255,0.95); }
+.msg-text a:hover, .msg-system-text a:hover { filter: brightness(1.15); }
+
+/* Кликабельные ссылки в диалоге приглашений */
+.invite-item-code a {
+  color: var(--text);
+  text-decoration: none;
+}
+.invite-item-code a:hover { color: var(--accent); text-decoration: underline; }
+
+.invite-item-open {
+  background: transparent;
+  border: none;
+  color: var(--text-sub);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+.invite-item-open:hover { background: var(--bg-hover); color: var(--text); }
