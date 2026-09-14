@@ -1058,11 +1058,9 @@ async function checkChannelAdmin(channelId, userId) {
 }
 
 async function updateChannelSubtitle(chatId) {
-  const { count } = await supabase
-    .from("chat_members")
-    .select("user_id", { count: "exact", head: true })
-    .eq("chat_id", chatId);
-  currentChannelSubscribers = count || 0;
+  const { data, error } = await supabase.rpc("channel_subscribers_count", { p_chat_id: chatId });
+  if (error) { console.error("subscribers_count:", error); return; }
+  currentChannelSubscribers = Number(data) || 0;
   const el = document.getElementById("chat-subtitle");
   if (el && currentChannelObj && currentChannelObj.id === chatId) {
     el.textContent = `${currentChannelSubscribers} ${pluralRu(currentChannelSubscribers, "подписчик", "подписчика", "подписчиков")}`;
@@ -1099,11 +1097,14 @@ async function openChannel(chatId) {
   currentOtherUser = null; pendingOtherUser = null;
   currentChannelViewsMap = new Map();
   currentChannelTotalViews = 0;
+  document.getElementById("composer").classList.add("hidden");
+  document.getElementById("channel-action-bar").classList.add("hidden");
 
   const searchInput = document.getElementById("search-input");
   if (searchInput && searchInput.value.trim()) {
     searchInput.value = "";
-    setTimeout(() => loadRecentChats(), 50);
+    // НЕ перезагружаем список при открытии канала — иначе снесём currentChannelObj из DOM
+    setTimeout(() => { if (!currentChannelObj) loadRecentChats(); }, 50);
   }
 
   paintAvatar(document.getElementById("chat-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
@@ -1541,7 +1542,7 @@ async function openChatWith(otherUser) {
   const searchInput = document.getElementById("search-input");
   if (searchInput && searchInput.value.trim()) {
     searchInput.value = "";
-    setTimeout(() => loadRecentChats(), 50);
+    setTimeout(() => { if (!currentOtherUser) loadRecentChats(); }, 50);
   }
   const itemEl = document.querySelector(`.user-item[data-user-id="${otherUser.id}"]`);
   const customName = itemEl ? itemEl.dataset.customName : null;
@@ -1637,20 +1638,22 @@ async function loadMessages(chatId) {
   const all = data || [];
   all.forEach((m) => msgCache.set(m.id, m));
   const visible = all.filter((m) => !hiddenMsgIds.has(m.id));
-  const isChannel = channelCache.has(chatId);
+
+  // ВАЖНО: используем currentChannelObj, а не channelCache
+  const isChannel = currentChannelObj && currentChannelObj.id === chatId;
+
   if (visible.length === 0) {
     box.innerHTML = isChannel
-      ? '<div class="empty">В этом канале пока нет сообщений.</div>'
+      ? '<div class="empty">В этом канале пока что нет сообщений.</div>'
       : '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
     return;
   }
 
   // Счётчики просмотров — только для канала
-  if (isChannel && visible.length) {
+  if (isChannel) {
     const ids = visible.map((m) => m.id);
-    const chunks = [];
-    for (let i = 0; i < ids.length; i += 500) chunks.push(ids.slice(i, i + 500));
-    for (const chunk of chunks) {
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
       const { data: views } = await supabase.rpc("get_message_view_counts", { p_message_ids: chunk });
       (views || []).forEach((v) => currentChannelViewsMap.set(v.message_id, Number(v.views) || 0));
     }
@@ -1661,15 +1664,14 @@ async function loadMessages(chatId) {
 
   // Отправляем свои просмотры — только для канала, только для чужих сообщений
   if (isChannel) {
-    const nonMyIds = visible.filter((m) => m.sender_id !== currentUser.id).map((m) => m.id);
-    if (nonMyIds.length) {
-      const rows = nonMyIds.map((id) => ({ message_id: id, user_id: currentUser.id }));
-      for (let i = 0; i < rows.length; i += 500) {
-        const { error } = await supabase.from("message_views").upsert(rows.slice(i, i + 500), {
-          ignoreDuplicates: true,
-        });
-        if (error) console.error("message_views upsert:", error);
-      }
+    const nonMyMsgs = visible.filter((m) => m.sender_id !== currentUser.id);
+    for (const m of nonMyMsgs) {
+      const { error: viewErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
+      if (viewErr) { console.error("mark_message_viewed:", viewErr); continue; }
+      // Локально сразу +1, чтобы юзер увидел свой просмотр
+      const cur = currentChannelViewsMap.get(m.id) || 0;
+      currentChannelViewsMap.set(m.id, cur + 1);
+      updateMessageViewsInUI(m.id, cur + 1);
     }
   }
 }
@@ -1686,7 +1688,7 @@ async function loadReactionsForVisibleMessages() {
 }
 
 function renderMsgStatus(msg) {
-  if (msg.chat_id && channelCache.has(msg.chat_id)) return "";
+  if (currentChannelObj && msg.chat_id === currentChannelObj.id) return "";
   if (msg.sender_id !== currentUser.id) return "";
   if (String(msg.id).startsWith("tmp_")) return '<span class="msg-status sending">⏳</span>';
   if (msg.read_at) return '<span class="msg-status read">✓✓</span>';
@@ -1760,7 +1762,7 @@ async function buildMsgHtml(msg) {
   html += `<div class="msg-reactions" data-reactions-for="${msg.id}"></div>`;
 
   let viewsHtml = "";
-  if (channelCache.has(msg.chat_id)) {
+  if (currentChannelObj && currentChannelObj.id === msg.chat_id) {
     const vc = currentChannelViewsMap.get(msg.id) || 0;
     if (vc > 0) viewsHtml = `<span class="msg-views">👁 ${vc}</span>`;
   }
@@ -1791,7 +1793,7 @@ async function appendMessage(msg) {
     return;
   }
 
-  const isChannelMsg = msg.chat_id && channelCache.has(msg.chat_id);
+  const isChannelMsg = currentChannelObj && msg.chat_id === currentChannelObj.id;
   const mine = !isChannelMsg && msg.sender_id === currentUser.id;
   const el = document.createElement("div");
   el.className = "msg " + (mine ? "mine" : "other");
@@ -2044,11 +2046,12 @@ function subscribeToChat(chatId) {
         if (currentChannelObj) {
           if (currentChannelIsSubscribed) markChatRead(chatId);
           if (m.sender_id !== currentUser.id) {
-            const { error } = await supabase.from("message_views").upsert(
-              { message_id: m.id, user_id: currentUser.id },
-              { ignoreDuplicates: true }
-            );
-            if (error) console.error("message_views upsert (rt):", error);
+            const { error: viewErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
+            if (!viewErr) {
+              const cur = currentChannelViewsMap.get(m.id) || 0;
+              currentChannelViewsMap.set(m.id, cur + 1);
+              updateMessageViewsInUI(m.id, cur + 1);
+            }
           }
         } else {
           markChatRead(chatId);
@@ -3653,9 +3656,8 @@ async function openChannelProfileDialog() {
   document.getElementById("channel-profile-name").textContent = ch.name;
   document.getElementById("channel-profile-username").textContent = "@" + (ch.username || "");
 
-  const { count } = await supabase.from("chat_members")
-    .select("user_id", { count: "exact", head: true }).eq("chat_id", ch.id);
-  const cnt = count || 0;
+  const { data: cntData } = await supabase.rpc("channel_subscribers_count", { p_chat_id: ch.id });
+  const cnt = Number(cntData) || 0;
   const word = pluralRu(cnt, "подписчик", "подписчика", "подписчиков");
   document.getElementById("channel-profile-subscribers-status").textContent = `${cnt} ${word}`;
   document.getElementById("channel-profile-subscribers").textContent = String(cnt);
