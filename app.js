@@ -1090,6 +1090,10 @@ async function updateChannelComposerState() {
 }
 
 async function openChannel(chatId) {
+  // СРАЗУ скрываем composer синхронно, до любых await — иначе мелькнёт
+  document.getElementById("composer").classList.add("hidden");
+  document.getElementById("channel-action-bar").classList.add("hidden");
+
   const { data: ch } = await supabase.from("channels").select("*").eq("id", chatId).maybeSingle();
   if (!ch) { await showAlertDialog("Ошибка", "Канал не найден"); return; }
   channelCache.set(chatId, ch);
@@ -1097,13 +1101,16 @@ async function openChannel(chatId) {
   currentOtherUser = null; pendingOtherUser = null;
   currentChannelViewsMap = new Map();
   currentChannelTotalViews = 0;
+
+  // ВАЖНО: сброс состояний ДО скрытия composer, потому что exitSelectionMode() его показывает
+  exitSelectionMode(); cancelReply(); cancelEdit(); closeReactionPicker();
   document.getElementById("composer").classList.add("hidden");
   document.getElementById("channel-action-bar").classList.add("hidden");
 
   const searchInput = document.getElementById("search-input");
   if (searchInput && searchInput.value.trim()) {
     searchInput.value = "";
-    // НЕ перезагружаем список при открытии канала — иначе снесём currentChannelObj из DOM
+    // НЕ перезагружаем список при открытии канала
     setTimeout(() => { if (!currentChannelObj) loadRecentChats(); }, 50);
   }
 
@@ -1112,7 +1119,6 @@ async function openChannel(chatId) {
   document.getElementById("chat-placeholder").classList.add("hidden");
   document.getElementById("chat-content").classList.remove("hidden");
   document.getElementById("chat-menu").classList.add("hidden");
-  exitSelectionMode(); cancelReply(); cancelEdit(); closeReactionPicker();
 
   // Подписан ли я?
   const { data: mem } = await supabase.from("chat_members")
@@ -2648,7 +2654,10 @@ function exitSelectionMode() {
   selectionMode = false;
   selectedMsgIds.clear();
   document.getElementById("selection-toolbar").classList.add("hidden");
-  document.getElementById("composer").classList.remove("hidden");
+  // Composer показываем только если мы НЕ в канале
+  if (!currentChannelObj) {
+    document.getElementById("composer").classList.remove("hidden");
+  }
   document.querySelectorAll(".msg.selected, .msg-system.selected").forEach((el) => el.classList.remove("selected"));
 }
 
