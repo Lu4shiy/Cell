@@ -2529,6 +2529,7 @@ function renderEmojiTabs() {
     { id: "activities", label: "⚽" },
     { id: "objects", label: "💡" },
     { id: "symbols", label: "❤️" },
+    { id: "flags", label: "🏳️" },
   ];
   tabsEl.innerHTML = cats.map((c) =>
     `<button type="button" class="emoji-tab ${emojiCurrentCategory === c.id ? "active" : ""}" data-cat="${c.id}" title="${c.id}">${c.label}</button>`
