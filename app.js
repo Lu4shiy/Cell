@@ -189,6 +189,7 @@ let currentChannelViewsMap = new Map();
 let currentChannelTotalViews = 0;
 let currentChannelViewsChannel = null;
 let contextChannelForMenu = null;
+let channelAdminsChannel = null;
 let usernameCheckTimeout = null, validatedUsername = null, reactionsRefreshTimer = null;
 let giftCatalogCache = [];
 let lastSeenInterval = null, otherUserInterval = null, statusPollInterval = null, deliveredInterval = null;
@@ -4408,7 +4409,6 @@ async function openTransferOwnerDialog() {
 }
 
 // Realtime: админы канала меняются → перерисовываем редактор
-let channelAdminsChannel = null;
 function subscribeToChannelAdmins() {
   if (channelAdminsChannel) return;
   channelAdminsChannel = supabase.channel("channel-admins-changes")
