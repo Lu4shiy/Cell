@@ -313,7 +313,7 @@ function showAuth() {
 // ======================= 5. ИНИЦИАЛИЗАЦИЯ =======================
 async function initApp() {
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
-  setupChatSearch();
+  setupChatSearch(); setupScrollBottomButton();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
   setupBirthdayClose(); setupTokensDialog(); setupChannelCreate(); setupChannelEdit();
   supabase.from("profiles").select("id").limit(1).then(() => {});
@@ -1288,6 +1288,8 @@ async function openChannel(chatId) {
   currentChannelViewsMap = new Map();
   currentChannelTotalViews = 0;
   closeChatSearch();
+  const sbBtn = document.getElementById("scroll-bottom-btn");
+  if (sbBtn) sbBtn.classList.remove("visible");
 
   // ВАЖНО: сброс состояний ДО скрытия composer, потому что exitSelectionMode() его показывает
   exitSelectionMode(); cancelReply(); cancelEdit(); closeReactionPicker();
@@ -1738,6 +1740,8 @@ async function openChatWith(otherUser) {
   currentOtherUser = otherUser; pendingOtherUser = null;
   currentChannelObj = null; currentChannelIsAdmin = false;
   closeChatSearch();
+  const sbBtn = document.getElementById("scroll-bottom-btn");
+  if (sbBtn) sbBtn.classList.remove("visible");
   document.getElementById("message-input").setAttribute("contenteditable", "true");
   document.getElementById("message-input").setAttribute("data-placeholder", "Написать сообщение...");
   resetChatMenuToDm();
@@ -2144,6 +2148,21 @@ async function openChatByUsername(username) {
 function scrollToBottom() {
   const box = document.getElementById("messages");
   box.scrollTop = box.scrollHeight;
+}
+
+function setupScrollBottomButton() {
+  const btn = document.getElementById("scroll-bottom-btn");
+  const box = document.getElementById("messages");
+  if (!btn || !box) return;
+
+  btn.addEventListener("click", () => {
+    box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
+  });
+
+  box.addEventListener("scroll", () => {
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+    btn.classList.toggle("visible", !nearBottom);
+  }, { passive: true });
 }
 
 function checkEmptyChat() {
@@ -2603,6 +2622,8 @@ function closeCurrentChat() {
   if (reactionsChannel) { supabase.removeChannel(reactionsChannel); reactionsChannel = null; }
   cancelReply(); cancelEdit(); exitSelectionMode(); closeReactionPicker();
   closeChatSearch();
+  const sbBtn = document.getElementById("scroll-bottom-btn");
+  if (sbBtn) sbBtn.classList.remove("visible");
   document.getElementById("chat-content").classList.add("hidden");
   document.getElementById("chat-placeholder").classList.remove("hidden");
 }
@@ -2838,18 +2859,64 @@ function closeChatSearch() {
   if (input) input.value = "";
   chatSearchMatches = [];
   chatSearchIndex = -1;
-  document.querySelectorAll(".msg.search-hidden, .msg-system.search-hidden").forEach((el) => {
-    el.classList.remove("search-hidden", "search-current");
+  clearSearchHighlights();
+  document.querySelectorAll("#messages .msg.search-current, #messages .msg-system.search-current").forEach((el) => {
+    el.classList.remove("search-current");
   });
   updateChatSearchUI();
 }
 
-function applyChatSearch(query) {
-  const q = query.trim().toLowerCase();
-  const all = document.querySelectorAll("#messages .msg, #messages .msg-system");
+// Очищает все подсветки поиска в сообщениях
+function clearSearchHighlights() {
+  document.querySelectorAll("#messages mark.search-hl").forEach((mark) => {
+    const parent = mark.parentNode;
+    if (!parent) return;
+    parent.replaceChild(document.createTextNode(mark.textContent), mark);
+    parent.normalize();
+  });
+}
 
-  // Сбрасываем предыдущий результат
-  all.forEach((el) => el.classList.remove("search-hidden", "search-current"));
+// Подсвечивает все вхождения query в текстовых нодах внутри rootEl.
+// Возвращает количество подсветок.
+function highlightInElement(rootEl, query) {
+  if (!query || !rootEl) return 0;
+  const q = query.toLowerCase();
+  const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, null);
+  const textNodes = [];
+  let node;
+  while ((node = walker.nextNode())) {
+    if (node.parentNode && node.parentNode.classList &&
+        node.parentNode.classList.contains("search-hl")) continue;
+    textNodes.push(node);
+  }
+  let count = 0;
+  textNodes.forEach((tn) => {
+    const text = tn.nodeValue;
+    if (!text) return;
+    const lower = text.toLowerCase();
+    let idx = lower.indexOf(q);
+    if (idx === -1) return;
+    const frag = document.createDocumentFragment();
+    let lastEnd = 0;
+    while (idx !== -1) {
+      if (idx > lastEnd) frag.appendChild(document.createTextNode(text.slice(lastEnd, idx)));
+      const mark = document.createElement("mark");
+      mark.className = "search-hl";
+      mark.textContent = text.slice(idx, idx + q.length);
+      frag.appendChild(mark);
+      lastEnd = idx + q.length;
+      count++;
+      idx = lower.indexOf(q, lastEnd);
+    }
+    if (lastEnd < text.length) frag.appendChild(document.createTextNode(text.slice(lastEnd)));
+    tn.parentNode.replaceChild(frag, tn);
+  });
+  return count;
+}
+
+function applyChatSearch(query) {
+  clearSearchHighlights();
+  const q = query.trim().toLowerCase();
   chatSearchMatches = [];
 
   if (!q) {
@@ -2858,14 +2925,11 @@ function applyChatSearch(query) {
     return;
   }
 
+  const all = document.querySelectorAll("#messages .msg, #messages .msg-system");
   all.forEach((el) => {
-    const id = el.dataset.id;
-    const m = msgCache.get(id);
-    if (!m) { el.classList.add("search-hidden"); return; }
-    const text = (m.content || "").toLowerCase();
-    const matched = text.indexOf(q) !== -1;
-    if (matched) chatSearchMatches.push(el);
-    else el.classList.add("search-hidden");
+    const textEl = el.querySelector(".msg-text") || el;
+    const cnt = highlightInElement(textEl, q);
+    if (cnt > 0) chatSearchMatches.push(el);
   });
 
   chatSearchIndex = chatSearchMatches.length ? 0 : -1;
