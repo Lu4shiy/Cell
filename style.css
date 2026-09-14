@@ -507,6 +507,63 @@ input:focus { border-color: var(--accent); }
   opacity: 0.75;
 }
 
+/* ============ ПРОСМОТР ФОТО/ВИДЕО ============ */
+
+.media-viewer {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  z-index: 6000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  animation: fadeIn 0.15s ease-out;
+  cursor: zoom-out;
+}
+
+.media-viewer-body {
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.media-viewer-body img,
+.media-viewer-body video {
+  max-width: 100%;
+  max-height: 90vh;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  display: block;
+}
+
+.media-viewer-close {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  padding: 0;
+  transition: background 0.15s, transform 0.12s;
+  z-index: 1;
+}
+.media-viewer-close:hover { background: rgba(255, 255, 255, 0.22); }
+.media-viewer-close:active { transform: scale(0.92); }
+
 .reply-bar {
   display: flex;
   align-items: center;

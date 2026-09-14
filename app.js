@@ -335,7 +335,7 @@ function showAuth() {
 // ======================= 5. ИНИЦИАЛИЗАЦИЯ =======================
 async function initApp() {
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
-  setupAttachments();
+  setupAttachments(); setupMediaViewer();
   setupChatSearch(); setupScrollBottomButton();
   setupChatPins(); setupInviteUI();
   subscribeToPins();
@@ -2447,6 +2447,65 @@ function setupAttachments() {
   });
 }
 
+function setupMediaViewer() {
+  const overlay = document.getElementById("media-viewer");
+  const body = document.getElementById("media-viewer-body");
+  const closeBtn = document.getElementById("media-viewer-close");
+  if (!overlay || !body) return;
+
+  closeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeMediaViewer();
+  });
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeMediaViewer();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !overlay.classList.contains("hidden")) {
+      e.preventDefault();
+      closeMediaViewer();
+    }
+  });
+}
+
+function openMediaViewer(url, kind) {
+  const overlay = document.getElementById("media-viewer");
+  const body = document.getElementById("media-viewer-body");
+  if (!overlay || !body) return;
+
+  // Останавливаем все видео, которые могли играть в фоне
+  document.querySelectorAll("#media-viewer video").forEach((v) => {
+    try { v.pause(); } catch (e) {}
+  });
+
+  body.innerHTML = "";
+  if (kind === "video") {
+    const v = document.createElement("video");
+    v.src = url;
+    v.controls = true;
+    v.autoplay = true;
+    v.playsInline = true;
+    body.appendChild(v);
+  } else {
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = "";
+    body.appendChild(img);
+  }
+  overlay.classList.remove("hidden");
+}
+
+function closeMediaViewer() {
+  const overlay = document.getElementById("media-viewer");
+  const body = document.getElementById("media-viewer-body");
+  if (!overlay || !body) return;
+  body.querySelectorAll("video").forEach((v) => {
+    try { v.pause(); } catch (e) {}
+  });
+  body.innerHTML = "";
+  overlay.classList.add("hidden");
+}
+
 function detectFileKind(file) {
   const t = file.type || "";
   if (t.startsWith("image/")) return "image";
@@ -2471,12 +2530,10 @@ function buildAttachmentHtml(msg) {
     return `<div class="msg-attachment-uploading">⏳ Загрузка…</div>`;
   }
   if (kind === "image") {
-    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">
-      <img src="${escapeHtml(url)}" class="msg-attachment-image" alt="">
-    </a>`;
+    return `<img src="${escapeHtml(url)}" class="msg-attachment-image" alt="" data-media-url="${escapeHtml(url)}" data-media-kind="image">`;
   }
   if (kind === "video") {
-    return `<video src="${escapeHtml(url)}" class="msg-attachment-video" controls preload="metadata"></video>`;
+    return `<video src="${escapeHtml(url)}" class="msg-attachment-video" controls preload="metadata" data-media-url="${escapeHtml(url)}" data-media-kind="video"></video>`;
   }
   return `<a class="msg-attachment-file" href="${escapeHtml(url)}" target="_blank" rel="noopener" download="${escapeHtml(name)}">
     <span class="maf-icon">📎</span>
@@ -3214,6 +3271,29 @@ function setupMessageMenu() {
     e.preventDefault();
     e.stopPropagation();
     window.location.hash = "invite=" + m[1];
+  }, true);
+
+  // Клик по картинке в сообщении — открываем лайтбокс (не новую вкладку)
+  document.getElementById("messages").addEventListener("click", (e) => {
+    const img = e.target.closest("img.msg-attachment-image");
+    if (!img) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const url = img.dataset.mediaUrl || img.src;
+    openMediaViewer(url, "image");
+  }, true);
+
+  // Клик по видео (без нажатия на controls) — тоже лайтбокс.
+  // Если это клик по самой области controls — не перехватываем.
+  document.getElementById("messages").addEventListener("click", (e) => {
+    const video = e.target.closest("video.msg-attachment-video");
+    if (!video) return;
+    // Не перехватываем клики внутри нативных контролов управления
+    if (e.target !== video) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const url = video.dataset.mediaUrl || video.src;
+    openMediaViewer(url, "video");
   }, true);
 }
 
