@@ -84,6 +84,7 @@
             <div class="chat-title" id="chat-title">Имя</div>
             <div class="chat-subtitle" id="chat-subtitle">@username</div>
           </div>
+          <button id="chat-search-btn" class="icon-btn" title="Поиск в чате">🔍</button>
           <button id="chat-menu-btn" class="icon-btn" title="Меню">⋮</button>
           <div id="chat-menu" class="menu hidden">
             <button data-action="tokens">Отправить ImagiTokens</button>
@@ -96,6 +97,14 @@
             <button data-action="channel-delete" class="hidden danger">Удалить канал</button>
           </div>
         </header>
+
+        <div id="chat-search-bar" class="chat-search-bar hidden">
+          <input type="text" id="chat-search-input" placeholder="Поиск в чате..." autocomplete="off">
+          <span class="chat-search-count" id="chat-search-count"></span>
+          <button class="chat-search-nav" id="chat-search-prev" title="Предыдущее" type="button">↑</button>
+          <button class="chat-search-nav" id="chat-search-next" title="Следующее" type="button">↓</button>
+          <button class="chat-search-nav" id="chat-search-close" title="Закрыть" type="button">✕</button>
+        </div>
 
         <div id="block-banner" class="block-banner hidden">
           <span id="block-banner-text"></span>

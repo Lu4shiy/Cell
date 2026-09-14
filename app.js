@@ -201,6 +201,11 @@ let channelAdminsChannel = null;
 let usernameCheckTimeout = null, validatedUsername = null, reactionsRefreshTimer = null;
 let giftCatalogCache = [];
 let lastSeenInterval = null, otherUserInterval = null, statusPollInterval = null, deliveredInterval = null;
+// Поиск внутри чата/канала
+let chatSearchOpen = false;
+let chatSearchMatches = [];
+let chatSearchIndex = -1;
+let chatSearchDebounce = null;
 
 // ======================= 3. АКЦЕНТ / АВАТАРЫ =======================
 function applyAccent(accent) { document.documentElement.setAttribute("data-accent", accent || "orange"); }
@@ -308,6 +313,7 @@ function showAuth() {
 // ======================= 5. ИНИЦИАЛИЗАЦИЯ =======================
 async function initApp() {
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
+  setupChatSearch();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
   setupBirthdayClose(); setupTokensDialog(); setupChannelCreate(); setupChannelEdit();
   supabase.from("profiles").select("id").limit(1).then(() => {});
@@ -1281,6 +1287,7 @@ async function openChannel(chatId) {
   currentOtherUser = null; pendingOtherUser = null;
   currentChannelViewsMap = new Map();
   currentChannelTotalViews = 0;
+  closeChatSearch();
 
   // ВАЖНО: сброс состояний ДО скрытия composer, потому что exitSelectionMode() его показывает
   exitSelectionMode(); cancelReply(); cancelEdit(); closeReactionPicker();
@@ -1730,6 +1737,7 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
 async function openChatWith(otherUser) {
   currentOtherUser = otherUser; pendingOtherUser = null;
   currentChannelObj = null; currentChannelIsAdmin = false;
+  closeChatSearch();
   document.getElementById("message-input").setAttribute("contenteditable", "true");
   document.getElementById("message-input").setAttribute("data-placeholder", "Написать сообщение...");
   resetChatMenuToDm();
@@ -2594,6 +2602,7 @@ function closeCurrentChat() {
   if (currentChannel) { supabase.removeChannel(currentChannel); currentChannel = null; }
   if (reactionsChannel) { supabase.removeChannel(reactionsChannel); reactionsChannel = null; }
   cancelReply(); cancelEdit(); exitSelectionMode(); closeReactionPicker();
+  closeChatSearch();
   document.getElementById("chat-content").classList.add("hidden");
   document.getElementById("chat-placeholder").classList.remove("hidden");
 }
@@ -2770,6 +2779,128 @@ async function openGiftDetailById(ugId) {
 function openPickerForContext(msgId) {
   const el = document.querySelector(`.msg[data-id="${msgId}"] .msg-add-reaction`);
   if (el) openReactionPickerFor(el, msgId);
+}
+
+// ======================================================
+// ПОИСК ВНУТРИ ЧАТА / КАНАЛА
+// ======================================================
+
+function setupChatSearch() {
+  const btn = document.getElementById("chat-search-btn");
+  const bar = document.getElementById("chat-search-bar");
+  const input = document.getElementById("chat-search-input");
+  const prevBtn = document.getElementById("chat-search-prev");
+  const nextBtn = document.getElementById("chat-search-next");
+  const closeBtn = document.getElementById("chat-search-close");
+
+  if (btn) btn.addEventListener("click", () => {
+    if (chatSearchOpen) closeChatSearch();
+    else openChatSearch();
+  });
+  if (closeBtn) closeBtn.addEventListener("click", closeChatSearch);
+  if (prevBtn) prevBtn.addEventListener("click", () => navigateChatSearch(-1));
+  if (nextBtn) nextBtn.addEventListener("click", () => navigateChatSearch(1));
+
+  if (input) {
+    input.addEventListener("input", () => {
+      clearTimeout(chatSearchDebounce);
+      const q = input.value;
+      chatSearchDebounce = setTimeout(() => applyChatSearch(q), 120);
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); closeChatSearch(); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        navigateChatSearch(e.shiftKey ? -1 : 1);
+      }
+    });
+  }
+}
+
+function openChatSearch() {
+  if (!currentChatId) return;
+  chatSearchOpen = true;
+  const bar = document.getElementById("chat-search-bar");
+  const input = document.getElementById("chat-search-input");
+  bar.classList.remove("hidden");
+  input.value = "";
+  chatSearchMatches = [];
+  chatSearchIndex = -1;
+  updateChatSearchUI();
+  setTimeout(() => input.focus(), 60);
+}
+
+function closeChatSearch() {
+  chatSearchOpen = false;
+  const bar = document.getElementById("chat-search-bar");
+  if (bar) bar.classList.add("hidden");
+  const input = document.getElementById("chat-search-input");
+  if (input) input.value = "";
+  chatSearchMatches = [];
+  chatSearchIndex = -1;
+  document.querySelectorAll(".msg.search-hidden, .msg-system.search-hidden").forEach((el) => {
+    el.classList.remove("search-hidden", "search-current");
+  });
+  updateChatSearchUI();
+}
+
+function applyChatSearch(query) {
+  const q = query.trim().toLowerCase();
+  const all = document.querySelectorAll("#messages .msg, #messages .msg-system");
+
+  // Сбрасываем предыдущий результат
+  all.forEach((el) => el.classList.remove("search-hidden", "search-current"));
+  chatSearchMatches = [];
+
+  if (!q) {
+    chatSearchIndex = -1;
+    updateChatSearchUI();
+    return;
+  }
+
+  all.forEach((el) => {
+    const id = el.dataset.id;
+    const m = msgCache.get(id);
+    if (!m) { el.classList.add("search-hidden"); return; }
+    const text = (m.content || "").toLowerCase();
+    const matched = text.indexOf(q) !== -1;
+    if (matched) chatSearchMatches.push(el);
+    else el.classList.add("search-hidden");
+  });
+
+  chatSearchIndex = chatSearchMatches.length ? 0 : -1;
+  if (chatSearchIndex >= 0) jumpToChatSearchMatch();
+  updateChatSearchUI();
+}
+
+function navigateChatSearch(dir) {
+  if (!chatSearchMatches.length) return;
+  chatSearchIndex = (chatSearchIndex + dir + chatSearchMatches.length) % chatSearchMatches.length;
+  jumpToChatSearchMatch();
+  updateChatSearchUI();
+}
+
+function jumpToChatSearchMatch() {
+  chatSearchMatches.forEach((el, i) => el.classList.toggle("search-current", i === chatSearchIndex));
+  const el = chatSearchMatches[chatSearchIndex];
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function updateChatSearchUI() {
+  const countEl = document.getElementById("chat-search-count");
+  const prevBtn = document.getElementById("chat-search-prev");
+  const nextBtn = document.getElementById("chat-search-next");
+  if (!countEl) return;
+  const total = chatSearchMatches.length;
+  if (!total) {
+    countEl.textContent = document.getElementById("chat-search-input").value.trim() ? "0 / 0" : "";
+    if (prevBtn) prevBtn.disabled = true;
+    if (nextBtn) nextBtn.disabled = true;
+    return;
+  }
+  countEl.textContent = `${chatSearchIndex + 1} / ${total}`;
+  if (prevBtn) prevBtn.disabled = false;
+  if (nextBtn) nextBtn.disabled = false;
 }
 
 // ======================================================
