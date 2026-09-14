@@ -431,6 +431,13 @@
           </div>
         </div>
         <div class="profile-info-row" id="channel-profile-subs-row" style="cursor:pointer;border-radius:8px;">
+        <div class="profile-info-row hidden" id="channel-profile-requests-row" style="cursor:pointer;border-radius:8px;">
+          <span class="pir-icon">📩</span>
+          <div class="pir-body">
+            <div class="pir-value" id="channel-profile-requests">0</div>
+            <div class="pir-label">Заявок на вступление · нажми, чтобы посмотреть</div>
+          </div>
+        </div>
           <span class="pir-icon">👥</span>
           <div class="pir-body">
             <div class="pir-value" id="channel-profile-subscribers">0</div>
@@ -496,6 +503,18 @@
         <div class="username-hint" id="channel-username-hint"></div>
       </div>
 
+      <div class="profile-section">
+        <div class="profile-label">Тип канала</div>
+        <div class="visibility-toggle" id="channel-visibility-toggle">
+          <button type="button" data-vis="public">Открытый</button>
+          <button type="button" data-vis="request">По заявке</button>
+          <button type="button" data-vis="private">Приватный</button>
+        </div>
+        <div class="username-hint" id="channel-visibility-hint">
+          Открытый — любой может подписаться. По заявке — нужна одобренная заявка. Приватный — только по ссылке-приглашению.
+        </div>
+      </div>
+
       <div class="dialog-actions">
         <button class="dialog-btn dialog-primary" id="channel-create-confirm" disabled>Создать канал</button>
         <button class="dialog-btn dialog-cancel" id="channel-create-cancel">Отмена</button>
@@ -528,6 +547,18 @@
           <input type="text" id="channel-edit-username-input" placeholder="username" maxlength="32" autocomplete="off" spellcheck="false">
         </div>
         <div class="username-hint" id="channel-edit-username-hint"></div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Тип канала</div>
+        <div class="visibility-toggle" id="channel-edit-visibility-toggle">
+          <button type="button" data-vis="public">Открытый</button>
+          <button type="button" data-vis="request">По заявке</button>
+          <button type="button" data-vis="private">Приватный</button>
+        </div>
+        <div class="username-hint" id="channel-edit-visibility-hint">
+          Открытый — любой может подписаться. По заявке — нужна одобренная заявка. Приватный — только по ссылке-приглашению.
+        </div>
       </div>
 
       <div class="profile-section">
@@ -572,6 +603,16 @@
       <div id="invite-list" class="invite-list"></div>
       <div class="dialog-actions">
         <button class="dialog-btn dialog-cancel" id="invite-close-btn">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="channel-requests-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title">Заявки на вступление</div>
+      <div id="channel-requests-list" class="admins-list" style="max-height:60vh;overflow-y:auto;"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="channel-requests-close">Закрыть</button>
       </div>
     </div>
   </div>

@@ -222,6 +222,11 @@ let currentInvitesList = [];
 let openSeq = 0;
 // Заморозка авто-переключения закрепа при jump (мс)
 let pinBarFrozenUntil = 0;
+// Типы каналов + заявки
+let channelCreateVisibility = "public";
+let channelEditVisibility = "public";
+let currentChannelHasRequest = false;
+let channelRequestsChannel = null;
 
 // ======================= 3. АКЦЕНТ / АВАТАРЫ =======================
 function applyAccent(accent) { document.documentElement.setAttribute("data-accent", accent || "orange"); }
@@ -332,6 +337,7 @@ async function initApp() {
   setupChatSearch(); setupScrollBottomButton();
   setupChatPins(); setupInviteUI();
   subscribeToPins();
+  subscribeToChannelRequests();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
   setupBirthdayClose(); setupTokensDialog(); setupChannelCreate(); setupChannelEdit();
   supabase.from("profiles").select("id").limit(1).then(() => {});
@@ -1288,19 +1294,38 @@ async function updateChannelComposerState() {
   const actionBar = document.getElementById("channel-action-bar");
   const subBtn = document.getElementById("channel-subscribe-btn");
   if (!currentChannelObj) return;
+
   if (currentChannelIsAdmin) {
     composer.classList.remove("hidden");
     actionBar.classList.add("hidden");
-  } else {
-    composer.classList.add("hidden");
-    actionBar.classList.remove("hidden");
-    if (currentChannelIsSubscribed) {
-      subBtn.textContent = "Отписаться";
-      subBtn.classList.add("unsub");
+    subBtn.disabled = false;
+    return;
+  }
+
+  composer.classList.add("hidden");
+  actionBar.classList.remove("hidden");
+  subBtn.classList.remove("unsub");
+  subBtn.disabled = false;
+
+  if (currentChannelIsSubscribed) {
+    subBtn.textContent = "Отписаться";
+    subBtn.classList.add("unsub");
+    return;
+  }
+
+  const vis = currentChannelObj.visibility || "public";
+  if (vis === "request") {
+    if (currentChannelHasRequest) {
+      subBtn.textContent = "Заявка отправлена";
+      subBtn.disabled = true;
     } else {
-      subBtn.textContent = "Подписаться";
-      subBtn.classList.remove("unsub");
+      subBtn.textContent = "Подать заявку";
     }
+  } else if (vis === "private") {
+    subBtn.textContent = "Только по ссылке-приглашению";
+    subBtn.disabled = true;
+  } else {
+    subBtn.textContent = "Подписаться";
   }
 }
 
@@ -1347,6 +1372,15 @@ async function openChannel(chatId) {
   if (mySeq !== openSeq) return;
   currentChannelIsSubscribed = !!memRes.data;
   currentChannelIsAdmin = !!isAdmin;
+
+  // Проверим, есть ли у нас активная заявка на этот канал
+  currentChannelHasRequest = false;
+  if (ch.visibility === "request" && !currentChannelIsSubscribed && !currentChannelIsAdmin) {
+    const { data: req } = await supabase.from("channel_join_requests")
+      .select("id").eq("chat_id", ch.id).eq("user_id", currentUser.id).maybeSingle();
+    if (mySeq !== openSeq) return;
+    currentChannelHasRequest = !!req;
+  }
 
   // Подписки realtime — как можно раньше
   subscribeToChannelViews(chatId);
@@ -1562,7 +1596,9 @@ async function performSearch(query) {
     });
   }
 
-  const channels = channelsRes.data || [];
+  let channels = channelsRes.data || [];
+  // Приватные каналы не показываем в поиске (только по ссылке-приглашению)
+  channels = channels.filter((c) => (c.visibility || "public") !== "private");
   if (!resultIds.size && !channels.length) {
     listEl.innerHTML = `<div class="empty">Никого не найдено по «${escapeHtml(query)}»</div>`;
     return;
@@ -1986,10 +2022,17 @@ async function loadMessages(chatId, mySeq) {
   if (error) { box.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
 
   box.innerHTML = "";
+  const isChannel = currentChannelObj && currentChannelObj.id === chatId;
+
+  // Канал «по заявке» — читать сообщения можно только подписчикам
+  if (isChannel && !currentChannelIsSubscribed && !currentChannelIsAdmin && currentChannelObj.visibility === "request") {
+    box.innerHTML = '<div class="empty">Вы не являетесь подписчиком.<br>Подайте заявку, чтобы читать сообщения.</div>';
+    return;
+  }
+
   const all = data || [];
   all.forEach((m) => msgCache.set(m.id, m));
   const visible = all.filter((m) => !hiddenMsgIds.has(m.id));
-  const isChannel = currentChannelObj && currentChannelObj.id === chatId;
 
   if (visible.length === 0) {
     box.innerHTML = isChannel
@@ -2681,6 +2724,15 @@ function setupChatMenu() {
   const subsRow = document.getElementById("channel-profile-subs-row");
   if (subsRow) subsRow.addEventListener("click", openChannelSubscribersDialog);
 
+  // Клик по строке «Заявки» в профиле канала
+  const reqRow = document.getElementById("channel-profile-requests-row");
+  if (reqRow) reqRow.addEventListener("click", openChannelRequestsDialog);
+  // Закрытие оверлея заявок
+  const reqClose = document.getElementById("channel-requests-close");
+  if (reqClose) reqClose.addEventListener("click", () => {
+    document.getElementById("channel-requests-overlay").classList.add("hidden");
+  });
+
   const chMenuBtn = document.getElementById("channel-profile-menu-btn");
   const chMenu = document.getElementById("channel-profile-menu");
   chMenuBtn.addEventListener("click", (e) => {
@@ -2927,6 +2979,7 @@ function openMsgContextMenu(e, msgId) {
 
   // Все эти кнопки прячем по умолчанию, потом показываем только нужные
   if (editBtn)  editBtn.classList.add("hidden");
+  if (replyBtn) replyBtn.classList.add("hidden");
   if (pinBtn)   pinBtn.classList.add("hidden");
   if (delBtn)   delBtn.classList.add("hidden");
 
@@ -4292,10 +4345,12 @@ function setupChannelCreate() {
 
   // Кнопка подписки — надёжный вариант через явный select → delete/insert
   const subBtn = document.getElementById("channel-subscribe-btn");
+  const subBtn = document.getElementById("channel-subscribe-btn");
   if (subBtn) subBtn.addEventListener("click", async () => {
     if (!currentChannelObj) return;
     subBtn.disabled = true;
     const chId = currentChannelObj.id;
+    const vis = currentChannelObj.visibility || "public";
     try {
       const { data: existing } = await supabase.from("chat_members")
         .select("chat_id").eq("chat_id", chId).eq("user_id", currentUser.id).limit(1);
@@ -4307,6 +4362,13 @@ function setupChannelCreate() {
         if (error) { await showAlertDialog("Ошибка отписки", error.message); return; }
         currentChannelIsSubscribed = false;
         removeChatFromList(chId);
+      } else if (vis === "request") {
+        const { error } = await supabase.rpc("submit_join_request", { p_chat_id: chId });
+        if (error) { await showAlertDialog("Ошибка", error.message); return; }
+        currentChannelHasRequest = true;
+      } else if (vis === "private") {
+        await showAlertDialog("Приватный канал", "В этот канал можно попасть только по ссылке-приглашению.");
+        return;
       } else {
         const { error } = await supabase.from("chat_members").insert({
           chat_id: chId, user_id: currentUser.id,
@@ -4329,6 +4391,15 @@ function setupChannelCreate() {
       subBtn.disabled = false;
     }
   });
+  // Тип канала при создании
+  const visToggle = document.getElementById("channel-visibility-toggle");
+  if (visToggle) {
+    visToggle.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-vis]"); if (!btn) return;
+      channelCreateVisibility = btn.dataset.vis;
+      visToggle.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.vis === channelCreateVisibility));
+    });
+  }
 }
 
 function updateChannelCreateButton() {
@@ -4341,6 +4412,11 @@ function updateChannelCreateButton() {
 function openChannelCreateDialog() {
   channelCreateAvatarUrl = "color:0";
   channelUsernameValidated = null;
+  channelCreateVisibility = "public";
+  const visToggle = document.getElementById("channel-visibility-toggle");
+  if (visToggle) {
+    visToggle.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.vis === "public"));
+  }
   document.getElementById("channel-name-input").value = "";
   document.getElementById("channel-username-input").value = "";
   const hint = document.getElementById("channel-username-hint");
@@ -4439,6 +4515,7 @@ async function createChannel() {
       name,
       avatar_url: channelCreateAvatarUrl,
       owner_id: currentUser.id,
+      visibility: channelCreateVisibility,
     });
     if (chanErr) {
       await supabase.from("chats").delete().eq("id", newChat.id);
@@ -4541,10 +4618,28 @@ async function openChannelProfileDialog() {
   currentChannelTotalViews = Number(totalViews) || 0;
   document.getElementById("channel-profile-views").textContent = String(currentChannelTotalViews);
 
+  const isOwner = ch.owner_id === currentUser.id;
+  const isAdmin = currentChannelIsAdmin;
   const menuBtn = document.getElementById("channel-profile-menu-btn");
-  menuBtn.classList.toggle("hidden", ch.owner_id !== currentUser.id);
-  document.getElementById("channel-profile-menu").classList.add("hidden");
+  menuBtn.classList.toggle("hidden", !isOwner);
 
+  // Вкладка «Заявки» — только для владельца и админов
+  const requestsRow = document.getElementById("channel-profile-requests-row");
+  if (requestsRow) {
+    if (isOwner || isAdmin) {
+      requestsRow.classList.remove("hidden");
+      const { data: cnt } = await supabase.rpc("count_pending_requests", { p_chat_id: ch.id });
+      const n = Number(cnt) || 0;
+      document.getElementById("channel-profile-requests").textContent = String(n);
+      const word = pluralRu(n, "заявка", "заявки", "заявок");
+      const sub = requestsRow.querySelector(".pir-label");
+      if (sub) sub.textContent = `${n} ${word} · нажми, чтобы посмотреть`;
+    } else {
+      requestsRow.classList.add("hidden");
+    }
+  }
+
+  document.getElementById("channel-profile-menu").classList.add("hidden");
   document.getElementById("channel-profile-overlay").classList.remove("hidden");
 }
 
@@ -4586,13 +4681,24 @@ async function deleteChannelDialog() {
 }
 
 async function joinAndOpenChannel(ch) {
-  // Очищаем поле поиска и крестик — чтобы поиск не оставался активным
   const searchInput = document.getElementById("search-input");
   const clearBtn = document.getElementById("search-clear");
   if (searchInput) searchInput.value = "";
   if (clearBtn) clearBtn.classList.add("hidden");
-  // Список чатов догружаем ФОНОМ, не блокируя открытие канала
   loadRecentChats().catch(() => {});
+
+  // Для «по заявке» и «приватный» — не подписываем автоматически
+  const vis = ch.visibility || "public";
+  if (vis !== "public") {
+    await openChannel(ch.id);
+    return;
+  }
+
+  // Публичный — автоподписка, затем открытие
+  await supabase.from("chat_members").upsert(
+    { chat_id: ch.id, user_id: currentUser.id },
+    { ignoreDuplicates: true }
+  );
   await openChannel(ch.id);
 }
 
@@ -4621,6 +4727,16 @@ function setupChannelEdit() {
   document.getElementById("channel-subs-close").addEventListener("click", () => {
     document.getElementById("channel-subs-overlay").classList.add("hidden");
   });
+
+  // Тип канала при редактировании
+  const editVisToggle = document.getElementById("channel-edit-visibility-toggle");
+  if (editVisToggle) {
+    editVisToggle.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-vis]"); if (!btn) return;
+      channelEditVisibility = btn.dataset.vis;
+      editVisToggle.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.vis === channelEditVisibility));
+    });
+  }
 
   subscribeToChannelAdmins();
 }
@@ -4654,6 +4770,12 @@ function openChannelEditDialog() {
   const hint = document.getElementById("channel-edit-username-hint");
   hint.className = "username-hint";
   hint.textContent = "";
+
+  channelEditVisibility = ch.visibility || "public";
+  const editVisToggle = document.getElementById("channel-edit-visibility-toggle");
+  if (editVisToggle) {
+    editVisToggle.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.vis === channelEditVisibility));
+  }
 
   renderChannelEditAvatarGrid();
   renderChannelEditReactions();
@@ -4811,6 +4933,7 @@ async function saveChannelEdit() {
       username,
       avatar_url: channelEditAvatarUrl,
       available_reactions: reactions,
+      visibility: channelEditVisibility,
     };
 
     const { error } = await supabase.from("channels").update(payload).eq("id", ch.id);
@@ -5475,4 +5598,96 @@ async function tryJoinFromInviteUrl() {
     console.error(e);
     await showAlertDialog("Ошибка", e.message || String(e));
   }
+}
+
+// ======================================================
+// 37. ЗАЯВКИ НА ВСТУПЛЕНИЕ В КАНАЛ
+// ======================================================
+
+async function openChannelRequestsDialog() {
+  if (!currentChannelObj) return;
+  const ch = currentChannelObj;
+  const overlay = document.getElementById("channel-requests-overlay");
+  const listEl = document.getElementById("channel-requests-list");
+
+  listEl.innerHTML = '<div class="empty">Загрузка...</div>';
+  overlay.classList.remove("hidden");
+
+  const { data: reqs, error } = await supabase.from("channel_join_requests")
+    .select("id, user_id, created_at").eq("chat_id", ch.id)
+    .order("created_at", { ascending: true });
+  if (error) { listEl.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
+  if (!reqs || !reqs.length) { listEl.innerHTML = '<div class="empty">Нет активных заявок</div>'; return; }
+
+  const profiles = [];
+  for (const r of reqs) {
+    const p = await getProfile(r.user_id);
+    if (p) profiles.push({ ...p, _requestId: r.id });
+  }
+
+  listEl.innerHTML = profiles.map((p) => `
+    <div class="admin-row" data-request-id="${p._requestId}">
+      <div class="avatar"></div>
+      <div class="admin-row-name">
+        ${escapeHtml(p.display_name)}
+        <div class="admin-row-username">@${escapeHtml(p.username)}</div>
+      </div>
+      <button type="button" class="request-approve" data-approve="${p._requestId}" title="Одобрить">✓</button>
+      <button type="button" class="request-reject" data-reject="${p._requestId}" title="Отклонить">✕</button>
+    </div>
+  `).join("");
+
+  listEl.querySelectorAll(".admin-row").forEach((row) => {
+    const p = profiles.find((x) => x._requestId === row.dataset.requestId);
+    paintAvatar(row.querySelector(".avatar"), p);
+  });
+
+  listEl.querySelectorAll("[data-approve]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      const { error } = await supabase.rpc("approve_join_request", { p_request_id: btn.dataset.approve });
+      btn.disabled = false;
+      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      await openChannelRequestsDialog(); // перерисовать
+      await refreshChannelRights(ch.id);
+    });
+  });
+  listEl.querySelectorAll("[data-reject]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      const { error } = await supabase.rpc("reject_join_request", { p_request_id: btn.dataset.reject });
+      btn.disabled = false;
+      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      await openChannelRequestsDialog();
+    });
+  });
+}
+
+function subscribeToChannelRequests() {
+  if (channelRequestsChannel) return;
+  channelRequestsChannel = supabase.channel("channel-requests-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "channel_join_requests" }, async (payload) => {
+      const row = payload.new || payload.old;
+      if (!row) return;
+      // Обновляем бейдж на открытом профиле
+      if (channelProfileChannelId === row.chat_id) {
+        const requestsRow = document.getElementById("channel-profile-requests-row");
+        if (requestsRow && !requestsRow.classList.contains("hidden")) {
+          const { data: cnt } = await supabase.rpc("count_pending_requests", { p_chat_id: row.chat_id });
+          const n = Number(cnt) || 0;
+          document.getElementById("channel-profile-requests").textContent = String(n);
+          const word = pluralRu(n, "заявка", "заявки", "заявок");
+          const sub = requestsRow.querySelector(".pir-label");
+          if (sub) sub.textContent = `${n} ${word} · нажми, чтобы посмотреть`;
+        }
+      }
+      // Если открыт список заявок — перерисовать
+      if (currentChannelObj && currentChannelObj.id === row.chat_id) {
+        const overlay = document.getElementById("channel-requests-overlay");
+        if (overlay && !overlay.classList.contains("hidden")) {
+          await openChannelRequestsDialog();
+        }
+      }
+    })
+    .subscribe();
 }
