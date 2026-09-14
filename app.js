@@ -206,6 +206,12 @@ let chatSearchOpen = false;
 let chatSearchMatches = [];
 let chatSearchIndex = -1;
 let chatSearchDebounce = null;
+// Закреплённые сообщения
+let currentPinnedList = [];
+let currentPinnedIndex = -1;
+let pinsChannel = null;
+// Ссылки-приглашения
+let currentInvitesList = [];
 
 // ======================= 3. АКЦЕНТ / АВАТАРЫ =======================
 function applyAccent(accent) { document.documentElement.setAttribute("data-accent", accent || "orange"); }
@@ -314,6 +320,8 @@ function showAuth() {
 async function initApp() {
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
   setupChatSearch(); setupScrollBottomButton();
+  setupChatPins(); setupInviteUI();
+  subscribeToPins();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
   setupBirthdayClose(); setupTokensDialog(); setupChannelCreate(); setupChannelEdit();
   supabase.from("profiles").select("id").limit(1).then(() => {});
@@ -367,6 +375,8 @@ async function initApp() {
       if (currentChatId) markChatRead(currentChatId);
     }
   });
+  // Обработка приглашения из URL (#invite=CODE)
+  setTimeout(() => { tryJoinFromInviteUrl(); }, 400);
 }
 
 async function pollMyMessageStatuses() {
@@ -1291,6 +1301,7 @@ async function openChannel(chatId) {
   currentChannelViewsMap = new Map();
   currentChannelTotalViews = 0;
   closeChatSearch();
+  resetPinsUI();
   const sbBtn = document.getElementById("scroll-bottom-btn");
   if (sbBtn) sbBtn.classList.remove("visible");
 
@@ -1823,6 +1834,7 @@ async function openChatWith(otherUser) {
   currentOtherUser = otherUser; pendingOtherUser = null;
   currentChannelObj = null; currentChannelIsAdmin = false;
   closeChatSearch();
+  resetPinsUI();
   const sbBtn = document.getElementById("scroll-bottom-btn");
   if (sbBtn) sbBtn.classList.remove("visible");
   document.getElementById("message-input").setAttribute("contenteditable", "true");
@@ -1980,6 +1992,7 @@ async function loadMessages(chatId) {
       });
     } catch (e) { console.warn(e); }
   }
+  await loadPinned(chatId);
 }
 
 async function loadReactionsForVisibleMessages() {
@@ -2413,6 +2426,13 @@ function subscribeToChat(chatId) {
         if (!id) return;
         msgCache.delete(id); reactionsCache.delete(id);
         subtractViewsForDeletedMessage(id);
+        const pinIdx = currentPinnedList.findIndex((p) => p.message_id === id);
+        if (pinIdx !== -1) {
+          currentPinnedList.splice(pinIdx, 1);
+          if (currentPinnedIndex >= currentPinnedList.length) currentPinnedIndex = currentPinnedList.length - 1;
+          renderPinBar();
+          updatePinButtonCount(currentPinnedList.length);
+        }
         const el = document.querySelector(`[data-id="${id}"]`);
         if (el) el.remove();
         checkEmptyChat();
@@ -2572,6 +2592,9 @@ function setupChatMenu() {
     } else if (action === "channel-profile") {
       if (!currentChannelObj) return;
       openChannelProfileDialog();
+    } else if (action === "channel-invite") {
+      if (!currentChannelObj) return;
+      openInviteDialog();
     } else if (action === "channel-unsubscribe") {
       if (!currentChannelObj) return;
       const ok = await showConfirmDialog("Отписаться", `Отписаться от канала «${currentChannelObj.name}»?`, "Отписаться");
@@ -2742,6 +2765,7 @@ function setupMessageMenu() {
     closeMsgContextMenu();
     if (!id) return;
     if (action === "reply") startReply(id);
+    else if (action === "pin") await handlePinAction(id);
     else if (action === "copy") copyMessageText(id);
     else if (action === "edit") startEdit(id);
     else if (action === "react") openPickerForContext(id);
@@ -2833,6 +2857,7 @@ function openMsgContextMenu(e, msgId) {
   if (selectionMode) return;
   e.preventDefault(); e.stopPropagation();
   contextMsgId = msgId;
+  updatePinMenuLabel(msgId);
   const msg = msgCache.get(msgId);
   const editBtn = document.querySelector('#msg-context-menu button[data-action="edit"]');
   const replyBtn = document.querySelector('#msg-context-menu button[data-action="reply"]');
@@ -4378,7 +4403,7 @@ function resetChatMenuToDm() {
     const b = menu.querySelector(`[data-action="${a}"]`);
     if (b) b.classList.remove("hidden");
   });
-  ["channel-profile", "channel-configure", "channel-unsubscribe", "channel-delete"].forEach((a) => {
+  ["channel-profile", "channel-configure", "channel-unsubscribe", "channel-delete", "channel-invite"].forEach((a) => {
     const b = menu.querySelector(`[data-action="${a}"]`);
     if (b) b.classList.add("hidden");
   });
@@ -4404,6 +4429,9 @@ function configureChatMenuForChannel(ch) {
   // Настроить — для админов и владельца
   const confBtn = menu.querySelector('[data-action="channel-configure"]');
   if (confBtn) confBtn.classList.toggle("hidden", !isAdmin);
+  // Пригласить — только owner/admin
+  const invBtn = menu.querySelector('[data-action="channel-invite"]');
+  if (invBtn) invBtn.classList.toggle("hidden", !isAdmin);
   // Удалить — только владелец
   const delBtn = menu.querySelector('[data-action="channel-delete"]');
   if (delBtn) delBtn.classList.toggle("hidden", !isOwner);
@@ -4987,4 +5015,324 @@ async function openChannelSubscribersDialog() {
     const p = profiles.find((x) => x.id === row.dataset.userId);
     paintAvatar(row.querySelector(".avatar"), p);
   });
+}
+
+// ======================================================
+// 35. ЗАКРЕПЛЁННЫЕ СООБЩЕНИЯ
+// ======================================================
+
+function setupChatPins() {
+  const btn = document.getElementById("chat-pin-btn");
+  const bar = document.getElementById("pin-bar");
+  const listBtn = document.getElementById("pin-bar-list");
+  const closeBtn = document.getElementById("pinned-list-close");
+
+  if (btn) btn.addEventListener("click", openPinnedListDialog);
+  if (closeBtn) closeBtn.addEventListener("click", () => {
+    document.getElementById("pinned-list-overlay").classList.add("hidden");
+  });
+  if (listBtn) listBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openPinnedListDialog();
+  });
+  if (bar) bar.addEventListener("click", () => {
+    const pin = currentPinnedList[currentPinnedIndex];
+    if (pin) jumpToMessage(pin.message_id);
+  });
+
+  const box = document.getElementById("messages");
+  if (box) box.addEventListener("scroll", () => updateCurrentPinnedByScroll(), { passive: true });
+}
+
+function resetPinsUI() {
+  currentPinnedList = [];
+  currentPinnedIndex = -1;
+  const bar = document.getElementById("pin-bar");
+  if (bar) bar.classList.add("hidden");
+  updatePinButtonCount(0);
+}
+
+function updatePinButtonCount(n) {
+  const badge = document.getElementById("pin-count-badge");
+  if (!badge) return;
+  if (n > 0) {
+    badge.textContent = String(n);
+    badge.classList.remove("hidden");
+  } else {
+    badge.classList.add("hidden");
+  }
+}
+
+async function loadPinned(chatId) {
+  currentPinnedList = [];
+  currentPinnedIndex = -1;
+  if (!chatId) { resetPinsUI(); return; }
+  const { data: pins, error } = await supabase.from("pinned_messages")
+    .select("*").eq("chat_id", chatId).order("pinned_at", { ascending: false });
+  if (error) { console.warn("loadPinned:", error); resetPinsUI(); return; }
+  if (!pins || !pins.length) { resetPinsUI(); return; }
+
+  const msgIds = pins.map((p) => p.message_id);
+  const { data: msgs } = await supabase.from("messages").select("*").in("id", msgIds);
+  const msgMap = new Map((msgs || []).map((m) => [m.id, m]));
+
+  currentPinnedList = pins
+    .filter((p) => msgMap.has(p.message_id))
+    .map((p) => ({ ...p, _msg: msgMap.get(p.message_id) }))
+    .sort((a, b) => new Date(a._msg.created_at) - new Date(b._msg.created_at));
+
+  updatePinButtonCount(currentPinnedList.length);
+
+  if (!currentPinnedList.length) { resetPinsUI(); return; }
+  currentPinnedIndex = 0;
+  renderPinBar();
+}
+
+function renderPinBar() {
+  const bar = document.getElementById("pin-bar");
+  const titleEl = document.getElementById("pin-bar-title");
+  const textEl = document.getElementById("pin-bar-text");
+  if (!bar) return;
+  if (!currentPinnedList.length) { bar.classList.add("hidden"); return; }
+  bar.classList.remove("hidden");
+  const pin = currentPinnedList[currentPinnedIndex];
+  if (!pin) { bar.classList.add("hidden"); return; }
+  const msg = pin._msg;
+  const preview = stripMarkdown(msg.content || "") || (msg.message_type === "gift" ? "🎁 Подарок" : msg.message_type === "tokens" ? "🧩 ImagiTokens" : "");
+  textEl.textContent = preview.slice(0, 80) || "(сообщение)";
+  const total = currentPinnedList.length;
+  titleEl.textContent = total > 1
+    ? `Закреплённое сообщение · ${currentPinnedIndex + 1} из ${total}`
+    : "Закреплённое сообщение";
+}
+
+function updateCurrentPinnedByScroll() {
+  if (!currentPinnedList.length) return;
+  const box = document.getElementById("messages");
+  if (!box) return;
+  const scrollTop = box.scrollTop;
+  let bestIdx = 0;
+  for (let i = 0; i < currentPinnedList.length; i++) {
+    const el = document.querySelector(`[data-id="${currentPinnedList[i].message_id}"]`);
+    if (!el) continue;
+    if (el.offsetTop <= scrollTop + 60) bestIdx = i;
+    else break;
+  }
+  if (bestIdx !== currentPinnedIndex) {
+    currentPinnedIndex = bestIdx;
+    renderPinBar();
+  }
+}
+
+function updatePinMenuLabel(msgId) {
+  const pinBtn = document.querySelector('#msg-context-menu button[data-action="pin"]');
+  if (!pinBtn) return;
+  const myPin = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "personal" && p.pinned_by === currentUser.id);
+  const sharedPin = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "shared");
+  if (myPin && sharedPin) pinBtn.textContent = "📌 Открепить";
+  else if (myPin) pinBtn.textContent = "📌 Открепить (у меня)";
+  else if (sharedPin) pinBtn.textContent = "📌 Открепить (у обоих)";
+  else pinBtn.textContent = "📌 Закрепить";
+}
+
+async function handlePinAction(msgId) {
+  if (!currentChatId) return;
+  const msg = msgCache.get(msgId);
+  if (!msg) return;
+  if (msg.message_type === "tokens") return;
+
+  // Канал: только shared
+  if (currentChannelObj) {
+    const existing = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "shared");
+    if (existing) {
+      const ok = await showConfirmDialog("Открепить", "Открепить это сообщение в канале?", "Открепить");
+      if (!ok) return;
+      const { error } = await supabase.from("pinned_messages").delete().eq("id", existing.id);
+      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    } else {
+      const { error } = await supabase.from("pinned_messages").insert({
+        chat_id: currentChatId, message_id: msgId, pinned_by: currentUser.id, scope: "shared",
+      });
+      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    }
+    await loadPinned(currentChatId);
+    return;
+  }
+
+  // DM: personal / shared
+  const myPin = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "personal" && p.pinned_by === currentUser.id);
+  const sharedPin = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "shared");
+
+  const opts = [];
+  if (!myPin) opts.push({ label: "📌 Закрепить у меня", value: "pin_me" });
+  else opts.push({ label: "📌 Открепить у меня", value: "unpin_me" });
+  if (!sharedPin) opts.push({ label: "📌 Закрепить у обоих", value: "pin_both" });
+  else opts.push({ label: "📌 Открепить у обоих", value: "unpin_both" });
+
+  const choice = await showChoiceDialog("Закрепление", "Что сделать?", opts, "ОК");
+  if (!choice) return;
+
+  if (choice === "pin_me") {
+    const { error } = await supabase.from("pinned_messages").insert({
+      chat_id: currentChatId, message_id: msgId, pinned_by: currentUser.id, scope: "personal",
+    });
+    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  } else if (choice === "unpin_me" && myPin) {
+    const { error } = await supabase.from("pinned_messages").delete().eq("id", myPin.id);
+    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  } else if (choice === "pin_both") {
+    const { error } = await supabase.from("pinned_messages").insert({
+      chat_id: currentChatId, message_id: msgId, pinned_by: currentUser.id, scope: "shared",
+    });
+    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  } else if (choice === "unpin_both" && sharedPin) {
+    const { error } = await supabase.from("pinned_messages").delete().eq("id", sharedPin.id);
+    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  }
+
+  await loadPinned(currentChatId);
+}
+
+function openPinnedListDialog() {
+  if (!currentPinnedList.length) {
+    showAlertDialog("Закреплённые", "Пока нет закреплённых сообщений.");
+    return;
+  }
+  const listEl = document.getElementById("pinned-list");
+  listEl.innerHTML = currentPinnedList.map((pin, idx) => {
+    const msg = pin._msg;
+    const time = new Date(msg.created_at).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const preview = stripMarkdown(msg.content || "") || (msg.message_type === "gift" ? "🎁 Подарок" : msg.message_type === "tokens" ? "🧩 ImagiTokens" : "(без текста)");
+    const sender = profileCache.get(msg.sender_id);
+    const senderName = msg.sender_id === currentUser.id ? "Вы" : (sender ? sender.display_name : "—");
+    const scopeLabel = pin.scope === "shared" ? "Общий" : "Личный";
+    return `
+      <div class="pinned-list-item" data-pin-idx="${idx}">
+        <div class="pinned-list-item-head">
+          <span class="pinned-list-item-sender">${escapeHtml(senderName)}</span>
+          <span class="pinned-list-item-time">${time}</span>
+        </div>
+        <div class="pinned-list-item-text">${escapeHtml(preview.slice(0, 120))}</div>
+        <div class="pinned-list-item-scope">${scopeLabel}</div>
+      </div>`;
+  }).join("");
+
+  listEl.querySelectorAll(".pinned-list-item").forEach((el) => {
+    el.addEventListener("click", () => {
+      const idx = parseInt(el.dataset.pinIdx, 10);
+      const pin = currentPinnedList[idx];
+      document.getElementById("pinned-list-overlay").classList.add("hidden");
+      if (pin) jumpToMessage(pin.message_id);
+    });
+  });
+
+  document.getElementById("pinned-list-overlay").classList.remove("hidden");
+}
+
+function subscribeToPins() {
+  if (pinsChannel) return;
+  pinsChannel = supabase.channel("pins-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "pinned_messages" }, async (payload) => {
+      const row = payload.new || payload.old;
+      if (!row || !row.chat_id) return;
+      if (currentChatId === row.chat_id) {
+        await loadPinned(row.chat_id);
+      }
+    })
+    .subscribe();
+}
+
+// ======================================================
+// 36. ССЫЛКИ-ПРИГЛАШЕНИЯ
+// ======================================================
+
+function setupInviteUI() {
+  const closeBtn = document.getElementById("invite-close-btn");
+  const createBtn = document.getElementById("invite-create-btn");
+  if (closeBtn) closeBtn.addEventListener("click", () => {
+    document.getElementById("invite-overlay").classList.add("hidden");
+  });
+  if (createBtn) createBtn.addEventListener("click", async () => {
+    if (!currentChannelObj) return;
+    createBtn.disabled = true;
+    const { data: code, error } = await supabase.rpc("create_channel_invite", { p_chat_id: currentChannelObj.id });
+    createBtn.disabled = false;
+    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    await refreshInviteList();
+  });
+}
+
+async function openInviteDialog() {
+  if (!currentChannelObj) return;
+  document.getElementById("invite-overlay").classList.remove("hidden");
+  await refreshInviteList();
+}
+
+async function refreshInviteList() {
+  const listEl = document.getElementById("invite-list");
+  if (!currentChannelObj) return;
+  listEl.innerHTML = '<div class="empty">Загрузка...</div>';
+  const { data, error } = await supabase.from("channel_invites")
+    .select("*").eq("chat_id", currentChannelObj.id).eq("revoked", false)
+    .order("created_at", { ascending: false });
+  if (error) { listEl.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
+  currentInvitesList = data || [];
+  if (!currentInvitesList.length) {
+    listEl.innerHTML = '<div class="empty">Пока нет ссылок</div>';
+    return;
+  }
+  const baseUrl = window.location.origin + window.location.pathname;
+  listEl.innerHTML = currentInvitesList.map((inv) => {
+    const url = `${baseUrl}#invite=${inv.code}`;
+    return `
+      <div class="invite-item" data-invite-id="${inv.id}">
+        <span class="invite-item-code">${escapeHtml(url)}</span>
+        <button class="invite-item-copy" data-copy-code="${inv.code}" title="Скопировать">📋</button>
+        <button class="invite-item-revoke" data-revoke-id="${inv.id}" title="Отозвать">✕</button>
+      </div>`;
+  }).join("");
+
+  listEl.querySelectorAll("[data-copy-code]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const url = `${baseUrl}#invite=${btn.dataset.copyCode}`;
+      if (navigator.clipboard) navigator.clipboard.writeText(url).catch(() => {});
+      else {
+        const tmp = document.createElement("textarea");
+        tmp.value = url; document.body.appendChild(tmp); tmp.select();
+        document.execCommand("copy"); document.body.removeChild(tmp);
+      }
+      btn.textContent = "✓";
+      setTimeout(() => { btn.textContent = "📋"; }, 1200);
+    });
+  });
+  listEl.querySelectorAll("[data-revoke-id]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const ok = await showConfirmDialog("Отозвать ссылку", "Ссылка перестанет работать. Продолжить?", "Отозвать");
+      if (!ok) return;
+      const { error } = await supabase.from("channel_invites")
+        .update({ revoked: true }).eq("id", btn.dataset.revokeId);
+      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      await refreshInviteList();
+    });
+  });
+}
+
+async function tryJoinFromInviteUrl() {
+  const hash = window.location.hash || "";
+  const m = /[#&]invite=([A-Za-z0-9_-]+)/.exec(hash);
+  if (!m) return;
+  const code = m[1];
+  try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch (e) {}
+  if (!currentUser) return;
+  try {
+    const { data: chatId, error } = await supabase.rpc("join_channel_by_invite", { p_code: code });
+    if (error) { await showAlertDialog("Приглашение", error.message); return; }
+    await loadRecentChats();
+    if (chatId) await openChannel(chatId);
+  } catch (e) {
+    console.error(e);
+    await showAlertDialog("Ошибка", e.message || String(e));
+  }
 }

@@ -85,6 +85,7 @@
             <div class="chat-subtitle" id="chat-subtitle">@username</div>
           </div>
           <button id="chat-search-btn" class="icon-btn" title="Поиск в чате">🔍</button>
+          <button id="chat-pin-btn" class="icon-btn" title="Закреплённые">📌<span class="pin-count-badge hidden" id="pin-count-badge">0</span></button>
           <button id="chat-menu-btn" class="icon-btn" title="Меню">⋮</button>
           <div id="chat-menu" class="menu hidden">
             <button data-action="tokens">Отправить ImagiTokens</button>
@@ -92,6 +93,7 @@
             <button data-action="delete">Удалить чат</button>
             <button data-action="block" id="menu-block" class="danger">Заблокировать</button>
             <button data-action="channel-profile" class="hidden">Профиль канала</button>
+            <button data-action="channel-invite" class="hidden">🔗 Пригласить по ссылке</button>
             <button data-action="channel-configure" class="hidden">Настроить канал</button>
             <button data-action="channel-unsubscribe" class="hidden danger">Отписаться</button>
             <button data-action="channel-delete" class="hidden danger">Удалить канал</button>
@@ -112,6 +114,14 @@
         </div>
 
         <div class="messages" id="messages"></div>
+        <div id="pin-bar" class="pin-bar hidden">
+          <span class="pin-bar-icon">📌</span>
+          <div class="pin-bar-content">
+            <div class="pin-bar-title" id="pin-bar-title">Закреплённое сообщение</div>
+            <div class="pin-bar-text" id="pin-bar-text"></div>
+          </div>
+          <button class="pin-bar-list-btn" id="pin-bar-list" title="Все закрепы" type="button">⋯</button>
+        </div>
         <button id="scroll-bottom-btn" class="scroll-bottom-btn" title="Вниз">↓</button>
 
         <div id="reply-bar" class="reply-bar hidden">
@@ -307,6 +317,7 @@
 
   <div id="msg-context-menu" class="context-menu hidden">
     <button data-action="reply">Ответить</button>
+    <button data-action="pin">📌 Закрепить</button>
     <button data-action="copy">Копировать</button>
     <button data-action="edit">Изменить</button>
     <button data-action="react">Реакция</button>
@@ -539,6 +550,28 @@
       <div class="dialog-actions">
         <button class="dialog-btn dialog-primary" id="channel-edit-save">Сохранить</button>
         <button class="dialog-btn dialog-cancel" id="channel-edit-cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pinned-list-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title">Закреплённые сообщения</div>
+      <div id="pinned-list" class="pinned-list"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="pinned-list-close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="invite-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title">Ссылка-приглашение</div>
+      <div class="dialog-text">По ссылке любой сможет подписаться на канал.</div>
+      <button class="dialog-btn dialog-primary" id="invite-create-btn" style="width:100%;margin-bottom:12px;">Создать новую ссылку</button>
+      <div id="invite-list" class="invite-list"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="invite-close-btn">Закрыть</button>
       </div>
     </div>
   </div>
