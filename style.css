@@ -1847,3 +1847,152 @@ button:not(:disabled):active { transform: scale(0.97); }
   transition: background 0.15s, color 0.15s;
 }
 .birthday-calendar-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+/* ====================================================== */
+/* Кастомный календарь для дня рождения                  */
+/* ====================================================== */
+
+.birthday-calendar {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 100;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 0 15px 40px rgba(0,0,0,0.5);
+  min-width: 280px;
+  animation: popIn 0.12s ease-out;
+  user-select: none;
+}
+
+.bc-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.bc-title {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+.bc-nav {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+}
+.bc-nav:hover { background: var(--bg-hover); color: var(--text); }
+
+.bc-days-head {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.bc-days-head span {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 600;
+  padding: 4px 0;
+}
+
+.bc-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.bc-day {
+  aspect-ratio: 1;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+.bc-day:hover { background: var(--bg-hover); }
+.bc-day.other-month { color: var(--text-dim); opacity: 0.5; }
+.bc-day.today { color: var(--accent); font-weight: 700; }
+.bc-day.selected { background: var(--accent); color: #fff; font-weight: 700; }
+.bc-day.selected:hover { background: var(--accent-hover); }
+
+.bc-footer {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.bc-btn {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.bc-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+/* ====================================================== */
+/* Редактор канала: сетка реакций                         */
+/* ====================================================== */
+
+.reactions-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.reaction-toggle {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, border-color 0.12s, transform 0.1s;
+  padding: 0;
+  font-family: inherit;
+}
+.reaction-toggle:hover { transform: scale(1.05); }
+.reaction-toggle.on {
+  border-color: var(--accent);
+  background: rgba(255,140,66,0.12);
+}
+.reaction-toggle.off {
+  opacity: 0.4;
+  filter: grayscale(0.6);
+}

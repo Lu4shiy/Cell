@@ -508,35 +508,7 @@ function setupProfilePanel() {
     draftProfile.birthday = e.target.value.trim() || null; markProfileDirty();
   });
 
-  // Календарик: открывает нативный date-picker и подставляет выбранную дату
-  const bdCalendarBtn = document.getElementById("profile-birthday-calendar");
-  const bdPicker = document.getElementById("profile-birthday-picker");
-  if (bdCalendarBtn && bdPicker) {
-    bdCalendarBtn.addEventListener("click", () => {
-      // Синхронизируем с текущим текстом, если он в валидном формате
-      const cur = document.getElementById("profile-birthday").value.trim();
-      const norm = normalizeBirthday(cur);
-      if (norm) {
-        const parts = norm.split(".");
-        if (parts.length === 3) {
-          const y = parts[2].length === 2 ? "20" + parts[2] : parts[2];
-          bdPicker.value = `${y}-${parts[1]}-${parts[0]}`;
-        } else if (parts.length === 2) {
-          bdPicker.value = `2000-${parts[1]}-${parts[0]}`;
-        }
-      }
-      if (bdPicker.showPicker) bdPicker.showPicker();
-      else bdPicker.click();
-    });
-    bdPicker.addEventListener("change", () => {
-      const v = bdPicker.value; if (!v) return;
-      const [y, m, d] = v.split("-");
-      const inp = document.getElementById("profile-birthday");
-      inp.value = `${d}.${m}.${y}`;
-      draftProfile.birthday = inp.value;
-      markProfileDirty();
-    });
-  }
+  setupBirthdayCalendar();
   document.getElementById("profile-apply").addEventListener("click", applyProfileChanges);
   document.getElementById("profile-gifts-btn").addEventListener("click", () => openGiftsOverlay(currentUser.id));
 }
@@ -1643,11 +1615,12 @@ async function openChatWith(otherUser) {
   resetChatMenuToDm();
   document.getElementById("composer").classList.remove("hidden");
   document.getElementById("channel-action-bar").classList.add("hidden");
-  const searchInput = document.getElementById("search-input");
-  if (searchInput && searchInput.value.trim()) {
-    searchInput.value = "";
-    setTimeout(() => { if (!currentOtherUser) loadRecentChats(); }, 50);
-  }
+  const _searchInput = document.getElementById("search-input");
+  const _searchClear = document.getElementById("search-clear");
+  const wasSearch = _searchInput && _searchInput.value.trim().length > 0;
+  if (_searchInput) _searchInput.value = "";
+  if (_searchClear) _searchClear.classList.add("hidden");
+  if (wasSearch) loadRecentChats().catch(() => {});
   const itemEl = document.querySelector(`.user-item[data-user-id="${otherUser.id}"]`);
   const customName = itemEl ? itemEl.dataset.customName : null;
   paintAvatar(document.getElementById("chat-avatar"), otherUser);
@@ -1772,16 +1745,12 @@ async function loadMessages(chatId) {
   if (isChannel) {
     const nonMyMsgs = visible.filter((m) => m.sender_id !== currentUser.id);
     for (const m of nonMyMsgs) {
-      const { data: wasInserted, error: mvErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
-      if (mvErr) {
-        console.error("mark_message_viewed FAILED:", mvErr, "msgId:", m.id);
-        continue;
-      }
-      console.log("[views] msg", m.id, "inserted:", wasInserted);
-      if (wasInserted) {
-        const cur = currentChannelViewsMap.get(m.id) || 0;
-        currentChannelViewsMap.set(m.id, cur + 1);
-        updateMessageViewsInUI(m.id, cur + 1);
+      const { data: total, error: mvErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
+      if (mvErr) { console.error("mark_message_viewed FAILED:", mvErr, "msgId:", m.id); continue; }
+      if (total !== null && total !== undefined) {
+        const cnt = Number(total) || 0;
+        currentChannelViewsMap.set(m.id, cnt);
+        updateMessageViewsInUI(m.id, cnt);
       }
     }
   }
@@ -2160,12 +2129,12 @@ function subscribeToChat(chatId) {
         if (currentChannelObj) {
           if (currentChannelIsSubscribed) markChatRead(chatId);
           if (m.sender_id !== currentUser.id) {
-            const { data: wasInserted, error: mvErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
+            const { data: total, error: mvErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
             if (mvErr) console.error("mark_message_viewed (rt):", mvErr);
-            if (wasInserted) {
-              const cur = currentChannelViewsMap.get(m.id) || 0;
-              currentChannelViewsMap.set(m.id, cur + 1);
-              updateMessageViewsInUI(m.id, cur + 1);
+            if (total !== null && total !== undefined) {
+              const cnt = Number(total) || 0;
+              currentChannelViewsMap.set(m.id, cnt);
+              updateMessageViewsInUI(m.id, cnt);
             }
           }
         } else {
@@ -3013,6 +2982,157 @@ function normalizeBirthday(str) {
   let res = String(d).padStart(2, "0") + "." + String(mo).padStart(2, "0");
   if (m[3]) res += "." + m[3];
   return res;
+}
+
+// ======================================================
+// Кастомный календарь для дня рождения
+// ======================================================
+let bcViewYear = 2000;
+let bcViewMonth = 0; // 0..11
+
+function bcUpdateTitle() {
+  const months = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+  const t = document.getElementById("bc-title");
+  if (t) t.textContent = months[bcViewMonth] + " " + bcViewYear;
+}
+
+function bcRender() {
+  bcUpdateTitle();
+  const grid = document.getElementById("bc-days");
+  if (!grid) return;
+  grid.innerHTML = "";
+
+  const first = new Date(bcViewYear, bcViewMonth, 1);
+  const startWeekday = (first.getDay() + 6) % 7; // Пн=0..Вс=6
+  const daysInMonth = new Date(bcViewYear, bcViewMonth + 1, 0).getDate();
+  const prevMonthDays = new Date(bcViewYear, bcViewMonth, 0).getDate();
+
+  const today = new Date();
+  const todayY = today.getFullYear(), todayM = today.getMonth(), todayD = today.getDate();
+
+  const input = document.getElementById("profile-birthday");
+  const norm = input ? normalizeBirthday(input.value.trim()) : null;
+  let selDay = null, selMonth = null, selYear = null;
+  if (norm) {
+    const parts = norm.split(".");
+    selDay = parseInt(parts[0], 10);
+    selMonth = parseInt(parts[1], 10) - 1;
+    if (parts[2]) selYear = parseInt(parts[2].length === 2 ? "20" + parts[2] : parts[2], 10);
+  }
+
+  // Сетка: 6 строк * 7 дней
+  for (let i = 0; i < 42; i++) {
+    const dayNum = i - startWeekday + 1;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "bc-day";
+    let realY = bcViewYear, realM = bcViewMonth, realD = dayNum;
+    if (dayNum < 1) {
+      realM = bcViewMonth - 1; realD = prevMonthDays + dayNum;
+      if (realM < 0) { realM = 11; realY -= 1; }
+      btn.classList.add("other-month");
+    } else if (dayNum > daysInMonth) {
+      realM = bcViewMonth + 1; realD = dayNum - daysInMonth;
+      if (realM > 11) { realM = 0; realY += 1; }
+      btn.classList.add("other-month");
+    }
+    btn.textContent = String(realD);
+    if (realY === todayY && realM === todayM && realD === todayD) btn.classList.add("today");
+    if (selDay !== null && selMonth !== null && selYear !== null &&
+        realY === selYear && realM === selMonth && realD === selDay) {
+      btn.classList.add("selected");
+    }
+    btn.addEventListener("click", () => {
+      const d = String(realD).padStart(2, "0");
+      const m = String(realM + 1).padStart(2, "0");
+      const inp = document.getElementById("profile-birthday");
+      inp.value = `${d}.${m}.${realY}`;
+      draftProfile.birthday = inp.value;
+      markProfileDirty();
+      bcRender();
+    });
+    grid.appendChild(btn);
+  }
+}
+
+function bcOpen() {
+  const cal = document.getElementById("birthday-calendar");
+  if (!cal) return;
+  const input = document.getElementById("profile-birthday");
+  const norm = input ? normalizeBirthday(input.value.trim()) : null;
+  const today = new Date();
+  if (norm) {
+    const parts = norm.split(".");
+    bcViewMonth = parseInt(parts[1], 10) - 1;
+    bcViewYear = parts[2] ? parseInt(parts[2].length === 2 ? "20" + parts[2] : parts[2], 10) : today.getFullYear();
+  } else {
+    bcViewMonth = today.getMonth();
+    bcViewYear = today.getFullYear() - 25;
+  }
+  bcRender();
+  cal.classList.remove("hidden");
+}
+
+function bcClose() {
+  const cal = document.getElementById("birthday-calendar");
+  if (cal) cal.classList.add("hidden");
+}
+
+function setupBirthdayCalendar() {
+  const btn = document.getElementById("profile-birthday-calendar");
+  const cal = document.getElementById("birthday-calendar");
+  if (!btn || !cal) return;
+
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (cal.classList.contains("hidden")) bcOpen();
+    else bcClose();
+  });
+
+  cal.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const target = e.target.closest("[data-bc]");
+    if (!target) return;
+    const act = target.dataset.bc;
+    if (act === "prev-month") { bcViewMonth--; if (bcViewMonth < 0) { bcViewMonth = 11; bcViewYear--; } }
+    else if (act === "next-month") { bcViewMonth++; if (bcViewMonth > 11) { bcViewMonth = 0; bcViewYear++; } }
+    else if (act === "prev-year") { bcViewYear--; }
+    else if (act === "next-year") { bcViewYear++; }
+    bcRender();
+  });
+
+  document.getElementById("bc-today").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const today = new Date();
+    const d = String(today.getDate()).padStart(2, "0");
+    const m = String(today.getMonth() + 1).padStart(2, "0");
+    const inp = document.getElementById("profile-birthday");
+    inp.value = `${d}.${m}`;
+    draftProfile.birthday = inp.value;
+    markProfileDirty();
+    bcViewMonth = today.getMonth();
+    bcViewYear = today.getFullYear();
+    bcRender();
+  });
+
+  document.getElementById("bc-clear").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const inp = document.getElementById("profile-birthday");
+    inp.value = "";
+    draftProfile.birthday = null;
+    markProfileDirty();
+    bcRender();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (cal.classList.contains("hidden")) return;
+    if (e.target.closest(".birthday-input-wrap")) return;
+    bcClose();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !cal.classList.contains("hidden")) bcClose();
+  });
 }
 
 function formatBirthday(str) {
