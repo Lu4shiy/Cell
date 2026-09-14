@@ -264,7 +264,15 @@ function showApp(user) {
   currentUser = user;
   document.getElementById("auth-screen").classList.add("hidden");
   document.getElementById("app-screen").classList.remove("hidden");
-  initApp();
+  initApp().catch((err) => {
+    console.error("initApp failed:", err);
+    const listEl = document.getElementById("users-list");
+    if (listEl) {
+      listEl.innerHTML = '<div class="empty">Ошибка запуска:<br>' +
+        escapeHtml(err && err.message ? err.message : String(err)) +
+        '<br><br>Открой F12 → Console и покажи ошибку.</div>';
+    }
+  });
 }
 
 function showAuth() {
@@ -774,6 +782,7 @@ function subscribeToMemberships() {
         if (payload.new.user_id === currentUser.id) {
           currentChannelIsSubscribed = true;
           await updateChannelComposerState();
+          configureChatMenuForChannel(currentChannelObj);
         }
       }
       if (payload.new.user_id === currentUser.id) {
@@ -792,6 +801,7 @@ function subscribeToMemberships() {
         if (payload.old.user_id === currentUser.id) {
           currentChannelIsSubscribed = false;
           updateChannelComposerState();
+          configureChatMenuForChannel(currentChannelObj);
         }
       }
       if (payload.old && payload.old.user_id === currentUser.id) {
@@ -1563,6 +1573,7 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
       currentChannelIsSubscribed = false;
       await updateChannelComposerState();
       await updateChannelSubtitle(ch.id);
+      configureChatMenuForChannel(currentChannelObj);
     }
     return;
   }
@@ -1760,19 +1771,30 @@ async function loadMessages(chatId) {
   for (const m of visible) await appendMessage(m);
   scrollToBottom();
 
-  // Отправляем свои просмотры — только для канала, только для чужих сообщений.
-  // Если запись реально создалась — локально +1, чтобы сразу увидеть свой просмотр.
-  // Чужие просмотры прилетят через realtime (subscribeToChannelViews).
+  // Отправляем свои просмотры — только для канала. Батчами по 10, параллельно.
+  // После пометки отдельно запрашиваем актуальные счётчики — не полагаемся на
+  // возвращаемое значение RPC (оно может быть null/undefined).
   if (isChannel) {
-    for (const m of visible) {
-      const { data: total, error: mvErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
-      if (mvErr) { console.error("mark_message_viewed FAILED:", mvErr, "msgId:", m.id); continue; }
-      if (total !== null && total !== undefined) {
-        const cnt = Number(total) || 0;
-        currentChannelViewsMap.set(m.id, cnt);
-        updateMessageViewsInUI(m.id, cnt);
-      }
+    const ids = visible.map((m) => m.id);
+    const chunkSize = 10;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      await Promise.all(chunk.map(async (id) => {
+        try {
+          const { error: mvErr } = await supabase.rpc("mark_message_viewed", { p_message_id: id });
+          if (mvErr) console.warn("mark_message_viewed:", mvErr.message || mvErr);
+        } catch (e) { console.warn(e); }
+      }));
     }
+    try {
+      const { data: views, error: vErr } = await supabase.rpc("get_message_view_counts", { p_message_ids: ids });
+      if (vErr) console.warn("get_message_view_counts:", vErr.message || vErr);
+      (views || []).forEach((v) => {
+        const cnt = Number(v.views) || 0;
+        currentChannelViewsMap.set(v.message_id, cnt);
+        updateMessageViewsInUI(v.message_id, cnt);
+      });
+    } catch (e) { console.warn(e); }
   }
 }
 
@@ -2126,6 +2148,18 @@ async function sendMessage(chatId, content) {
   updateChatItemPreview(chatId);
   resortChatsList();
 
+  // Если это канал — сразу помечаем свой просмотр (баг №1)
+  if (currentChannelObj && currentChannelObj.id === chatId) {
+    try {
+      await supabase.rpc("mark_message_viewed", { p_message_id: data.id });
+      const { data: counts } = await supabase.rpc("get_message_view_counts", { p_message_ids: [data.id] });
+      const v = (counts && counts[0]) || null;
+      const cnt = v ? Number(v.views) || 0 : 1;
+      currentChannelViewsMap.set(data.id, cnt);
+      updateMessageViewsInUI(data.id, cnt);
+    } catch (e) { console.warn("mark own view:", e); }
+  }
+
   const inputEl = document.getElementById("message-input");
   if (inputEl) inputEl.style.height = "auto";
 }
@@ -2336,6 +2370,21 @@ function setupChatMenu() {
       openChannelEditDialog();
     } else if (action === "channel-delete") {
       await deleteChannelDialog();
+    } else if (action === "channel-profile") {
+      if (!currentChannelObj) return;
+      openChannelProfileDialog();
+    } else if (action === "channel-unsubscribe") {
+      if (!currentChannelObj) return;
+      const ok = await showConfirmDialog("Отписаться", `Отписаться от канала «${currentChannelObj.name}»?`, "Отписаться");
+      if (!ok) return;
+      const { error } = await supabase.from("chat_members")
+        .delete().eq("chat_id", currentChannelObj.id).eq("user_id", currentUser.id);
+      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      currentChannelIsSubscribed = false;
+      removeChatFromList(currentChannelObj.id);
+      await updateChannelSubtitle(currentChannelObj.id);
+      await updateChannelComposerState();
+      configureChatMenuForChannel(currentChannelObj);
     }
   });
 
@@ -3695,6 +3744,10 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("Unhandled promise rejection:", e.reason);
+});
+
 const { data: { session } } = await supabase.auth.getSession();
 if (session) showApp(session.user);
 
@@ -3719,31 +3772,42 @@ function setupChannelCreate() {
     channelUsernameCheckTimeout = setTimeout(() => checkChannelUsernameLive(value), 350);
   });
   document.getElementById("channel-name-input").addEventListener("input", updateChannelCreateButton);
-  // Кнопка подписки
+
+  // Кнопка подписки — надёжный вариант через явный select → delete/insert
   const subBtn = document.getElementById("channel-subscribe-btn");
   if (subBtn) subBtn.addEventListener("click", async () => {
     if (!currentChannelObj) return;
     subBtn.disabled = true;
-    if (currentChannelIsSubscribed) {
-      const { error } = await supabase.from("chat_members")
-        .delete().eq("chat_id", currentChannelObj.id).eq("user_id", currentUser.id);
+    try {
+      const { data: existing, error: checkErr } = await supabase.from("chat_members")
+        .select("chat_id").eq("chat_id", currentChannelObj.id).eq("user_id", currentUser.id).maybeSingle();
+      if (checkErr) { await showAlertDialog("Ошибка", checkErr.message); return; }
+      const isSubscribed = !!existing;
+      if (isSubscribed) {
+        const { error } = await supabase.from("chat_members")
+          .delete().eq("chat_id", currentChannelObj.id).eq("user_id", currentUser.id);
+        if (error) { await showAlertDialog("Ошибка отписки", error.message); return; }
+        currentChannelIsSubscribed = false;
+        removeChatFromList(currentChannelObj.id);
+      } else {
+        const { error } = await supabase.from("chat_members").insert({
+          chat_id: currentChannelObj.id, user_id: currentUser.id,
+        });
+        if (error && !String(error.message || "").toLowerCase().includes("duplicate")) {
+          await showAlertDialog("Ошибка подписки", error.message); return;
+        }
+        currentChannelIsSubscribed = true;
+        await addOrUpdateChannelInList(currentChannelObj.id, currentChannelObj);
+      }
+      await updateChannelSubtitle(currentChannelObj.id);
+      await updateChannelComposerState();
+      configureChatMenuForChannel(currentChannelObj);
+    } catch (ex) {
+      console.error(ex);
+      await showAlertDialog("Ошибка", ex.message || String(ex));
+    } finally {
       subBtn.disabled = false;
-      if (error) { await showAlertDialog("Ошибка", error.message); return; }
-      currentChannelIsSubscribed = false;
-      removeChatFromList(currentChannelObj.id);
-    } else {
-      // upsert с ignoreDuplicates — не упадёт, если запись уже есть
-      const { error } = await supabase.from("chat_members").upsert(
-        { chat_id: currentChannelObj.id, user_id: currentUser.id },
-        { ignoreDuplicates: true }
-      );
-      subBtn.disabled = false;
-      if (error) { await showAlertDialog("Ошибка", error.message); return; }
-      currentChannelIsSubscribed = true;
-      await addOrUpdateChannelInList(currentChannelObj.id, currentChannelObj);
     }
-    await updateChannelSubtitle(currentChannelObj.id);
-    await updateChannelComposerState();
   });
 }
 
@@ -3897,7 +3961,7 @@ function resetChatMenuToDm() {
     const b = menu.querySelector(`[data-action="${a}"]`);
     if (b) b.classList.remove("hidden");
   });
-  ["channel-configure", "channel-delete"].forEach((a) => {
+  ["channel-profile", "channel-configure", "channel-unsubscribe", "channel-delete"].forEach((a) => {
     const b = menu.querySelector(`[data-action="${a}"]`);
     if (b) b.classList.add("hidden");
   });
@@ -3907,17 +3971,28 @@ function resetChatMenuToDm() {
 
 function configureChatMenuForChannel(ch) {
   const menu = document.getElementById("chat-menu");
+  // Скрываем все DM-опции
   ["tokens", "clear", "delete", "block"].forEach((a) => {
     const b = menu.querySelector(`[data-action="${a}"]`);
     if (b) b.classList.add("hidden");
   });
   const isOwner = ch.owner_id === currentUser.id;
-  ["channel-configure", "channel-delete"].forEach((a) => {
-    const b = menu.querySelector(`[data-action="${a}"]`);
-    if (b) b.classList.toggle("hidden", !isOwner);
-  });
+  const isAdmin = currentChannelIsAdmin;
+  // Профиль канала — для всех
+  const profBtn = menu.querySelector('[data-action="channel-profile"]');
+  if (profBtn) profBtn.classList.remove("hidden");
+  // Отписаться — для подписанных, но не для владельца
+  const unsubBtn = menu.querySelector('[data-action="channel-unsubscribe"]');
+  if (unsubBtn) unsubBtn.classList.toggle("hidden", !currentChannelIsSubscribed || isOwner);
+  // Настроить — для админов и владельца
+  const confBtn = menu.querySelector('[data-action="channel-configure"]');
+  if (confBtn) confBtn.classList.toggle("hidden", !isAdmin);
+  // Удалить — только владелец
+  const delBtn = menu.querySelector('[data-action="channel-delete"]');
+  if (delBtn) delBtn.classList.toggle("hidden", !isOwner);
+  // Кнопка меню — всегда видима
   const menuBtn = document.getElementById("chat-menu-btn");
-  if (menuBtn) menuBtn.classList.toggle("hidden", !isOwner);
+  if (menuBtn) menuBtn.classList.remove("hidden");
 }
 
 async function openChannelProfileDialog() {

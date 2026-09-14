@@ -90,7 +90,9 @@
             <button data-action="clear">Очистить чат</button>
             <button data-action="delete">Удалить чат</button>
             <button data-action="block" id="menu-block" class="danger">Заблокировать</button>
+            <button data-action="channel-profile" class="hidden">Профиль канала</button>
             <button data-action="channel-configure" class="hidden">Настроить канал</button>
+            <button data-action="channel-unsubscribe" class="hidden danger">Отписаться</button>
             <button data-action="channel-delete" class="hidden danger">Удалить канал</button>
           </div>
         </header>
@@ -446,8 +448,6 @@
     </div>
   </div>
 
-  <script type="module" src="app.js"></script>
-
   <div id="channel-create-overlay" class="dialog-overlay hidden">
     <div class="dialog dialog-profile">
       <div class="dialog-title">Создать канал</div>
@@ -533,5 +533,6 @@
     </div>
   </div>
 
+  <script type="module" src="app.js"></script>
 </body>
 </html>
