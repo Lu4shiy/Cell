@@ -1540,36 +1540,82 @@ async function performSearch(query) {
   renderSearchResultsUnified(allProfiles, channels);
 }
 
-function renderSearchResultsUnified(users, channels) {
-  const listEl = document.getElementById("users-list");
-  if (!users.length && !channels.length) { listEl.innerHTML = '<div class="empty">Пусто</div>'; return; }
-
-  const channelsHtml = channels.map((ch) => `
+// Строка результата: канал
+function renderSearchChannelHtml(ch) {
+  return `
     <div class="user-item" data-chat-type="channel-search" data-channel-id="${ch.id}">
       <div class="avatar"></div>
       <div class="user-item-body">
         <div class="user-item-row1"><div class="user-item-name">${escapeHtml(ch.name)}<span class="channel-mark">📢</span></div></div>
         <div class="user-item-row2"><div class="user-item-preview">@${escapeHtml(ch.username)}</div></div>
       </div>
-    </div>`).join("");
+    </div>`;
+}
 
-  const usersHtml = users.map((u) => {
-    const blocked = isBlockedByMe(u.id) ? " 🚫" : "";
-    const displayName = u._customName
-      ? `${escapeHtml(u._customName)} <span style="color:var(--text-dim);font-size:12px;">(${escapeHtml(u.display_name)})</span>`
-      : escapeHtml(u.display_name);
-    return `
-      <div class="user-item" data-user-id="${u.id}" data-custom-name="${u._customName ? escapeHtml(u._customName) : ""}">
-        <div class="avatar"></div>
-        <div class="user-item-body">
-          <div class="user-item-row1"><div class="user-item-name">${displayName}${blocked}</div></div>
-          <div class="user-item-row2"><div class="user-item-preview">@${escapeHtml(u.username)}</div></div>
-        </div>
-      </div>`;
-  }).join("");
+// Строка результата: пользователь
+function renderSearchUserHtml(u) {
+  const blocked = isBlockedByMe(u.id) ? " 🚫" : "";
+  const displayName = u._customName
+    ? `${escapeHtml(u._customName)} <span style="color:var(--text-dim);font-size:12px;">(${escapeHtml(u.display_name)})</span>`
+    : escapeHtml(u.display_name);
+  return `
+    <div class="user-item" data-user-id="${u.id}" data-custom-name="${u._customName ? escapeHtml(u._customName) : ""}">
+      <div class="avatar"></div>
+      <div class="user-item-body">
+        <div class="user-item-row1"><div class="user-item-name">${displayName}${blocked}</div></div>
+        <div class="user-item-row2"><div class="user-item-preview">@${escapeHtml(u.username)}</div></div>
+      </div>
+    </div>`;
+}
 
-  listEl.innerHTML = channelsHtml + usersHtml;
+function renderSearchResultsUnified(users, channels) {
+  const listEl = document.getElementById("users-list");
 
+  // Разделяем результаты: "мои" (уже в списке чатов) и "новые" (не подписан / нет чата)
+  const myUsers    = users.filter((u) => chatIdByUser.has(u.id));
+  const myChannels = channels.filter((c) => channelCache.has(c.id));
+  const newUsers   = users.filter((u) => !chatIdByUser.has(u.id));
+  const newChannels = channels.filter((c) => !channelCache.has(c.id));
+
+  // Топ-5 из новых: сначала каналы (поиск по @username/названию), потом юзеры.
+  // Ограничим ровно пятью строками.
+  const topNew = [
+    ...newChannels.slice(0, 5),
+    ...newUsers.slice(0, 5),
+  ].slice(0, 5);
+
+  // "Ваши чаты и каналы": только то, что уже есть в списке
+  const myList = [
+    ...myChannels.map((c) => ({ kind: "channel", data: c })),
+    ...myUsers.map((u) => ({ kind: "user", data: u })),
+  ];
+
+  if (!topNew.length && !myList.length) {
+    listEl.innerHTML = '<div class="empty">Пусто</div>';
+    return;
+  }
+
+  let html = "";
+
+  if (topNew.length) {
+    html += `<div class="search-section-title">Найденные</div>`;
+    html += topNew.map((item) => {
+      if (item && item.username && item.owner_id) return renderSearchChannelHtml(item);
+      return renderSearchUserHtml(item);
+    }).join("");
+  }
+
+  if (myList.length) {
+    html += `<div class="search-section-title">Ваши чаты и каналы</div>`;
+    html += myList.map((item) => {
+      if (item.kind === "channel") return renderSearchChannelHtml(item.data);
+      return renderSearchUserHtml(item.data);
+    }).join("");
+  }
+
+  listEl.innerHTML = html;
+
+  // Навешиваем обработчики
   listEl.querySelectorAll(".user-item").forEach((el) => {
     if (el.dataset.chatType === "channel-search") {
       const ch = channels.find((x) => x.id === el.dataset.channelId);
