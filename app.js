@@ -1132,11 +1132,13 @@ async function openChannel(chatId) {
   configureChatMenuForChannel(ch);
 
   currentChatId = chatId;
+  // Подписку на просмотры — ДО loadMessages, чтобы catch-нуть чужие просмотры,
+  // которые могут прийти пока мы рендерим сообщения
+  subscribeToChannelViews(chatId);
   await loadMessages(chatId);
   await loadReactionsForVisibleMessages();
   subscribeToChat(chatId);
   subscribeToReactions();
-  subscribeToChannelViews(chatId);
 
   if (currentChannelIsSubscribed) await markChatRead(chatId);
 }
@@ -1684,11 +1686,18 @@ async function loadMessages(chatId) {
   scrollToBottom();
 
   // Отправляем свои просмотры — только для канала, только для чужих сообщений.
-  // Счётчик обновится через realtime (subscribeToChannelViews), не локально.
+  // Если запись реально создалась — локально +1, чтобы сразу увидеть свой просмотр.
+  // Чужие просмотры прилетят через realtime (subscribeToChannelViews).
   if (isChannel) {
     const nonMyMsgs = visible.filter((m) => m.sender_id !== currentUser.id);
     for (const m of nonMyMsgs) {
-      await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
+      const { data: wasInserted, error: mvErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
+      if (mvErr) { console.error("mark_message_viewed:", mvErr); continue; }
+      if (wasInserted) {
+        const cur = currentChannelViewsMap.get(m.id) || 0;
+        currentChannelViewsMap.set(m.id, cur + 1);
+        updateMessageViewsInUI(m.id, cur + 1);
+      }
     }
   }
 }
@@ -1864,6 +1873,9 @@ function subscribeToChannelViews(chatId) {
   currentChannelViewsChannel = supabase.channel("views-" + chatId)
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "message_views" }, (payload) => {
       const mv = payload.new; if (!mv) return;
+      // Свои просмотры уже посчитаны локально в loadMessages/subscribeToChat —
+      // не считаем их повторно, иначе цифра будет «прыгать»
+      if (mv.user_id === currentUser.id) return;
       const m = msgCache.get(mv.message_id);
       if (!m || m.chat_id !== currentChatId) return;
       const next = (currentChannelViewsMap.get(mv.message_id) || 0) + 1;
@@ -2063,7 +2075,13 @@ function subscribeToChat(chatId) {
         if (currentChannelObj) {
           if (currentChannelIsSubscribed) markChatRead(chatId);
           if (m.sender_id !== currentUser.id) {
-            await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
+            const { data: wasInserted, error: mvErr } = await supabase.rpc("mark_message_viewed", { p_message_id: m.id });
+            if (mvErr) console.error("mark_message_viewed (rt):", mvErr);
+            if (wasInserted) {
+              const cur = currentChannelViewsMap.get(m.id) || 0;
+              currentChannelViewsMap.set(m.id, cur + 1);
+              updateMessageViewsInUI(m.id, cur + 1);
+            }
           }
         } else {
           markChatRead(chatId);
@@ -3730,12 +3748,12 @@ async function deleteChannelDialog() {
 }
 
 async function joinAndOpenChannel(ch) {
-  // Очищаем поиск, чтобы не остался "channel-search" в DOM
+  // Очищаем поле поиска и крестик — чтобы поиск не оставался активным
   const searchInput = document.getElementById("search-input");
   const clearBtn = document.getElementById("search-clear");
   if (searchInput) searchInput.value = "";
   if (clearBtn) clearBtn.classList.add("hidden");
-  // Перезагружаем список чатов (там появится канал, если я подписан)
-  await loadRecentChats();
+  // Список чатов догружаем ФОНОМ, не блокируя открытие канала
+  loadRecentChats().catch(() => {});
   await openChannel(ch.id);
 }
