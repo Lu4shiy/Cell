@@ -696,23 +696,11 @@ function setupProfilePanel() {
   document.getElementById("profile-close").addEventListener("click", () => document.getElementById("profile-overlay").classList.add("hidden"));
   document.getElementById("avatar-upload").addEventListener("change", handleAvatarUpload);
 
-  const grid = document.getElementById("accent-grid");
-  grid.innerHTML = "";
-  ACCENTS.forEach((a) => {
-    const d = document.createElement("div");
-    d.className = "accent-option"; d.dataset.accent = a;
-    d.style.background = ACCENT_COLORS[a]; d.title = a; grid.appendChild(d);
-  });
-  grid.addEventListener("click", async (e) => {
-    const el = e.target.closest(".accent-option"); if (!el) return;
-    applyAccent(el.dataset.accent); updateAccentButtons();
-    await saveProfileField({ accent_color: el.dataset.accent });
-  });
-
   document.getElementById("profile-username").addEventListener("input", (e) => {
     clearTimeout(usernameCheckTimeout); validatedUsername = null;
     const value = e.target.value;
     usernameCheckTimeout = setTimeout(() => checkUsernameLive(value), 350);
+    markProfileDirty();
   });
   document.getElementById("profile-displayname").addEventListener("input", (e) => {
     draftProfile.display_name = e.target.value.trim(); markProfileDirty();
@@ -774,7 +762,7 @@ async function openProfilePanel() {
   if (!myProfile) return;
   document.getElementById("profile-overlay").classList.remove("hidden");
   paintAvatar(document.getElementById("profile-avatar-preview"), myProfile);
-  updateAccentButtons(); renderAvatarGrid();
+  renderAvatarGrid();
   document.getElementById("profile-displayname").value = myProfile.display_name || "";
   document.getElementById("profile-birthday").value = myProfile.birthday || "";
   updateGenderButtons();
@@ -7119,8 +7107,25 @@ function setupSettings() {
   const toggle = document.getElementById("settings-scroll-mode");
   if (!btn || !overlay) return;
 
+  // Акцент-грид живёт в настройках
+  const grid = document.getElementById("accent-grid");
+  if (grid) {
+    grid.innerHTML = "";
+    ACCENTS.forEach((a) => {
+      const d = document.createElement("div");
+      d.className = "accent-option"; d.dataset.accent = a;
+      d.style.background = ACCENT_COLORS[a]; d.title = a; grid.appendChild(d);
+    });
+    grid.addEventListener("click", async (e) => {
+      const el = e.target.closest(".accent-option"); if (!el) return;
+      applyAccent(el.dataset.accent); updateAccentButtons();
+      await saveProfileField({ accent_color: el.dataset.accent });
+    });
+  }
+
   btn.addEventListener("click", () => {
     updateSettingsUI();
+    updateAccentButtons();
     overlay.classList.remove("hidden");
   });
   if (closeBtn) closeBtn.addEventListener("click", () => overlay.classList.add("hidden"));
