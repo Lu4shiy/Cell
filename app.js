@@ -5786,12 +5786,12 @@ async function renderGiftDetail(ownerId, ug) {
       </div>`
     : "";
 
-  // Цвет маски-паттерна = центр фона
-  const bgCenterColor = (ug.background && ug.background.includes("|"))
-    ? ug.background.split("|")[0]
-    : (ug.background || "#888888");
+  // Цвет маски-паттерна = ТЁМНЫЙ край фона (как в Telegram — паттерн темнее фона)
+  const bgEdgeColor = (ug.background && ug.background.includes("|"))
+    ? ug.background.split("|")[1]
+    : (ug.background || "#000000");
   const patternStyle = patternIcon
-    ? `background-color:${bgCenterColor};-webkit-mask-image:url(${patternIcon});mask-image:url(${patternIcon});`
+    ? `background-color:${bgEdgeColor};-webkit-mask-image:url(${patternIcon});mask-image:url(${patternIcon});`
     : "display:none;";
 
   // Количество
