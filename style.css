@@ -3361,9 +3361,9 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.22;
-  -webkit-mask-size: 90px 90px;
-  mask-size: 90px 90px;
+  opacity: 0.28;
+  -webkit-mask-size: 120px 120px;
+  mask-size: 120px 120px;
   -webkit-mask-repeat: repeat;
   mask-repeat: repeat;
   -webkit-mask-position: 0 0;

@@ -5343,6 +5343,49 @@ function giftRarityLabel(r) {
 // ПАТТЕРНЫ ПОДАРКОВ (только для epic).
 // Тир 1 = лучший (🟦), тир 6 = обычный (🟫).
 // ======================================================
+
+// Маленькая иконка внутри большого тайла — как в Telegram.
+const PATTERN_TILE_SIZE = 120;   // шаг сетки (больше = реже)
+const PATTERN_ICON_SIZE = 26;    // размер иконки внутри тайла
+
+const PATTERN_MASK_CACHE = new Map();
+
+// Скачивает иконку через wsrv.nl (обход CORS у i.ibb.co),
+// прогоняет через FileReader → base64 и собирает SVG-маску,
+// где иконка маленькая в центре большого тайла.
+async function buildPatternMaskUrl(iconUrl) {
+  if (!iconUrl) return null;
+  if (PATTERN_MASK_CACHE.has(iconUrl)) return PATTERN_MASK_CACHE.get(iconUrl);
+
+  try {
+    const bare = iconUrl.replace(/^https?:\/\//, "");
+    const proxied = `https://wsrv.nl/?url=${encodeURIComponent(bare)}&output=png`;
+    const res = await fetch(proxied);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const blob = await res.blob();
+
+    const dataUrl = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(new Error("FileReader"));
+      r.readAsDataURL(blob);
+    });
+
+    const tile = PATTERN_TILE_SIZE;
+    const icon = PATTERN_ICON_SIZE;
+    const off = (tile - icon) / 2;
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${tile}' height='${tile}'><image href='${dataUrl}' x='${off}' y='${off}' width='${icon}' height='${icon}'/></svg>`;
+    // encodeURIComponent уберёт одинарные кавычки — они безопасны в style="..."
+    const maskUrl = `url('data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}')`;
+    PATTERN_MASK_CACHE.set(iconUrl, maskUrl);
+    return maskUrl;
+  } catch (e) {
+    console.warn("pattern mask build failed:", e);
+    PATTERN_MASK_CACHE.set(iconUrl, null);
+    return null;
+  }
+}
+
 const GIFT_PATTERNS = [
   // Tier 1 — 🟦 (0.75% каждый)
   { id: "Tiger",              icon: "https://i.ibb.co/twqHC62m/icons8-tiger-100.png",           tier: 1 },
@@ -5787,13 +5830,12 @@ async function renderGiftDetail(ownerId, ug) {
     : "";
 
   // Цвет маски-паттерна = ТЁМНЫЙ край фона (как в Telegram — паттерн темнее фона)
-  // Иконка идёт напрямую в mask-image — без canvas, без SVG-обёртки.
-  // Браузер грузит её как обычную картинку, CORS тут не нужен.
   const bgEdgeColor = (ug.background && ug.background.includes("|"))
     ? ug.background.split("|")[1]
     : (ug.background || "#000000");
-  const patternStyle = patternIcon
-    ? `background-color:${bgEdgeColor};-webkit-mask-image:url('${patternIcon}');mask-image:url('${patternIcon}');`
+  const maskUrl = patternIcon ? await buildPatternMaskUrl(patternIcon) : null;
+  const patternStyle = maskUrl
+    ? `background-color:${bgEdgeColor};-webkit-mask-image:${maskUrl};mask-image:${maskUrl};`
     : "display:none;";
 
   // Количество
