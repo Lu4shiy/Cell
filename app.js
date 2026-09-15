@@ -5362,34 +5362,11 @@ const PATTERN_MASK_CACHE = new Map();
 async function buildPatternMaskUrl(iconUrl) {
   if (!iconUrl) return null;
   if (PATTERN_MASK_CACHE.has(iconUrl)) return PATTERN_MASK_CACHE.get(iconUrl);
-
-  try {
-    const bare = iconUrl.replace(/^https?:\/\//, "");
-    const proxied = `https://wsrv.nl/?url=${encodeURIComponent(bare)}&output=png`;
-    const res = await fetch(proxied);
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const blob = await res.blob();
-
-    const dataUrl = await new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result);
-      r.onerror = () => reject(new Error("FileReader"));
-      r.readAsDataURL(blob);
-    });
-
-    const tile = PATTERN_TILE_SIZE;
-    const icon = PATTERN_ICON_SIZE;
-    const off = (tile - icon) / 2;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${tile}" height="${tile}"><image href="${dataUrl}" x="${off}" y="${off}" width="${icon}" height="${icon}"/></svg>`;
-    // encodeURIComponent закодирует все " как %22, поэтому внутри style="..." безопасно использовать url('...')
-    const maskUrl = `url('data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}')`;
-    PATTERN_MASK_CACHE.set(iconUrl, maskUrl);
-    return maskUrl;
-  } catch (e) {
-    console.warn("pattern mask build failed:", e);
-    PATTERN_MASK_CACHE.set(iconUrl, null);
-    return null;
-  }
+  // Используем иконку напрямую как background-image — CSS-фоны не требуют CORS,
+  // поэтому прокси wsrv.nl больше не нужен. Тилящийся фон даёт много мини-рисунков.
+  const bgUrl = `url('${iconUrl}')`;
+  PATTERN_MASK_CACHE.set(iconUrl, bgUrl);
+  return bgUrl;
 }
 
 const GIFT_PATTERNS = [
@@ -5617,14 +5594,19 @@ async function renderGiftsMain(userId) {
   content.querySelectorAll(".gift-tile-pattern[data-icon]").forEach((el) => {
     const iconUrl = el.dataset.icon;
     if (!iconUrl) return;
-    buildPatternMaskUrl(iconUrl).then((maskUrl) => {
-      if (!maskUrl) return;
+    buildPatternMaskUrl(iconUrl).then((bgUrl) => {
+      if (!bgUrl) return;
       el.style.display = "block";
-      el.style.backgroundColor = "#000";
-      el.style.webkitMaskImage = maskUrl;
-      el.style.maskImage = maskUrl;
+      el.style.backgroundImage = bgUrl;
+      el.style.backgroundRepeat = "repeat";
     });
   });
+
+  // Сброс прокрутки — список всегда открывается с шапки
+  content.scrollTop = 0;
+
+  // Сброс прокрутки — список всегда открывается с шапки
+  content.scrollTop = 0;
 
   content.querySelectorAll(".gift-tile").forEach((el) => {
     el.addEventListener("click", () => {
@@ -5675,10 +5657,9 @@ async function renderCatalog(recipientId) {
   const catalog = await loadGiftCatalog();
   if (!catalog.length) { content.innerHTML = '<div class="empty">Каталог пуст</div>'; return; }
 
-  // Считаем только те подарки, у которых есть владелец (проданные/уничтоженные через sell_gift имеют owner_id = null)
+  // Считаем ВСЕ выпущенные подарки (даже если владелец продал — серийник уже существует и «слот» занят).
   const { data: sold } = await supabase.from("user_gifts")
-    .select("gift_id")
-    .not("owner_id", "is", null);
+    .select("gift_id");
   const soldMap = new Map();
   (sold || []).forEach((s) => soldMap.set(s.gift_id, (soldMap.get(s.gift_id) || 0) + 1));
 
@@ -5937,14 +5918,13 @@ async function renderGiftDetail(ownerId, ug) {
 
   // Асинхронно дорисовываем паттерн
   if (patternIcon) {
-    buildPatternMaskUrl(patternIcon).then((maskUrl) => {
-      if (!maskUrl) return;
+    buildPatternMaskUrl(patternIcon).then((bgUrl) => {
+      if (!bgUrl) return;
       const el = content.querySelector(".gift-hero-pattern");
       if (!el) return;
       el.style.display = "block";
-      el.style.backgroundColor = "#000";
-      el.style.webkitMaskImage = maskUrl;
-      el.style.maskImage = maskUrl;
+      el.style.backgroundImage = bgUrl;
+      el.style.backgroundRepeat = "repeat";
     });
   }
 
@@ -5971,6 +5951,11 @@ async function renderGiftDetail(ownerId, ug) {
       renderGiftsMain(ownerId);
     });
   }
+
+  // Сбросить прокрутку контейнера — чтобы карточка подарка открывалась с шапки,
+  // а не в середине/низу.
+  const contentEl = document.getElementById("gifts-content");
+  if (contentEl) contentEl.scrollTop = 0;
 }
 
 // Отправка подарка — только контактам (тем, с кем есть чат)
