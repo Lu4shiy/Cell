@@ -903,10 +903,13 @@ function subscribeToMemberships() {
         const { data: ch } = await supabase.from("channels").select("id").eq("id", chatId).maybeSingle();
         if (ch) {
           // Канал: не закрываем и не убираем из списка — можно просматривать дальше.
-          // refreshChannelRights уже обновил composer и меню.
           currentChannelIsSubscribed = false;
+          if (currentChannelObj && currentChannelObj.id === chatId) {
+            await loadMessages(chatId, openSeq);
+            await loadReactionsForVisibleMessages();
+          }
         } else {
-          // DM: как раньше — закрываем и удаляем
+          // DM: закрываем и удаляем
           if (currentChatId === chatId) closeCurrentChat();
           removeChatFromList(chatId);
           channelCache.delete(chatId);
@@ -1490,6 +1493,11 @@ function resortChatsList() {
 
 async function addOrUpdateChatInList(chatId, otherUserId) {
   if (document.getElementById("search-input").value.trim()) return;
+  // Защита: не добавляем канал как DM
+  if (channelCache.has(chatId)) return;
+  // Дополнительная проверка — вдруг это канал, но кэш не успел обновиться
+  const { data: chCheck } = await supabase.from("channels").select("id").eq("id", chatId).maybeSingle();
+  if (chCheck) return;
   if (document.querySelector(`.user-item[data-chat-id="${chatId}"]`)) return;
   if (pendingChatAdds.has(chatId)) return;
   pendingChatAdds.add(chatId);
@@ -1866,13 +1874,13 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
     const { error } = await supabase.from("chat_members")
       .delete().eq("chat_id", ch.id).eq("user_id", currentUser.id);
     if (error) { await showAlertDialog("Ошибка", error.message); return; }
-    // Если канал открыт — оставляем его открытым (просто без подписки).
-    // Если не открыт — убираем из списка, чтобы не мозолил глаза.
     if (currentChannelObj && currentChannelObj.id === ch.id) {
       currentChannelIsSubscribed = false;
       await updateChannelComposerState();
       await updateChannelSubtitle(ch.id);
       configureChatMenuForChannel(currentChannelObj);
+      await loadMessages(ch.id, openSeq);
+      await loadReactionsForVisibleMessages();
     } else {
       removeChatFromList(ch.id);
       channelCache.delete(ch.id);
@@ -1943,6 +1951,8 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
 // ======================= 13. ОТКРЫТИЕ ЧАТА =======================
 async function openChatWith(otherUser) {
   const mySeq = ++openSeq;
+  // СРАЗУ сбрасываем текущий чат, чтобы избежать случайной отправки в старый
+  currentChatId = null;
   currentOtherUser = otherUser; pendingOtherUser = null;
   currentChannelObj = null; currentChannelIsAdmin = false;
   closeChatSearch();
@@ -1971,13 +1981,30 @@ async function openChatWith(otherUser) {
   exitSelectionMode(); cancelReply(); cancelEdit(); closeReactionPicker(); updateBlockUI();
 
   let chatId = chatIdByUser.get(otherUser.id) || null;
+
+  // ВАЖНО: если в кэше лежит ID канала — это не DM, сбрасываем.
+  if (chatId && channelCache.has(chatId)) {
+    chatId = null;
+    chatIdByUser.delete(otherUser.id);
+  }
+
   if (!chatId) {
     const { data: myMemberships } = await supabase.from("chat_members").select("chat_id").eq("user_id", currentUser.id);
     if (mySeq !== openSeq) return;
     const myChatIds = (myMemberships || []).map((m) => m.chat_id);
+
+    // КРИТИЧНО: исключаем каналы — общий канал ≠ общий DM!
+    let channelIdsSet = new Set();
     if (myChatIds.length) {
+      const { data: myChans } = await supabase.from("channels").select("id").in("id", myChatIds);
+      if (mySeq !== openSeq) return;
+      channelIdsSet = new Set((myChans || []).map((c) => c.id));
+    }
+    const myDmChatIds = myChatIds.filter((id) => !channelIdsSet.has(id));
+
+    if (myDmChatIds.length) {
       const { data: shared } = await supabase.from("chat_members")
-        .select("chat_id").eq("user_id", otherUser.id).in("chat_id", myChatIds).limit(1);
+        .select("chat_id").eq("user_id", otherUser.id).in("chat_id", myDmChatIds).limit(1);
       if (mySeq !== openSeq) return;
       if (shared && shared.length) { chatId = shared[0].chat_id; chatIdByUser.set(otherUser.id, chatId); }
     }
@@ -2067,10 +2094,17 @@ async function loadMessages(chatId, mySeq) {
   box.innerHTML = "";
   const isChannel = currentChannelObj && currentChannelObj.id === chatId;
 
-  // Канал «по заявке» — читать сообщения можно только подписчикам
-  if (isChannel && !currentChannelIsSubscribed && !currentChannelIsAdmin && currentChannelObj.visibility === "request") {
-    box.innerHTML = '<div class="empty">Вы не являетесь подписчиком.<br>Подайте заявку, чтобы читать сообщения.</div>';
-    return;
+  // Приватный/заявочный канал — читать сообщения можно только подписчикам и админам
+  if (isChannel && !currentChannelIsSubscribed && !currentChannelIsAdmin) {
+    const vis = currentChannelObj.visibility || "public";
+    if (vis === "request") {
+      box.innerHTML = '<div class="empty">Вы не являетесь подписчиком.<br>Подайте заявку, чтобы читать сообщения.</div>';
+      return;
+    }
+    if (vis === "private") {
+      box.innerHTML = '<div class="empty">Этот канал приватный.<br>Читать сообщения могут только подписчики.</div>';
+      return;
+    }
   }
 
   const all = data || [];
@@ -2917,9 +2951,17 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
 });
 
 async function sendMessage(chatId, content) {
-  if (currentChannelObj && currentChannelObj.id === chatId && !currentChannelIsAdmin) {
-    await showAlertDialog("Нельзя", "Только администраторы могут писать в этом канале");
-    return;
+  // Защита: если chatId — это канал, отправка возможна только когда он реально открыт
+  const isKnownChannel = channelCache.has(chatId);
+  if (isKnownChannel) {
+    if (!currentChannelObj || currentChannelObj.id !== chatId) {
+      console.error("sendMessage: попытка отправить в канал без его открытия", chatId);
+      return;
+    }
+    if (!currentChannelIsAdmin) {
+      await showAlertDialog("Нельзя", "Только администраторы могут писать в этом канале");
+      return;
+    }
   }
   const tempId = "tmp_" + Date.now();
   const tempMsg = {
@@ -3211,6 +3253,9 @@ function setupChatMenu() {
       await updateChannelSubtitle(chId);
       await updateChannelComposerState();
       configureChatMenuForChannel(currentChannelObj);
+      // Перезагружаем сообщения — для private/request покажется заглушка
+      await loadMessages(chId, openSeq);
+      await loadReactionsForVisibleMessages();
     }
   });
 
@@ -4953,7 +4998,12 @@ function setupChannelCreate() {
           .delete().eq("chat_id", chId).eq("user_id", currentUser.id);
         if (error) { await showAlertDialog("Ошибка отписки", error.message); return; }
         currentChannelIsSubscribed = false;
-        removeChatFromList(chId);
+        if (currentChannelObj && currentChannelObj.id === chId) {
+          await loadMessages(chId, openSeq);
+          await loadReactionsForVisibleMessages();
+        } else {
+          removeChatFromList(chId);
+        }
       } else if (vis === "request") {
         const { error } = await supabase.rpc("submit_join_request", { p_chat_id: chId });
         if (error) { await showAlertDialog("Ошибка", error.message); return; }
@@ -5396,6 +5446,13 @@ function openChannelEditDialog() {
   renderChannelEditReactions();
   renderChannelEditAdmins();
 
+  // Кнопки назначения/передачи — только владельцу
+  const isOwner = ch.owner_id === currentUser.id;
+  const addAdminBtn = document.getElementById("channel-edit-add-admin");
+  const transferBtn = document.getElementById("channel-edit-transfer");
+  if (addAdminBtn) addAdminBtn.classList.toggle("hidden", !isOwner);
+  if (transferBtn) transferBtn.classList.toggle("hidden", !isOwner);
+
   updateChannelEditSaveButton();
   document.getElementById("channel-edit-overlay").classList.remove("hidden");
 }
@@ -5647,10 +5704,24 @@ async function renderChannelEditAdmins() {
       <span class="admin-row-role owner">Владелец</span>
     </div>`;
   paintAvatar(ownerEl.querySelector(".avatar"), ownerProfile || { display_name: "?" });
+
+  // Кнопки назначения/передачи + крестики снятия — только владельцу
+  const isOwner = ch.owner_id === currentUser.id;
+  const addAdminBtn = document.getElementById("channel-edit-add-admin");
+  const transferBtn = document.getElementById("channel-edit-transfer");
+  if (addAdminBtn) addAdminBtn.classList.toggle("hidden", !isOwner);
+  if (transferBtn) transferBtn.classList.toggle("hidden", !isOwner);
+  listEl.querySelectorAll("[data-remove-admin]").forEach((btn) => {
+    btn.classList.toggle("hidden", !isOwner);
+  });
 }
 
 async function removeChannelAdmin(userId) {
   if (!currentChannelObj) return;
+  if (currentChannelObj.owner_id !== currentUser.id) {
+    await showAlertDialog("Нет прав", "Только владелец канала может снимать администраторов");
+    return;
+  }
   const ok = await showConfirmDialog("Снять администратора", "Снять с должности администратора?", "Снять");
   if (!ok) return;
   const { error } = await supabase.rpc("remove_channel_admin", {
@@ -5664,6 +5735,10 @@ async function removeChannelAdmin(userId) {
 
 async function openAddAdminDialog() {
   if (!currentChannelObj) return;
+  if (currentChannelObj.owner_id !== currentUser.id) {
+    await showAlertDialog("Нет прав", "Только владелец канала может назначать администраторов");
+    return;
+  }
   const ch = currentChannelObj;
 
   const { data: mems } = await supabase.from("chat_members")
@@ -5718,6 +5793,10 @@ async function openAddAdminDialog() {
 
 async function openTransferOwnerDialog() {
   if (!currentChannelObj) return;
+  if (currentChannelObj.owner_id !== currentUser.id) {
+    await showAlertDialog("Нет прав", "Только владелец канала может передать владение");
+    return;
+  }
   const ch = currentChannelObj;
 
   const { data: mems } = await supabase.from("chat_members")
