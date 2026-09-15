@@ -5396,52 +5396,6 @@ function getPatternChance(id) {
   return PATTERN_TIER_CHANCE[p.tier] !== undefined ? PATTERN_TIER_CHANCE[p.tier] : null;
 }
 
-// Собирает SVG-маску: иконка маленькая по центру большого тайла.
-// Тайл = gap-контейнер, иконка = сам паттерн внутри.
-const PATTERN_TILE_SIZE  = 90;
-const PATTERN_ICON_SIZE  = 44;
-
-// Кэш готовых mask-url: icon-url → data:image/svg+xml,...
-const PATTERN_MASK_CACHE = new Map();
-
-// Скачивает иконку, прогоняет через canvas → dataURL,
-// потом собирает SVG-маску. Внешние ресурсы в mask-image не грузятся,
-// поэтому без canvas никак.
-async function buildPatternMaskUrl(iconUrl) {
-  if (PATTERN_MASK_CACHE.has(iconUrl)) return PATTERN_MASK_CACHE.get(iconUrl);
-
-  const dataUrl = await new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      try {
-        const c = document.createElement("canvas");
-        c.width = img.naturalWidth || img.width;
-        c.height = img.naturalHeight || img.height;
-        const ctx = c.getContext("2d");
-        ctx.drawImage(img, 0, 0);
-        resolve(c.toDataURL("image/png"));
-      } catch (e) {
-        console.warn("pattern canvas tainted:", e);
-        resolve(null);
-      }
-    };
-    img.onerror = () => resolve(null);
-    img.src = iconUrl;
-  });
-
-  if (!dataUrl) return null;
-
-  const tile = PATTERN_TILE_SIZE;
-  const icon = PATTERN_ICON_SIZE;
-  const off = (tile - icon) / 2;
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${tile}' height='${tile}'><image href='${dataUrl}' x='${off}' y='${off}' width='${icon}' height='${icon}'/></svg>`;
-  const encoded = encodeURIComponent(svg).replace(/'/g, "%27");
-  const maskUrl = `url("data:image/svg+xml;charset=utf-8,${encoded}")`;
-  PATTERN_MASK_CACHE.set(iconUrl, maskUrl);
-  return maskUrl;
-}
-
 function getPatternIcon(id) {
   if (!id) return null;
   const p = GIFT_PATTERNS.find((x) => x.id === id);
@@ -5833,12 +5787,13 @@ async function renderGiftDetail(ownerId, ug) {
     : "";
 
   // Цвет маски-паттерна = ТЁМНЫЙ край фона (как в Telegram — паттерн темнее фона)
+  // Иконка идёт напрямую в mask-image — без canvas, без SVG-обёртки.
+  // Браузер грузит её как обычную картинку, CORS тут не нужен.
   const bgEdgeColor = (ug.background && ug.background.includes("|"))
     ? ug.background.split("|")[1]
     : (ug.background || "#000000");
-  const maskUrl = patternIcon ? await buildPatternMaskUrl(patternIcon) : null;
-  const patternStyle = maskUrl
-    ? `background-color:${bgEdgeColor};-webkit-mask-image:${maskUrl};mask-image:${maskUrl};`
+  const patternStyle = patternIcon
+    ? `background-color:${bgEdgeColor};-webkit-mask-image:url("${patternIcon}");mask-image:url("${patternIcon}");`
     : "display:none;";
 
   // Количество
