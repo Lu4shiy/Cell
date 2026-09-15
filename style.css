@@ -770,6 +770,16 @@ input:focus {
 .msg-tokens .tok-icon { font-size: 32px; }
 .msg-tokens .tok-amount { font-weight: 700; font-size: 18px; }
 
+/* Индикатор подгрузки старых сообщений */
+.msg-loader {
+  text-align: center;
+  padding: 12px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-style: italic;
+  user-select: none;
+}
+
 /* Просмотры */
 .msg-views { font-size: 11px; margin-right: 5px; opacity: 0.7; user-select: none; }
 
@@ -3263,6 +3273,11 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   background: var(--bg-hover);
 }
 
+.gift-tile.in-profile {
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.25), 0 0 12px rgba(var(--accent-rgb), 0.18);
+}
+
 .gift-tile-emoji {
   width: 72%;
   height: 72%;
@@ -3467,6 +3482,46 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   user-select: none;
   display: inline-block;
   cursor: help;
+  position: relative;
+  background-image: url("https://i.ibb.co/TB7T6kgN/image.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  flex-shrink: 0;
+}
+.verified-badge .verified-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s, transform 0.15s;
+  z-index: 100;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  letter-spacing: 0.2px;
+}
+.verified-badge .verified-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--border);
+  margin-top: -1px;
+}
+.verified-badge:hover .verified-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 /* Иконка Nectar */

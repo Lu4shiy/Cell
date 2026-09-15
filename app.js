@@ -59,7 +59,7 @@ const ICONS = {
 
 function verifiedBadge(profile) {
   if (!profile || !profile.verified) return "";
-  return `<img class="verified-badge" src="${ICONS.verified}" alt="✓" title="Официальный аккаунт" draggable="false">`;
+  return `<span class="verified-badge" role="img" aria-label="Официальный аккаунт"><span class="verified-tooltip">Официальный аккаунт</span></span>`;
 }
 
 // ======================================================
@@ -281,6 +281,11 @@ let pinsChannel = null;
 let currentInvitesList = [];
 // Race-guard при быстром переключении чатов
 let openSeq = 0;
+// Пагинация сообщений
+let messagesHasMore = false;
+let messagesLoadingMore = false;
+let messagesOldestTs = null;
+const MESSAGES_PAGE_SIZE = 50;
 // Заморозка авто-переключения закрепа при jump (мс)
 let pinBarFrozenUntil = 0;
 // Типы каналов + заявки
@@ -403,6 +408,7 @@ async function initApp() {
   setupWheel(); setupCommandPalette(); setupMiniProfile(); setupDateFloat();
   setupSettings(); applyScrollMode();
   setupChatSearch(); setupScrollBottomButton();
+  setupMessagesScrollPagination();
   setupChatPins(); setupInviteUI();
   subscribeToPins();
   subscribeToChannelRequests();
@@ -861,6 +867,21 @@ function resizeImage(file, maxSize) {
   });
 }
 
+// Возвращает true, если username зарезервирован и НЕ доступен текущему пользователю
+async function isUsernameReservedForOther(username) {
+  const clean = String(username || "").trim();
+  if (!clean) return false;
+  const { data, error } = await supabase.from("reserved_usernames")
+    .select("username, reserved_for")
+    .ilike("username", clean)
+    .limit(1);
+  if (error || !data || !data.length) return false;
+  const row = data[0];
+  if (!row.reserved_for) return true;                      // зарезервировано для всех
+  if (row.reserved_for === currentUser.id) return false;   // открыто тебе
+  return true;                                             // занято кем-то другим
+}
+
 async function checkUsernameLive(value) {
   const hint = document.getElementById("username-hint");
   const username = value.trim(); validatedUsername = null;
@@ -871,6 +892,16 @@ async function checkUsernameLive(value) {
     hint.className = "username-hint ok"; hint.textContent = "Это ваш текущий юзернейм"; validatedUsername = username; return;
   }
   hint.className = "username-hint"; hint.textContent = "Проверяю...";
+
+  const reserved = await isUsernameReservedForOther(username);
+  if (reserved) {
+    if (document.getElementById("profile-username").value.trim() !== username) return;
+    hint.className = "username-hint err";
+    hint.textContent = `@${username} зарезервирован`;
+    validatedUsername = null;
+    return;
+  }
+
   const { data, error } = await supabase.from("profiles").select("id").ilike("username", username).neq("id", currentUser.id).limit(1);
   if (document.getElementById("profile-username").value.trim() !== username) return;
   if (error) { hint.className = "username-hint err"; hint.textContent = "Ошибка проверки"; return; }
@@ -2203,26 +2234,21 @@ async function loadMessages(chatId, mySeq) {
   box.innerHTML = '<div class="empty">Загрузка...</div>';
   msgCache.clear(); hiddenMsgIds = new Set(); reactionsCache.clear();
   currentChannelViewsMap = new Map();
+  messagesHasMore = false;
+  messagesLoadingMore = false;
+  messagesOldestTs = null;
 
   const [hidesRes, clearRes] = await Promise.all([
     supabase.from("message_hides").select("message_id").eq("user_id", currentUser.id),
     supabase.from("chat_clears").select("cleared_at").eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle(),
   ]);
-  // Race-guard: если за это время переключились на другой чат — прерываемся
   if (mySeq !== undefined && mySeq !== openSeq) return;
   if (currentChatId !== chatId) return;
 
   hiddenMsgIds = new Set((hidesRes.data || []).map((h) => h.message_id));
   const clearRow = clearRes.data;
+  const clearedAt = clearRow && clearRow.cleared_at ? clearRow.cleared_at : null;
 
-  let query = supabase.from("messages").select("*").eq("chat_id", chatId).order("created_at", { ascending: true });
-  if (clearRow && clearRow.cleared_at) query = query.gt("created_at", clearRow.cleared_at);
-  const { data, error } = await query;
-  if (mySeq !== undefined && mySeq !== openSeq) return;
-  if (currentChatId !== chatId) return;
-  if (error) { box.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
-
-  box.innerHTML = "";
   const isChannel = currentChannelObj && currentChannelObj.id === chatId;
 
   // Проверка доступа к чтению: владелец всегда видит, остальные — только если подписаны
@@ -2241,14 +2267,27 @@ async function loadMessages(chatId, mySeq) {
         await loadPinned(chatId);
         return;
       }
-      // Для публичных каналов без подписки оставляем возможность читать (как в Телеграме),
-      // но писать нельзя — это отдельно проверяется в updateChannelComposerState.
     }
   }
 
-  const all = data || [];
-  all.forEach((m) => msgCache.set(m.id, m));
-  const visible = all.filter((m) => !hiddenMsgIds.has(m.id));
+  // Грузим ПОСЛЕДНИЕ MESSAGES_PAGE_SIZE сообщений
+  let query = supabase.from("messages").select("*")
+    .eq("chat_id", chatId)
+    .order("created_at", { ascending: false })
+    .limit(MESSAGES_PAGE_SIZE);
+  if (clearedAt) query = query.gt("created_at", clearedAt);
+  const { data, error } = await query;
+  if (mySeq !== undefined && mySeq !== openSeq) return;
+  if (currentChatId !== chatId) return;
+  if (error) { box.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
+
+  box.innerHTML = "";
+  const initial = (data || []).slice().reverse(); // хронологический порядок
+  initial.forEach((m) => msgCache.set(m.id, m));
+  messagesHasMore = initial.length === MESSAGES_PAGE_SIZE;
+  messagesOldestTs = initial.length ? initial[0].created_at : null;
+
+  const visible = initial.filter((m) => !hiddenMsgIds.has(m.id));
 
   if (visible.length === 0) {
     box.innerHTML = isChannel
@@ -2258,7 +2297,7 @@ async function loadMessages(chatId, mySeq) {
     return;
   }
 
-  // Закрепы ЗАГРУЖАЕМ ДО рендера — чтобы значки 📌 сразу были
+  // Закрепы — до рендера, чтобы значки сразу были
   await loadPinned(chatId);
   if (mySeq !== undefined && mySeq !== openSeq) return;
   if (currentChatId !== chatId) return;
@@ -2279,6 +2318,8 @@ async function loadMessages(chatId, mySeq) {
   }
   scrollToBottom();
   rerenderPinMarks();
+  refreshMessageGroups();
+  buildChatTimeline();
 
   if (isChannel) {
     await viewsPromise;
@@ -2305,6 +2346,112 @@ async function loadMessages(chatId, mySeq) {
       } catch (e) {}
     })();
   }
+}
+
+// Подгрузка 50 более старых сообщений, когда пользователь доскроллил вверх
+async function loadOlderMessages() {
+  if (!messagesHasMore || messagesLoadingMore || !currentChatId || !messagesOldestTs) return;
+  const chatId = currentChatId;
+  messagesLoadingMore = true;
+
+  const box = document.getElementById("messages");
+  if (!box) { messagesLoadingMore = false; return; }
+
+  const loader = document.createElement("div");
+  loader.className = "msg-loader";
+  loader.textContent = "Загрузка...";
+  box.insertBefore(loader, box.firstChild);
+
+  try {
+    const { data, error } = await supabase.from("messages").select("*")
+      .eq("chat_id", chatId)
+      .lt("created_at", messagesOldestTs)
+      .order("created_at", { ascending: false })
+      .limit(MESSAGES_PAGE_SIZE);
+    if (error) { console.warn("loadOlderMessages:", error); loader.remove(); messagesLoadingMore = false; return; }
+    if (currentChatId !== chatId) { loader.remove(); messagesLoadingMore = false; return; }
+
+    const older = (data || []).slice().reverse(); // хронологический
+    if (!older.length) {
+      messagesHasMore = false;
+      loader.remove();
+      messagesLoadingMore = false;
+      return;
+    }
+    messagesHasMore = older.length === MESSAGES_PAGE_SIZE;
+    messagesOldestTs = older[0].created_at;
+
+    const prevHeight = box.scrollHeight;
+    const prevTop = box.scrollTop;
+
+    loader.remove();
+
+    const firstExisting = box.firstChild;
+    const visible = older.filter((m) => !hiddenMsgIds.has(m.id));
+    visible.forEach((m) => msgCache.set(m.id, m));
+
+    for (const m of visible) {
+      if (currentChatId !== chatId) { messagesLoadingMore = false; return; }
+      await appendMessageBefore(m, firstExisting);
+    }
+
+    // Восстанавливаем позицию скролла — пользователь остаётся на том же сообщении
+    box.scrollTop = box.scrollHeight - prevHeight + prevTop;
+
+    await loadReactionsForVisibleMessages();
+    rerenderPinMarks();
+    refreshMessageGroups();
+    buildChatTimeline();
+  } catch (e) {
+    console.warn("loadOlderMessages catch:", e);
+    loader.remove();
+  } finally {
+    messagesLoadingMore = false;
+  }
+}
+
+// Вставка сообщения В НАЧАЛО списка (для подгрузки вверх)
+async function appendMessageBefore(msg, firstExisting) {
+  if (msg.chat_id && currentChatId && msg.chat_id !== currentChatId) return;
+  const box = document.getElementById("messages");
+  if (document.querySelector(`[data-id="${msg.id}"]`)) return;
+  const empty = box.querySelector(".empty");
+  if (empty) empty.remove();
+
+  if (msg.message_type === "tokens" || msg.message_type === "gift") {
+    const el = document.createElement("div");
+    el.className = "msg-system" + (msg.message_type === "gift" ? " gift-msg" : "");
+    el.dataset.id = msg.id;
+    el.innerHTML = await renderSystemMessage(msg);
+    el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
+    el.addEventListener("click", onMsgClick);
+    box.insertBefore(el, firstExisting);
+    msgCache.set(msg.id, msg);
+    return;
+  }
+
+  const isChannelMsg = currentChannelObj && msg.chat_id === currentChannelObj.id;
+  const mine = !isChannelMsg && msg.sender_id === currentUser.id;
+  const el = document.createElement("div");
+  el.className = "msg " + (mine ? "mine" : "other");
+  el.dataset.id = msg.id;
+  el.innerHTML = await buildMsgHtml(msg);
+  el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
+  el.addEventListener("click", onMsgClick);
+  box.insertBefore(el, firstExisting);
+  msgCache.set(msg.id, msg);
+  renderReactionsUI(msg.id);
+}
+
+// Слушаем скролл вверх — догружаем ещё пачку
+function setupMessagesScrollPagination() {
+  const box = document.getElementById("messages");
+  if (!box) return;
+  box.addEventListener("scroll", () => {
+    if (box.scrollTop < 80 && messagesHasMore && !messagesLoadingMore) {
+      loadOlderMessages();
+    }
+  }, { passive: true });
 }
 
 async function loadReactionsForVisibleMessages() {
@@ -5280,13 +5427,24 @@ function setupGiftsUI() {
       const btn = e.target.closest("button"); if (!btn) return;
       e.stopPropagation();
       const ugId = giftMenu.dataset.ugId;
+      const action = btn.dataset.action;
       giftMenu.classList.add("hidden");
-      if (!ugId || btn.dataset.action !== "pin") return;
-      const { data: ug } = await supabase.from("user_gifts").select("pinned_at").eq("id", ugId).maybeSingle();
-      const newVal = (ug && ug.pinned_at) ? null : new Date().toISOString();
-      const { error } = await supabase.from("user_gifts").update({ pinned_at: newVal }).eq("id", ugId);
-      if (error) { await showAlertDialog("Ошибка", error.message); return; }
-      renderGiftsMain(currentUser.id);
+      if (!ugId) return;
+
+      if (action === "pin") {
+        const { data: ug } = await supabase.from("user_gifts").select("pinned_at").eq("id", ugId).maybeSingle();
+        const newVal = (ug && ug.pinned_at) ? null : new Date().toISOString();
+        const { error } = await supabase.from("user_gifts").update({ pinned_at: newVal }).eq("id", ugId);
+        if (error) { await showAlertDialog("Ошибка", error.message); return; }
+        renderGiftsMain(currentUser.id);
+      } else if (action === "visibility") {
+        const { data: ug } = await supabase.from("user_gifts").select("in_profile").eq("id", ugId).maybeSingle();
+        const newVal = !(ug && ug.in_profile);
+        const { error } = await supabase.from("user_gifts").update({ in_profile: newVal }).eq("id", ugId);
+        if (error) { await showAlertDialog("Ошибка", error.message); return; }
+        await refreshMyGiftsCount();
+        renderGiftsMain(currentUser.id);
+      }
     });
     document.addEventListener("click", () => giftMenu.classList.add("hidden"));
   }
@@ -5572,8 +5730,9 @@ async function renderGiftsMain(userId) {
         ? `<div class="gift-tile-pin"><img class="gift-pin-icon" src="https://i.ibb.co/W4YMJWPd/icons8-94.png" alt=""></div>`
         : "";
       const patternIcon = cat.rarity === "epic" ? getPatternIcon(ug.pattern_id) : null;
+      const inProfileClass = (isMe && ug.in_profile) ? " in-profile" : "";
       html += `
-        <div class="gift-tile" data-gift-ug-id="${ug.id}" data-pinned="${ug.pinned_at ? "1" : "0"}">
+        <div class="gift-tile${inProfileClass}" data-gift-ug-id="${ug.id}" data-pinned="${ug.pinned_at ? "1" : "0"}" data-in-profile="${ug.in_profile ? "1" : "0"}">
           ${ribbon}
           ${pinMark}
           <div class="gift-tile-emoji" style="${bg}">
@@ -5619,17 +5778,19 @@ async function renderGiftsMain(userId) {
         ev.preventDefault();
         ev.stopPropagation();
         const ug = gifts.find((g) => g.id === el.dataset.giftUgId);
-        if (ug) openGiftTileContextMenu(ev, ug.id, !!ug.pinned_at);
+        if (ug) openGiftTileContextMenu(ev, ug.id, !!ug.pinned_at, !!ug.in_profile);
       });
     }
   });
 }
 
-function openGiftTileContextMenu(ev, ugId, isPinned) {
+function openGiftTileContextMenu(ev, ugId, isPinned, inProfile) {
   const menu = document.getElementById("gift-context-menu");
   if (!menu) return;
-  const btn = menu.querySelector('button[data-action="pin"]');
-  if (btn) btn.textContent = isPinned ? "Открепить" : "Закрепить";
+  const pinBtn = menu.querySelector('button[data-action="pin"]');
+  if (pinBtn) pinBtn.textContent = isPinned ? "Открепить" : "Закрепить";
+  const visBtn = menu.querySelector('button[data-action="visibility"]');
+  if (visBtn) visBtn.textContent = inProfile ? "Убрать из профиля" : "Добавить в профиль";
   menu.dataset.ugId = ugId;
   menu.classList.remove("hidden");
   menu.style.left = "0px";
@@ -5658,10 +5819,11 @@ async function renderCatalog(recipientId) {
   if (!catalog.length) { content.innerHTML = '<div class="empty">Каталог пуст</div>'; return; }
 
   // Считаем ВСЕ выпущенные подарки (даже если владелец продал — серийник уже существует и «слот» занят).
-  const { data: sold } = await supabase.from("user_gifts")
-    .select("gift_id");
+  // Считаем ВСЕ выпущенные подарки через SECURITY DEFINER RPC — обходит RLS,
+  // и не зависит от owner_id (проданные через sell_gift не «освобождают» слот).
+  const { data: sold } = await supabase.rpc("get_gift_sold_counts");
   const soldMap = new Map();
-  (sold || []).forEach((s) => soldMap.set(s.gift_id, (soldMap.get(s.gift_id) || 0) + 1));
+  (sold || []).forEach((s) => soldMap.set(s.gift_id, Number(s.sold_count) || 0));
 
   content.innerHTML = catalog.map((g) => {
     const soldCount = soldMap.get(g.id) || 0;
@@ -6253,6 +6415,16 @@ async function checkChannelUsernameLive(value) {
   if (username.length < 3) { hint.className = "username-hint err"; hint.textContent = "Минимум 3 символа"; return; }
   hint.className = "username-hint"; hint.textContent = "Проверяю...";
 
+  const reserved = await isUsernameReservedForOther(username);
+  if (reserved) {
+    if (document.getElementById("channel-username-input").value.trim() !== username) return;
+    hint.className = "username-hint err";
+    hint.textContent = `@${username} зарезервирован`;
+    channelUsernameValidated = null;
+    updateChannelCreateButton();
+    return;
+  }
+
   const [pRes, cRes] = await Promise.all([
     supabase.from("profiles").select("id").ilike("username", username).limit(1),
     supabase.from("channels").select("id").ilike("username", username).limit(1),
@@ -6681,6 +6853,16 @@ async function checkChannelEditUsernameLive(value) {
   }
 
   hint.className = "username-hint"; hint.textContent = "Проверяю...";
+
+  const reserved = await isUsernameReservedForOther(username);
+  if (reserved) {
+    if (document.getElementById("channel-edit-username-input").value.trim() !== username) return;
+    hint.className = "username-hint err";
+    hint.textContent = `@${username} зарезервирован`;
+    channelEditUsernameValidated = null;
+    updateChannelEditSaveButton();
+    return;
+  }
 
   const [pRes, cRes] = await Promise.all([
     supabase.from("profiles").select("id").ilike("username", username).limit(1),
