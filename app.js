@@ -2701,16 +2701,35 @@ function setupCommandPalette() {
   const overlay = document.getElementById("cmd-palette-overlay");
   if (!input || !overlay) return;
 
+  // ВАЖНО: capture: true — перехватываем раньше браузера
   document.addEventListener("keydown", (e) => {
-    const isK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k";
+    // e.code не зависит от раскладки — KeyK везде KeyK
+    const isK = (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.code === "KeyK";
     if (isK) {
       e.preventDefault();
-      openCmdPalette();
+      e.stopPropagation();
+      if (cmdPaletteOpen) closeCmdPalette();
+      else openCmdPalette();
+      return;
     }
     if (e.key === "Escape" && cmdPaletteOpen) {
+      e.preventDefault();
+      e.stopPropagation();
       closeCmdPalette();
     }
-  });
+  }, true);
+
+  // На случай, если focus в самом input — тоже перехватываем
+  document.addEventListener("keydown", (e) => {
+    if (e.target === input) return;
+    const isK = (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.code === "KeyK";
+    if (isK) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (cmdPaletteOpen) closeCmdPalette();
+      else openCmdPalette();
+    }
+  }, true);
 
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) closeCmdPalette();
@@ -2725,6 +2744,7 @@ function setupCommandPalette() {
     if (e.key === "ArrowDown") { e.preventDefault(); cmdPaletteMove(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); cmdPaletteMove(-1); }
     else if (e.key === "Enter") { e.preventDefault(); cmdPaletteRunSelected(); }
+    else if (e.key === "Escape") { e.preventDefault(); closeCmdPalette(); }
   });
 }
 
