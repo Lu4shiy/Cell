@@ -56,6 +56,17 @@ const ICONS = {
   switchOn:    "https://i.ibb.co/MDfhc887/icons8-switch-on-100.png",
 };
 
+// ======================================================
+// РЕЖИМ СПИСКА ЧАТОВ — объявлено ДО initApp, иначе TDZ
+// ======================================================
+const SCROLL_MODE_KEY = "cell_scroll_mode";
+let scrollMode = "classic"; // "classic" | "wheel"
+try {
+  const savedMode = localStorage.getItem(SCROLL_MODE_KEY);
+  if (savedMode === "classic" || savedMode === "wheel") scrollMode = savedMode;
+} catch (e) { /* silent */ }
+document.documentElement.dataset.scrollMode = scrollMode;
+
 // ======================= 1. АВТОРИЗАЦИЯ =======================
 const tabs = document.querySelectorAll(".tab");
 const loginForm = document.getElementById("login-form");
@@ -7098,9 +7109,8 @@ function subscribeToChannelRequests() {
 // ======================================================
 // 43. НАСТРОЙКИ: РЕЖИМ СПИСКА ЧАТОВ
 // ======================================================
-
-const SCROLL_MODE_KEY = "cell_scroll_mode";
-let scrollMode = "classic"; // "classic" | "wheel"
+// ВАЖНО: SCROLL_MODE_KEY и scrollMode объявлены в самом верху файла,
+// сразу после ICONS — чтобы не было TDZ при вызове initApp().
 
 function setupSettings() {
   const btn = document.getElementById("settings-btn");
