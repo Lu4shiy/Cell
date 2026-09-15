@@ -410,6 +410,46 @@ async function initApp() {
   window.addEventListener("hashchange", () => {
     if (currentUser) tryJoinFromInviteUrl();
   });
+
+  // Страховочный опрос членств — на случай, если realtime не доставил событие
+  // (например, при одобрении заявки владельцем канала)
+  setInterval(pollMemberships, 4000);
+  setTimeout(pollMemberships, 1000);
+}
+
+// Опрашивает список моих chat_members и подтягивает всё, чего нет в UI
+async function pollMemberships() {
+  if (!currentUser) return;
+  // Не трогаем список, если открыт поиск — там свои результаты
+  const searchInput = document.getElementById("search-input");
+  if (searchInput && searchInput.value.trim()) return;
+  try {
+    const { data: myMemberships } = await supabase.from("chat_members")
+      .select("chat_id").eq("user_id", currentUser.id);
+    if (!myMemberships) return;
+    const myIds = new Set(myMemberships.map((m) => m.chat_id));
+
+    // Что сейчас в UI
+    const uiIds = new Set();
+    document.querySelectorAll(".user-item[data-chat-id]").forEach((el) => {
+      uiIds.add(el.dataset.chatId);
+    });
+
+    // Что есть в БД, но нет в UI → добавляем
+    for (const cid of myIds) {
+      if (uiIds.has(cid)) continue;
+      const { data: ch } = await supabase.from("channels").select("*").eq("id", cid).maybeSingle();
+      if (ch) {
+        await addOrUpdateChannelInList(cid, ch);
+      } else {
+        const { data: others } = await supabase.from("chat_members")
+          .select("user_id").eq("chat_id", cid).neq("user_id", currentUser.id);
+        if (others && others.length) {
+          await addOrUpdateChatInList(cid, others[0].user_id);
+        }
+      }
+    }
+  } catch (e) { /* silent */ }
 }
 
 async function pollMyMessageStatuses() {
@@ -5291,18 +5331,13 @@ async function openChannelProfileDialog() {
   const menuBtn = document.getElementById("channel-profile-menu-btn");
   menuBtn.classList.toggle("hidden", !isOwner);
 
-  // Вкладка «Заявки» — только для владельца/админов И только для каналов «по заявке»
+  // Вкладка «Заявки» — только для владельца И только для каналов «по заявке»
   const requestsRow = document.getElementById("channel-profile-requests-row");
   if (requestsRow) {
     const visibility = ch.visibility || "public";
-    if ((isOwner || isAdmin) && visibility === "request") {
+    if (isOwner && visibility === "request") {
       requestsRow.classList.remove("hidden");
-      const { data: cnt } = await supabase.rpc("count_pending_requests", { p_chat_id: ch.id });
-      const n = Number(cnt) || 0;
-      document.getElementById("channel-profile-requests").textContent = String(n);
-      const word = pluralRu(n, "заявка", "заявки", "заявок");
-      const sub = requestsRow.querySelector(".pir-label");
-      if (sub) sub.textContent = `${n} ${word} · нажми, чтобы посмотреть`;
+      await updateChannelRequestsBadge(ch.id);
     } else {
       requestsRow.classList.add("hidden");
     }
@@ -5757,6 +5792,8 @@ async function removeChannelAdmin(userId) {
   if (error) { await showAlertDialog("Ошибка", error.message); return; }
   await renderChannelEditAdmins();
   await refreshChannelRights(currentChannelObj.id);
+  // «Сохранить» — только для полей канала, сбрасываем её состояние
+  updateChannelEditSaveButton();
 }
 
 async function openAddAdminDialog() {
@@ -5815,6 +5852,7 @@ async function openAddAdminDialog() {
   if (error) { await showAlertDialog("Ошибка", error.message); return; }
   await renderChannelEditAdmins();
   await refreshChannelRights(ch.id);
+  updateChannelEditSaveButton();
 }
 
 async function openTransferOwnerDialog() {
@@ -5875,6 +5913,7 @@ async function openTransferOwnerDialog() {
   await showAlertDialog("Готово", "Владение передано.");
   closeChannelEditDialog();
   closeChannelProfileDialog();
+  updateChannelEditSaveButton();
   // Если ты больше не владелец и не админ — канал останется открытым,
   // но composer скроется, а меню перестроится. Если ты и не подписчик — закроем.
   if (!currentChannelIsAdmin && !currentChannelIsSubscribed) {
@@ -6346,7 +6385,11 @@ async function openChannelRequestsDialog() {
     .select("id, user_id, created_at").eq("chat_id", ch.id)
     .order("created_at", { ascending: true });
   if (error) { listEl.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
-  if (!reqs || !reqs.length) { listEl.innerHTML = '<div class="empty">Нет активных заявок</div>'; return; }
+  if (!reqs || !reqs.length) {
+    listEl.innerHTML = '<div class="empty">Нет активных заявок</div>';
+    updateChannelRequestsBadge(ch.id);
+    return;
+  }
 
   const profiles = [];
   for (const r of reqs) {
@@ -6377,6 +6420,7 @@ async function openChannelRequestsDialog() {
       const { error } = await supabase.rpc("approve_join_request", { p_request_id: btn.dataset.approve });
       btn.disabled = false;
       if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      await updateChannelRequestsBadge(ch.id);
       await openChannelRequestsDialog(); // перерисовать
       await refreshChannelRights(ch.id);
     });
@@ -6387,9 +6431,23 @@ async function openChannelRequestsDialog() {
       const { error } = await supabase.rpc("reject_join_request", { p_request_id: btn.dataset.reject });
       btn.disabled = false;
       if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      await updateChannelRequestsBadge(ch.id);
       await openChannelRequestsDialog();
     });
   });
+}
+
+// Обновляет бейдж «Заявки» в открытом профиле канала
+async function updateChannelRequestsBadge(channelId) {
+  if (channelProfileChannelId !== channelId) return;
+  const requestsRow = document.getElementById("channel-profile-requests-row");
+  if (!requestsRow || requestsRow.classList.contains("hidden")) return;
+  const { data: cnt } = await supabase.rpc("count_pending_requests", { p_chat_id: channelId });
+  const n = Number(cnt) || 0;
+  document.getElementById("channel-profile-requests").textContent = String(n);
+  const word = pluralRu(n, "заявка", "заявки", "заявок");
+  const sub = requestsRow.querySelector(".pir-label");
+  if (sub) sub.textContent = `${n} ${word} · нажми, чтобы посмотреть`;
 }
 
 function subscribeToChannelRequests() {
@@ -6400,15 +6458,7 @@ function subscribeToChannelRequests() {
       if (!row) return;
       // Обновляем бейдж на открытом профиле
       if (channelProfileChannelId === row.chat_id) {
-        const requestsRow = document.getElementById("channel-profile-requests-row");
-        if (requestsRow && !requestsRow.classList.contains("hidden")) {
-          const { data: cnt } = await supabase.rpc("count_pending_requests", { p_chat_id: row.chat_id });
-          const n = Number(cnt) || 0;
-          document.getElementById("channel-profile-requests").textContent = String(n);
-          const word = pluralRu(n, "заявка", "заявки", "заявок");
-          const sub = requestsRow.querySelector(".pir-label");
-          if (sub) sub.textContent = `${n} ${word} · нажми, чтобы посмотреть`;
-        }
+        await updateChannelRequestsBadge(row.chat_id);
       }
       // Если открыт список заявок — перерисовать
       if (currentChannelObj && currentChannelObj.id === row.chat_id) {
