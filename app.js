@@ -5814,9 +5814,9 @@ async function renderGiftDetail(ownerId, ug) {
 
   content.innerHTML = `
     <div class="gift-detail">
-      <div class="gift-hero">
+      <div class="gift-hero" style="${bg}">
         <div class="gift-hero-pattern" style="${patternStyle}"></div>
-        <div class="gift-hero-emoji" style="${bg}">${cat.emoji}</div>
+        <div class="gift-hero-emoji">${cat.emoji}</div>
       </div>
 
       <div class="gift-detail-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
