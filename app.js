@@ -21,6 +21,41 @@ const ACCENT_COLORS = { orange:"#ff8c42",blue:"#2196f3",green:"#4caf50",red:"#f4
 const BASE_AVATARS = [["#ff8c42","#ffb37a"],["#2196f3","#64b5f6"],["#4caf50","#81c784"],["#f44336","#ef9a9a"],["#9c27b0","#ce93d8"],["#e91e63","#f48fb1"],["#009688","#4db6ac"],["#607d8b","#90a4ae"]];
 const REACTION_EMOJIS = ["👍","👎","❤️","🤣","🤮","🤯","🤬","😡","🎉","😅"];
 
+// ---- Иконки Cell ----
+const ICONS = {
+  plus:        "https://i.ibb.co/vxd50Lys/icons8-1500.png",
+  search:      "https://i.ibb.co/6zRygtc/icons8-1500.png",
+  arrowRight:  "https://i.ibb.co/sJ5cRDq5/icons8-100.png",
+  arrowUp:     "https://i.ibb.co/4RQ8CxV6/icons8-arrow-up-100.png",
+  arrowDown:   "https://i.ibb.co/hx2WcJm1/icons8-100.png",
+  miniRight:   "https://i.ibb.co/YFYkyF74/icons8-100.png",
+  miniLeft:    "https://i.ibb.co/MxBsK2rf/icons8-100.png",
+  arrowLeft:   "https://i.ibb.co/93dShvBP/icons8-100.png",
+  undo:        "https://i.ibb.co/W4JjxNdk/icons8-100.png",
+  redo:        "https://i.ibb.co/7JkncpWz/icons8-100.png",
+  checkboxOff: "https://i.ibb.co/Q7GpR0tj/icons8-unchecked-checkbox-100.png",
+  checkboxOn:  "https://i.ibb.co/Xx1gZN2H/icons8-checked-checkbox-100.png",
+  upload:      "https://i.ibb.co/pvyKyg4v/icons8-upload-100.png",
+  findFile:    "https://i.ibb.co/8L9MNx03/icons8-view-100.png",
+  addFile:     "https://i.ibb.co/whVjBfR3/icons8-add-file-100.png",
+  addLink:     "https://i.ibb.co/4ZtzJ06c/icons8-add-link-100.png",
+  email:       "https://i.ibb.co/ns3L6RZX/icons8-at-sign-100.png",
+  calendar:    "https://i.ibb.co/dZjkzXz/icons8-calendar-100.png",
+  logout:      "https://i.ibb.co/gbTLc2jJ/icons8-change-user-100.png",
+  deleteLink:  "https://i.ibb.co/0y0fG5n2/icons8-delete-link-100.png",
+  download:    "https://i.ibb.co/fzzrdz3V/icons8-download-100.png",
+  error:       "https://i.ibb.co/GvBQMp9G/icons8-error-sign-100.png",
+  features:    "https://i.ibb.co/C5FZd4mj/icons8-features-list-100.png",
+  gear:        "https://i.ibb.co/CsBkQMQv/icons8-gear-100.png",
+  info:        "https://i.ibb.co/nqcVPKHp/icons8-info-popup-100.png",
+  language:    "https://i.ibb.co/5Xr3V3Kv/icons8-language-100.png",
+  link:        "https://i.ibb.co/XrqrrXm9/icons8-link-100.png",
+  save:        "https://i.ibb.co/Lh0mHcsY/icons8-save-100.png",
+  saveAs:      "https://i.ibb.co/MkZN03VX/icons8-save-as-100.png",
+  switchOff:   "https://i.ibb.co/0jsYMd1s/icons8-switch-off-100.png",
+  switchOn:    "https://i.ibb.co/MDfhc887/icons8-switch-on-100.png",
+};
+
 // ======================= 1. АВТОРИЗАЦИЯ =======================
 const tabs = document.querySelectorAll(".tab");
 const loginForm = document.getElementById("login-form");
@@ -337,6 +372,7 @@ async function initApp() {
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
   setupAttachments(); setupMediaViewer(); setupEmojiPicker(); setupAboutDialog();
   setupWheel(); setupCommandPalette(); setupMiniProfile(); setupDateFloat();
+  setupSettings(); applyScrollMode();
   setupChatSearch(); setupScrollBottomButton();
   setupChatPins(); setupInviteUI();
   subscribeToPins();
@@ -3260,12 +3296,16 @@ function setupAttachments() {
 
   btn.addEventListener("click", () => input.click());
 
-  input.addEventListener("change", async (e) => {
+  input.addEventListener("change", (e) => {
     const files = [...e.target.files];
     e.target.value = "";
     if (!files.length) return;
-    await handleAttachments(files);
+    // Открываем диалог предпросмотра — отправка пойдёт оттуда
+    openAttachmentDialog(files);
   });
+
+  // Инициализируем диалог предпросмотра
+  setupAttachPreviewDialog();
 }
 
 function setupAboutDialog() {
@@ -3281,10 +3321,15 @@ function setupAboutDialog() {
   });
 }
 
+let mediaViewerList = [];   // [{ url, kind, msgId }]
+let mediaViewerIndex = -1;
+
 function setupMediaViewer() {
   const overlay = document.getElementById("media-viewer");
   const body = document.getElementById("media-viewer-body");
   const closeBtn = document.getElementById("media-viewer-close");
+  const prevBtn = document.getElementById("media-viewer-prev");
+  const nextBtn = document.getElementById("media-viewer-next");
   if (!overlay || !body) return;
 
   closeBtn.addEventListener("click", (e) => {
@@ -3294,39 +3339,90 @@ function setupMediaViewer() {
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) closeMediaViewer();
   });
+  if (prevBtn) prevBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    mediaViewerNavigate(-1);
+  });
+  if (nextBtn) nextBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    mediaViewerNavigate(1);
+  });
+
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !overlay.classList.contains("hidden")) {
-      e.preventDefault();
-      closeMediaViewer();
-    }
+    if (overlay.classList.contains("hidden")) return;
+    if (e.key === "Escape") { e.preventDefault(); closeMediaViewer(); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); mediaViewerNavigate(-1); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); mediaViewerNavigate(1); }
   });
 }
 
-function openMediaViewer(url, kind) {
+// Собирает все медиа текущего открытого чата в порядке следования сообщений
+function collectChatMedia() {
+  const result = [];
+  document.querySelectorAll("#messages .msg").forEach((el) => {
+    const m = msgCache.get(el.dataset.id);
+    if (!m) return;
+    if (m.message_type === "attachment" && m.image_url && (m.file_kind === "image" || m.file_kind === "video")) {
+      result.push({ url: m.image_url, kind: m.file_kind, msgId: m.id });
+    }
+  });
+  return result;
+}
+
+function openMediaViewer(url, kind, mediaList, startIndex) {
   const overlay = document.getElementById("media-viewer");
   const body = document.getElementById("media-viewer-body");
   if (!overlay || !body) return;
 
-  // Останавливаем все видео, которые могли играть в фоне
+  if (mediaList && mediaList.length) {
+    mediaViewerList = mediaList;
+    mediaViewerIndex = (startIndex >= 0 && startIndex < mediaList.length) ? startIndex : 0;
+  } else {
+    mediaViewerList = [{ url, kind, msgId: null }];
+    mediaViewerIndex = 0;
+  }
+
+  renderMediaViewer();
+  overlay.classList.remove("hidden");
+}
+
+function renderMediaViewer() {
+  const body = document.getElementById("media-viewer-body");
+  const prevBtn = document.getElementById("media-viewer-prev");
+  const nextBtn = document.getElementById("media-viewer-next");
+  if (!body) return;
+
   document.querySelectorAll("#media-viewer video").forEach((v) => {
     try { v.pause(); } catch (e) {}
   });
-
   body.innerHTML = "";
-  if (kind === "video") {
+
+  const cur = mediaViewerList[mediaViewerIndex];
+  if (!cur) { closeMediaViewer(); return; }
+
+  if (cur.kind === "video") {
     const v = document.createElement("video");
-    v.src = url;
+    v.src = cur.url;
     v.controls = true;
     v.autoplay = true;
     v.playsInline = true;
     body.appendChild(v);
   } else {
     const img = document.createElement("img");
-    img.src = url;
+    img.src = cur.url;
     img.alt = "";
     body.appendChild(img);
   }
-  overlay.classList.remove("hidden");
+
+  if (prevBtn) prevBtn.classList.toggle("hidden", mediaViewerIndex <= 0);
+  if (nextBtn) nextBtn.classList.toggle("hidden", mediaViewerIndex >= mediaViewerList.length - 1);
+}
+
+function mediaViewerNavigate(dir) {
+  const next = mediaViewerIndex + dir;
+  if (next < 0 || next >= mediaViewerList.length) return;
+  mediaViewerIndex = next;
+  renderMediaViewer();
 }
 
 function closeMediaViewer() {
@@ -3338,6 +3434,8 @@ function closeMediaViewer() {
   });
   body.innerHTML = "";
   overlay.classList.add("hidden");
+  mediaViewerList = [];
+  mediaViewerIndex = -1;
 }
 
 function detectFileKind(file) {
@@ -3378,7 +3476,7 @@ function buildAttachmentHtml(msg) {
   </a>`;
 }
 
-async function handleAttachments(files) {
+async function handleAttachments(files, caption, asFile) {
   if (currentChannelObj) {
     const isOwner = currentChannelObj.owner_id === currentUser.id;
     const canWrite = isOwner || (currentChannelIsSubscribed && currentChannelIsAdmin);
@@ -3414,13 +3512,16 @@ async function handleAttachments(files) {
   }
   if (!currentChatId) return;
 
-  for (const file of files) {
-    await uploadAndSendAttachment(file, currentChatId);
+  const cap = (caption || "").trim();
+  for (let i = 0; i < files.length; i++) {
+    await uploadAndSendAttachment(files[i], currentChatId, i === 0 ? cap : "", !!asFile);
   }
 }
 
-async function uploadAndSendAttachment(file, chatId) {
-  const kind = detectFileKind(file);
+async function uploadAndSendAttachment(file, chatId, caption, asFile) {
+  const detected = detectFileKind(file);
+  const kind = asFile ? "file" : detected;
+  caption = caption || "";
   const rawExt = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
   const ext = rawExt.slice(0, 8) || "bin";
   const path = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
@@ -3468,7 +3569,7 @@ async function uploadAndSendAttachment(file, chatId) {
   const payload = {
     chat_id: chatId,
     sender_id: currentUser.id,
-    content: "",
+    content: caption || "",
     message_type: "attachment",
     image_url: url,
     file_name: file.name,
@@ -3498,7 +3599,8 @@ async function uploadAndSendAttachment(file, chatId) {
   await appendMessage(data);
   scrollToBottom();
 
-  const preview = kind === "image" ? "📷 Фото" : kind === "video" ? "🎥 Видео" : "📎 Файл";
+  let preview = kind === "image" ? "📷 Фото" : kind === "video" ? "🎥 Видео" : "📎 Файл";
+  if (caption) preview = caption.slice(0, 60);
   chatLastMsg.set(chatId, {
     text: preview, time: new Date(data.created_at).getTime(),
     senderId: currentUser.id, unread: 0,
@@ -4124,27 +4226,17 @@ function setupMessageMenu() {
     window.location.hash = "invite=" + m[1];
   }, true);
 
-  // Клик по картинке в сообщении — открываем лайтбокс (не новую вкладку)
-  document.getElementById("messages").addEventListener("click", (e) => {
-    const img = e.target.closest("img.msg-attachment-image");
-    if (!img) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const url = img.dataset.mediaUrl || img.src;
-    openMediaViewer(url, "image");
-  }, true);
-
-  // Клик по видео (без нажатия на controls) — тоже лайтбокс.
-  // Если это клик по самой области controls — не перехватываем.
   document.getElementById("messages").addEventListener("click", (e) => {
     const video = e.target.closest("video.msg-attachment-video");
     if (!video) return;
-    // Не перехватываем клики внутри нативных контролов управления
     if (e.target !== video) return;
     e.preventDefault();
     e.stopPropagation();
     const url = video.dataset.mediaUrl || video.src;
-    openMediaViewer(url, "video");
+    const msgId = video.closest("[data-id]")?.dataset.id || null;
+    const media = collectChatMedia();
+    const idx = media.findIndex((x) => x.msgId === msgId);
+    openMediaViewer(url, "video", media, idx >= 0 ? idx : 0);
   }, true);
 }
 
@@ -7004,4 +7096,217 @@ function subscribeToChannelRequests() {
       }
     })
     .subscribe();
+}
+
+// ======================================================
+// 43. НАСТРОЙКИ: РЕЖИМ СПИСКА ЧАТОВ
+// ======================================================
+
+const SCROLL_MODE_KEY = "cell_scroll_mode";
+let scrollMode = "classic"; // "classic" | "wheel"
+
+function setupSettings() {
+  const btn = document.getElementById("settings-btn");
+  const overlay = document.getElementById("settings-overlay");
+  const closeBtn = document.getElementById("settings-close");
+  const toggle = document.getElementById("settings-scroll-mode");
+  if (!btn || !overlay) return;
+
+  btn.addEventListener("click", () => {
+    updateSettingsUI();
+    overlay.classList.remove("hidden");
+  });
+  if (closeBtn) closeBtn.addEventListener("click", () => overlay.classList.add("hidden"));
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) overlay.classList.add("hidden");
+  });
+
+  if (toggle) {
+    toggle.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-mode]");
+      if (!b) return;
+      scrollMode = b.dataset.mode;
+      try { localStorage.setItem(SCROLL_MODE_KEY, scrollMode); } catch (ex) {}
+      updateSettingsUI();
+      applyScrollMode();
+    });
+  }
+}
+
+function updateSettingsUI() {
+  const toggle = document.getElementById("settings-scroll-mode");
+  if (!toggle) return;
+  toggle.querySelectorAll("button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.mode === scrollMode);
+  });
+}
+
+function applyScrollMode() {
+  try {
+    const saved = localStorage.getItem(SCROLL_MODE_KEY);
+    if (saved === "classic" || saved === "wheel") scrollMode = saved;
+  } catch (e) {}
+
+  document.documentElement.dataset.scrollMode = scrollMode;
+
+  const list = document.getElementById("users-list");
+  if (!list) return;
+
+  if (scrollMode === "classic") {
+    // Убираем отступы, добавленные колесом
+    list.style.paddingTop = "";
+    list.style.paddingBottom = "";
+    // Прокручиваем наверх
+    list.scrollTop = 0;
+  } else {
+    // Колёсный режим — пересчитаем отступы (setPadding вызовется из setupWheel)
+    if (typeof refreshWheelLayout === "function") refreshWheelLayout();
+    if (typeof updateWheelFromScroll === "function") updateWheelFromScroll();
+  }
+}
+
+// Сохранить режим при старте — сделать это до initApp
+(function initScrollMode() {
+  try {
+    const saved = localStorage.getItem(SCROLL_MODE_KEY);
+    if (saved === "classic" || saved === "wheel") {
+      scrollMode = saved;
+    } else {
+      scrollMode = "classic"; // по умолчанию — классический
+    }
+  } catch (e) { scrollMode = "classic"; }
+  document.documentElement.dataset.scrollMode = scrollMode;
+})();
+
+// ======================================================
+// 44. ПРЕДПРОСМОТР ВЛОЖЕНИЙ ПЕРЕД ОТПРАВКОЙ
+// ======================================================
+
+let attachPendingFiles = [];
+
+function openAttachmentDialog(files) {
+  attachPendingFiles = [...files];
+  document.getElementById("attach-caption").value = "";
+  document.getElementById("attach-as-file").checked = false;
+  updateAttachAsFileIcon();
+  renderAttachPreview();
+  document.getElementById("attach-preview-overlay").classList.remove("hidden");
+  setTimeout(() => document.getElementById("attach-caption").focus(), 60);
+}
+
+function updateAttachAsFileIcon() {
+  const cb = document.getElementById("attach-as-file");
+  const icon = document.getElementById("attach-as-file-icon");
+  if (!cb || !icon) return;
+  icon.src = cb.checked ? ICONS.checkboxOn : ICONS.checkboxOff;
+}
+
+function renderAttachPreview() {
+  const listEl = document.getElementById("attach-preview-list");
+  if (!listEl) return;
+
+  if (!attachPendingFiles.length) {
+    document.getElementById("attach-preview-overlay").classList.add("hidden");
+    return;
+  }
+
+  listEl.innerHTML = attachPendingFiles.map((f, i) => {
+    const url = URL.createObjectURL(f);
+    const kind = detectFileKind(f);
+    let previewHtml;
+    if (kind === "image") {
+      previewHtml = `<img src="${url}" class="attach-preview-media" alt="">`;
+    } else if (kind === "video") {
+      previewHtml = `<video src="${url}" class="attach-preview-media" muted preload="metadata"></video>`;
+    } else {
+      previewHtml = `<div class="attach-preview-file"><span class="maf-icon">📎</span><span class="maf-name" style="font-size:14px;">${escapeHtml(f.name)}</span></div>`;
+    }
+    return `<div class="attach-preview-item">
+      ${previewHtml}
+      <button class="attach-preview-remove" data-remove-idx="${i}" title="Убрать">✕</button>
+    </div>`;
+  }).join("");
+
+  // Обновляем заголовок
+  const titleEl = document.getElementById("attach-preview-title");
+  if (titleEl) {
+    const firstKind = detectFileKind(attachPendingFiles[0]);
+    if (firstKind === "image") titleEl.textContent = "Отправить изображение";
+    else if (firstKind === "video") titleEl.textContent = "Отправить видео";
+    else titleEl.textContent = "Отправить файл";
+  }
+
+  listEl.querySelectorAll("[data-remove-idx]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const i = parseInt(btn.dataset.removeIdx, 10);
+      if (isNaN(i)) return;
+      attachPendingFiles.splice(i, 1);
+      renderAttachPreview();
+    });
+  });
+}
+
+function setupAttachPreviewDialog() {
+  const overlay = document.getElementById("attach-preview-overlay");
+  const cancelBtn = document.getElementById("attach-preview-cancel");
+  const sendBtn = document.getElementById("attach-preview-send");
+  const addBtn = document.getElementById("attach-add-btn");
+  const moreInput = document.getElementById("attach-more-input");
+  const asFileCb = document.getElementById("attach-as-file");
+  const captionEl = document.getElementById("attach-caption");
+  if (!overlay) return;
+
+  cancelBtn.addEventListener("click", () => {
+    attachPendingFiles = [];
+    overlay.classList.add("hidden");
+    document.getElementById("attach-caption").value = "";
+    document.getElementById("attach-as-file").checked = false;
+    updateAttachAsFileIcon();
+  });
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      attachPendingFiles = [];
+      overlay.classList.add("hidden");
+      document.getElementById("attach-caption").value = "";
+      document.getElementById("attach-as-file").checked = false;
+      updateAttachAsFileIcon();
+    }
+  });
+
+  if (asFileCb) asFileCb.addEventListener("change", updateAttachAsFileIcon);
+
+  if (captionEl) {
+    captionEl.addEventListener("input", () => {
+      captionEl.style.height = "auto";
+      captionEl.style.height = Math.min(captionEl.scrollHeight, 120) + "px";
+    });
+  }
+
+  if (addBtn && moreInput) {
+    addBtn.addEventListener("click", () => moreInput.click());
+    moreInput.addEventListener("change", (e) => {
+      const files = [...e.target.files];
+      e.target.value = "";
+      if (!files.length) return;
+      attachPendingFiles = attachPendingFiles.concat(files);
+      renderAttachPreview();
+    });
+  }
+
+  sendBtn.addEventListener("click", async () => {
+    if (!attachPendingFiles.length) return;
+    const files = [...attachPendingFiles];
+    const caption = (document.getElementById("attach-caption").value || "").trim();
+    const asFile = document.getElementById("attach-as-file").checked;
+
+    attachPendingFiles = [];
+    overlay.classList.add("hidden");
+    document.getElementById("attach-caption").value = "";
+    document.getElementById("attach-as-file").checked = false;
+    updateAttachAsFileIcon();
+
+    await handleAttachments(files, caption, asFile);
+  });
 }

@@ -55,9 +55,10 @@
           </div>
         </div>
         <div class="sidebar-actions">
-          <button id="create-channel-btn" class="icon-btn" title="Создать канал">＋</button>
-          <button id="about-btn" class="icon-btn" title="О приложении">ℹ</button>
-          <button id="logout-btn" class="icon-btn" title="Выйти">⎋</button>
+          <button id="create-channel-btn" class="icon-btn" title="Создать канал"><img class="cell-icon" src="https://i.ibb.co/vxd50Lys/icons8-1500.png" alt="+"></button>
+          <button id="settings-btn" class="icon-btn" title="Настройки"><img class="cell-icon" src="https://i.ibb.co/CsBkQMQv/icons8-gear-100.png" alt="⚙"></button>
+          <button id="about-btn" class="icon-btn" title="О приложении"><img class="cell-icon" src="https://i.ibb.co/nqcVPKHp/icons8-info-popup-100.png" alt="ℹ"></button>
+          <button id="logout-btn" class="icon-btn" title="Выйти"><img class="cell-icon" src="https://i.ibb.co/gbTLc2jJ/icons8-change-user-100.png" alt="⎋"></button>
         </div>
       </header>
 
@@ -98,7 +99,7 @@
             <div class="chat-title" id="chat-title">Имя</div>
             <div class="chat-subtitle" id="chat-subtitle">@username</div>
           </div>
-          <button id="chat-search-btn" class="icon-btn" title="Поиск в чате">🔍</button>
+          <button id="chat-search-btn" class="icon-btn" title="Поиск в чате"><img class="cell-icon" src="https://i.ibb.co/6zRygtc/icons8-1500.png" alt="🔍"></button>
           <button id="chat-pin-btn" class="icon-btn" title="Закреплённые">📌<span class="pin-count-badge hidden" id="pin-count-badge">0</span></button>
           <button id="chat-menu-btn" class="icon-btn" title="Меню">⋮</button>
           <div id="chat-menu" class="menu hidden">
@@ -138,7 +139,7 @@
         <div class="messages" id="messages"></div>
         <div id="date-float" class="date-float hidden"></div>
         <div id="chat-timeline" class="chat-timeline hidden"></div>
-        <button id="scroll-bottom-btn" class="scroll-bottom-btn" title="Вниз">↓</button>
+        <button id="scroll-bottom-btn" class="scroll-bottom-btn" title="Вниз"><img class="cell-icon" src="https://i.ibb.co/hx2WcJm1/icons8-100.png" alt="↓"></button>
 
         <div id="reply-bar" class="reply-bar hidden">
           <div class="reply-bar-icon" id="reply-bar-icon">↩</div>
@@ -150,7 +151,7 @@
         </div>
 
         <form class="composer" id="composer">
-          <button type="button" id="attach-btn" class="attach-btn" title="Прикрепить файл">📎</button>
+          <button type="button" id="attach-btn" class="attach-btn" title="Прикрепить файл"><img class="cell-icon" src="https://i.ibb.co/XrqrrXm9/icons8-link-100.png" alt="📎"></button>
           <input type="file" id="attach-input" multiple hidden>
           <div id="message-input" class="message-input" contenteditable="true" data-placeholder="Написать сообщение..." role="textbox" spellcheck="false"></div>
           <button type="button" id="emoji-btn" class="emoji-btn" title="Эмодзи">😊</button>
@@ -354,7 +355,9 @@
 
   <div id="media-viewer" class="media-viewer hidden">
     <button class="media-viewer-close" id="media-viewer-close" title="Закрыть">✕</button>
+    <button class="media-viewer-nav media-viewer-prev hidden" id="media-viewer-prev" title="Предыдущее"><img class="cell-icon-lg" src="https://i.ibb.co/MxBsK2rf/icons8-100.png" alt="‹"></button>
     <div class="media-viewer-body" id="media-viewer-body"></div>
+    <button class="media-viewer-nav media-viewer-next hidden" id="media-viewer-next" title="Следующее"><img class="cell-icon-lg" src="https://i.ibb.co/YFYkyF74/icons8-100.png" alt="›"></button>
   </div>
 
   <div id="input-overlay" class="dialog-overlay hidden">
@@ -646,6 +649,27 @@
     </div>
   </div>
 
+  <div id="settings-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-settings">
+      <div class="dialog-title">Настройки</div>
+
+      <div class="profile-section">
+        <div class="profile-label">Режим списка чатов</div>
+        <div class="visibility-toggle" id="settings-scroll-mode">
+          <button type="button" data-mode="classic">Обычный</button>
+          <button type="button" data-mode="wheel">Современный</button>
+        </div>
+        <div class="username-hint">
+          Обычный — привычный список. Современный — колесо с центрированием и плавным переходом.
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="settings-close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
   <div id="about-overlay" class="dialog-overlay hidden">
     <div class="dialog dialog-about">
       <div class="about-logo">
@@ -722,6 +746,33 @@
       </div>
     </div>
     <div class="mini-profile-status" id="mini-profile-status">—</div>
+  </div>
+
+  <div id="attach-preview-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-attach-preview">
+      <div class="dialog-title" id="attach-preview-title">Отправить</div>
+
+      <div id="attach-preview-list" class="attach-preview-list"></div>
+
+      <label class="toggle-row attach-preview-toggle">
+        <img class="cell-icon-sm" src="https://i.ibb.co/Q7GpR0tj/icons8-unchecked-checkbox-100.png" alt="" id="attach-as-file-icon">
+        <input type="checkbox" id="attach-as-file">
+        <span>Отправить как файл</span>
+      </label>
+
+      <div class="profile-label" style="margin-top:4px;">Подпись</div>
+      <textarea id="attach-caption" class="attach-caption" placeholder="Введите подпись..." rows="1"></textarea>
+
+      <input type="file" id="attach-more-input" multiple hidden>
+
+      <div class="attach-preview-actions">
+        <button type="button" class="attach-add-btn" id="attach-add-btn" title="Добавить файл"><img class="cell-icon" src="https://i.ibb.co/whVjBfR3/icons8-add-file-100.png" alt="+"></button>
+        <div class="attach-preview-actions-right">
+          <button class="dialog-btn dialog-cancel" id="attach-preview-cancel">Отмена</button>
+          <button class="dialog-btn dialog-primary" id="attach-preview-send">Отправить</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="app.js"></script>
