@@ -5793,7 +5793,7 @@ async function renderGiftDetail(ownerId, ug) {
     ? ug.background.split("|")[1]
     : (ug.background || "#000000");
   const patternStyle = patternIcon
-    ? `background-color:${bgEdgeColor};-webkit-mask-image:url("${patternIcon}");mask-image:url("${patternIcon}");`
+    ? `background-color:${bgEdgeColor};-webkit-mask-image:url('${patternIcon}');mask-image:url('${patternIcon}');`
     : "display:none;";
 
   // Количество
