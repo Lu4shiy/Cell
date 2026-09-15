@@ -5311,11 +5311,68 @@ function giftRarityLabel(r) {
   return r;
 }
 
+// Шансы фонов (в %) — должны совпадать с buy_gift в Supabase
+const BACKGROUND_CHANCES = {
+  // Tier 1 — 0.5%
+  "Vantablack": 0.5,
+
+  // Tier 2 — 1.2%
+  "Pure Gold": 1.2,
+  "Honey": 1.2,
+  "Absolute Pure": 1.2,
+
+  // Tier 3 — 2%
+  "Onyx": 2,
+  "Ice and Fire": 2,
+  "Abyss": 2,
+
+  // Tier 4 — 2.9%
+  "Boner": 2.9,
+  "Frosty Day": 2.9,
+  "Aurora": 2.9,
+  "Lavender": 2.9,
+  "Sapphire": 2.9,
+
+  // Tier 5 — 3.05%
+  "Ruby": 3.05,
+  "Emerald": 3.05,
+  "Amethyst": 3.05,
+  "Topaz": 3.05,
+  "Aquamarine": 3.05,
+  "Rose Quartz": 3.05,
+  "Nebula": 3.05,
+  "Comet": 3.05,
+  "Flame": 3.05,
+  "Sunset": 3.05,
+  "Scarlet Blood": 3.05,
+  "Bronze": 3.05,
+
+  // Tier 6 — 3.527%
+  "Steel": 3.527,
+  "Obsidian": 3.527,
+  "Moss": 3.527,
+  "Autumn": 3.527,
+  "Bark": 3.527,
+  "Mint": 3.527,
+  "Swamp": 3.527,
+  "Acid": 3.527,
+  "Ice": 3.527,
+  "Steel Rain": 3.527,
+  "Pistachio": 3.527
+};
+
+function getBackgroundChance(name) {
+  if (!name) return null;
+  const v = BACKGROUND_CHANCES[name];
+  return v !== undefined ? v : null;
+}
+
 function giftBackgroundStyle(bg, bgType) {
   if (!bg) return "background: var(--bg-input);";
-  if (bgType === "gradient") {
+  // Все новые фоны — пара "центр|край" → radial-gradient(circle, ...)
+  if (bg.includes("|")) {
     const [c1, c2] = bg.split("|");
-    return `background: linear-gradient(135deg, ${c1}, ${c2});`;
+    return `background: radial-gradient(circle, ${c1} 0%, ${c2} 100%);`;
   }
   return `background: ${bg};`;
 }
@@ -5572,7 +5629,9 @@ async function renderGiftDetail(ownerId, ug) {
   }
   let bgRow = "";
   if (ug.background_name) {
-    bgRow = `<div class="gift-detail-row"><span class="gdr-label">Фон</span><span class="gdr-value">${escapeHtml(ug.background_name)}${ug.background_rarity === "gradient" ? " · градиент" : ""}</span></div>`;
+    const chance = getBackgroundChance(ug.background_name);
+    const chanceStr = chance !== null ? ` (${chance}%)` : "";
+    bgRow = `<div class="gift-detail-row"><span class="gdr-label">Фон</span><span class="gdr-value">${escapeHtml(ug.background_name)}${chanceStr}</span></div>`;
   }
 
   content.innerHTML = `
