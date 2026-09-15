@@ -2572,6 +2572,406 @@ mark.search-hl {
 .about-text a:hover { filter: brightness(1.15); }
 
 /* ====================================================== */
+/* ВОЗВРАТ КРУГЛЫХ АВАТАРОВ                                */
+/* ====================================================== */
+
+.avatar {
+  border-radius: 50% !important;
+  clip-path: none !important;
+}
+.avatar-grid .avatar-option {
+  border-radius: 50% !important;
+  clip-path: none !important;
+}
+.avatar-grid .avatar-option.selected {
+  filter: none;
+  border: 2px solid var(--accent);
+}
+
+/* ====================================================== */
+/* КОЛЕСО ЧАТОВ                                            */
+/* ====================================================== */
+
+.wheel-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.wheel-wrap .users-list {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.wheel-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 60px;
+  pointer-events: none;
+  z-index: 5;
+}
+.wheel-fade-top {
+  top: 0;
+  background: linear-gradient(to bottom, var(--bg-side) 15%, transparent);
+}
+.wheel-fade-bottom {
+  bottom: 0;
+  background: linear-gradient(to top, var(--bg-side) 15%, transparent);
+}
+
+.wheel-wrap .user-item {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 50%;
+  height: 72px;
+  padding: 8px 12px;
+  margin: 0;
+  transform: translateY(calc(-50% + var(--ty, 0px))) scale(var(--sc, 1));
+  transition: transform 0.32s cubic-bezier(0.22, 0.9, 0.35, 1),
+              opacity 0.28s ease,
+              background 0.15s;
+  will-change: transform, opacity;
+  transform-origin: center center;
+  overflow: hidden;
+}
+
+.wheel-wrap .user-item .user-item-preview,
+.wheel-wrap .user-item .user-item-row2 { display: none; }
+
+.wheel-wrap .user-item.wheel-active .user-item-row2 {
+  display: flex;
+  margin-top: 2px;
+}
+.wheel-wrap .user-item.wheel-active .user-item-preview {
+  display: block;
+}
+
+.wheel-wrap .user-item.wheel-active {
+  height: 88px;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: 1px solid hsl(var(--chat-hue, 35), 55%, 45%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45),
+              0 0 0 3px hsla(var(--chat-hue, 35), 60%, 55%, 0.10);
+}
+
+.wheel-wrap .user-item.wheel-active .avatar {
+  box-shadow: 0 0 0 2px hsl(var(--chat-hue, 35), 60%, 55%);
+}
+
+.wheel-wrap .user-item.wheel-active .user-item-name {
+  color: hsl(var(--chat-hue, 35), 60%, 72%);
+  font-weight: 600;
+}
+
+.wheel-wrap .empty {
+  position: absolute;
+  top: 50%;
+  left: 16px;
+  right: 16px;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+/* Оттенок на шапке чата */
+.chat-header {
+  position: relative;
+}
+.chat-header::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: hsl(var(--chat-hue, 35), 65%, 55%);
+  opacity: 0.75;
+}
+
+/* ====================================================== */
+/* ГРУППИРОВКА СООБЩЕНИЙ                                    */
+/* ====================================================== */
+
+.msg.group-mid,
+.msg.group-last {
+  margin-top: -2px;
+}
+
+.msg.group-first { margin-top: 8px; }
+
+.msg.group-first.other { border-bottom-left-radius: 16px; }
+.msg.group-mid.other { border-top-left-radius: 16px; border-bottom-left-radius: 16px; }
+.msg.group-last.other { border-top-left-radius: 16px; }
+
+.msg.group-first.mine { border-bottom-right-radius: 16px; }
+.msg.group-mid.mine { border-top-right-radius: 16px; border-bottom-right-radius: 16px; }
+.msg.group-last.mine { border-top-right-radius: 16px; }
+
+/* Скрываем время у всех, кроме последнего в группе */
+.msg.group-first .msg-time,
+.msg.group-mid .msg-time { visibility: hidden; height: 0; margin: 0; }
+
+/* ====================================================== */
+/* ПЛАВАЮЩАЯ ДАТА                                          */
+/* ====================================================== */
+
+.date-float {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 14px;
+  background: rgba(21, 17, 13, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sub);
+  z-index: 30;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+  transition: opacity 0.2s;
+  letter-spacing: 0.3px;
+}
+
+/* ====================================================== */
+/* ТАЙМЛАЙН-СКРАББЕР                                       */
+/* ====================================================== */
+
+.chat-timeline {
+  position: absolute;
+  right: 4px;
+  top: 80px;
+  bottom: 90px;
+  width: 8px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+.chat-timeline:hover { opacity: 1; }
+
+.timeline-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform 0.15s, background 0.15s;
+  cursor: pointer;
+}
+.timeline-dot:hover {
+  transform: scale(1.8);
+  background: var(--accent);
+}
+.timeline-dot.timeline-current {
+  background: var(--accent);
+  transform: scale(1.4);
+  box-shadow: 0 0 8px rgba(245, 166, 35, 0.6);
+}
+.timeline-dot.timeline-unread {
+  background: var(--danger);
+}
+
+/* ====================================================== */
+/* КОМАНДНАЯ ПАЛИТРА (Ctrl+K)                              */
+/* ====================================================== */
+
+.cmd-palette-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 7000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  animation: fadeIn 0.12s ease-out;
+}
+
+.cmd-palette {
+  width: 100%;
+  max-width: 560px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7),
+              0 0 0 1px hsla(35, 60%, 55%, 0.08);
+  overflow: hidden;
+  animation: popIn 0.15s ease-out;
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+}
+
+.cmd-palette-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cmd-palette-icon {
+  font-size: 18px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+#cmd-palette-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 17px;
+  outline: none;
+  font-family: inherit;
+}
+
+#cmd-palette-input::placeholder { color: var(--text-dim); }
+
+.cmd-palette-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg-input);
+}
+
+.cmd-palette-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.cmd-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.cmd-palette-item:hover,
+.cmd-palette-item.active {
+  background: var(--bg-hover);
+}
+.cmd-palette-item.active {
+  background: rgba(245, 166, 35, 0.12);
+  outline: 1px solid var(--accent);
+}
+.cmd-palette-item .avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+}
+.cmd-palette-item-body { flex: 1; min-width: 0; }
+.cmd-palette-item-title {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmd-palette-item-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmd-palette-item-kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+
+.cmd-palette-foot {
+  display: flex;
+  gap: 16px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.cmd-palette-foot kbd {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 10px;
+  margin-right: 2px;
+}
+
+/* ====================================================== */
+/* МИНИ-ПРОФИЛЬ                                            */
+/* ====================================================== */
+
+.mini-profile {
+  position: fixed;
+  width: 240px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.55);
+  z-index: 6500;
+  pointer-events: none;
+  animation: popIn 0.12s ease-out;
+}
+
+.mini-profile-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.mini-profile-head .avatar {
+  width: 48px;
+  height: 48px;
+  font-size: 18px;
+}
+.mini-profile-info { flex: 1; min-width: 0; }
+.mini-profile-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mini-profile-username {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.mini-profile-status {
+  font-size: 12px;
+  color: var(--text-sub);
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.mini-profile-status.online { color: var(--accent); font-weight: 600; }
+
+/* ====================================================== */
 /* Плавные анимации                                        */
 /* ====================================================== */
 

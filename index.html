@@ -73,8 +73,12 @@
       </div>
 
       <div class="section-title" id="section-title">Чаты</div>
-      <div id="users-list" class="users-list">
-        <div class="empty">Загрузка...</div>
+      <div class="wheel-wrap" id="wheel-wrap">
+        <div class="wheel-fade wheel-fade-top"></div>
+        <div id="users-list" class="users-list">
+          <div class="empty">Загрузка...</div>
+        </div>
+        <div class="wheel-fade wheel-fade-bottom"></div>
       </div>
     </aside>
 
@@ -132,6 +136,8 @@
           <button class="pin-bar-list-btn" id="pin-bar-list" title="Все закрепы" type="button">⋯</button>
         </div>
         <div class="messages" id="messages"></div>
+        <div id="date-float" class="date-float hidden"></div>
+        <div id="chat-timeline" class="chat-timeline hidden"></div>
         <button id="scroll-bottom-btn" class="scroll-bottom-btn" title="Вниз">↓</button>
 
         <div id="reply-bar" class="reply-bar hidden">
@@ -690,6 +696,32 @@
         <button class="dialog-btn dialog-primary" id="about-close">Закрыть</button>
       </div>
     </div>
+  </div>
+
+  <div id="cmd-palette-overlay" class="cmd-palette-overlay hidden">
+    <div class="cmd-palette">
+      <div class="cmd-palette-head">
+        <span class="cmd-palette-icon">⌘</span>
+        <input type="text" id="cmd-palette-input" placeholder="Поиск чатов, каналов, людей или команда >" autocomplete="off" spellcheck="false">
+        <span class="cmd-palette-hint">Esc</span>
+      </div>
+      <div id="cmd-palette-list" class="cmd-palette-list"></div>
+      <div class="cmd-palette-foot">
+        <span><kbd>↑</kbd><kbd>↓</kbd> — выбор</span>
+        <span><kbd>Enter</kbd> — открыть</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="mini-profile" class="mini-profile hidden">
+    <div class="mini-profile-head">
+      <div class="avatar" id="mini-profile-avatar">?</div>
+      <div class="mini-profile-info">
+        <div class="mini-profile-name" id="mini-profile-name">—</div>
+        <div class="mini-profile-username" id="mini-profile-username">@—</div>
+      </div>
+    </div>
+    <div class="mini-profile-status" id="mini-profile-status">—</div>
   </div>
 
   <script type="module" src="app.js"></script>

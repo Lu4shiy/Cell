@@ -336,6 +336,7 @@ function showAuth() {
 async function initApp() {
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
   setupAttachments(); setupMediaViewer(); setupEmojiPicker(); setupAboutDialog();
+  setupWheel(); setupCommandPalette(); setupMiniProfile(); setupDateFloat();
   setupChatSearch(); setupScrollBottomButton();
   setupChatPins(); setupInviteUI();
   subscribeToPins();
@@ -1201,7 +1202,7 @@ function bindChatItemEvents(el, user) {
 
 function renderChatListUnified(items, profileMap) {
   const listEl = document.getElementById("users-list");
-  if (!items.length) { listEl.innerHTML = '<div class="empty">У вас пока нет чатов.</div>'; return; }
+  if (!items.length) { listEl.innerHTML = '<div class="empty">У вас пока нет чатов.</div>'; refreshWheelLayout(); return; }
   listEl.innerHTML = items.map((it) => {
     if (it.type === "channel") return renderChannelItemHtml(it);
     return renderDmItemHtml(it, profileMap);
@@ -1222,6 +1223,7 @@ function renderChatListUnified(items, profileMap) {
       bindChatItemEvents(el, user);
     }
   });
+  refreshWheelLayout();
 }
 
 function renderDmItemHtml(it, profileMap) {
@@ -1500,6 +1502,9 @@ async function openChannel(chatId) {
   if (mySeq !== openSeq) return;
 
   if (currentChannelIsSubscribed) await markChatRead(chatId);
+
+  setWheelSelected(chatId);
+  buildChatTimeline();
 }
 
 function updateChatItemPreview(chatId) {
@@ -1545,6 +1550,7 @@ function resortChatsList() {
     return bt - at;
   });
   items.forEach((it) => listEl.appendChild(it));
+  refreshWheelLayout();
 }
 
 async function addOrUpdateChatInList(chatId, otherUserId) {
@@ -1594,6 +1600,7 @@ async function addOrUpdateChatInList(chatId, otherUserId) {
     paintAvatar(itemEl.querySelector(".avatar"), profile);
     bindChatItemEvents(itemEl, profile);
     listEl.insertBefore(itemEl, listEl.firstChild);
+    refreshWheelLayout();
   } finally {
     pendingChatAdds.delete(chatId);
   }
@@ -1632,6 +1639,7 @@ async function addOrUpdateChannelInList(chatId, channel) {
   paintAvatar(itemEl.querySelector(".avatar"), { id: channel.id, display_name: channel.name, avatar_url: channel.avatar_url });
   bindChannelItemEvents(itemEl, channel);
   listEl.insertBefore(itemEl, listEl.firstChild);
+  refreshWheelLayout();
 }
 
 function removeChatFromList(chatId) {
@@ -1641,6 +1649,7 @@ function removeChatFromList(chatId) {
   for (const [uid, cid] of chatIdByUser.entries()) if (cid === chatId) chatIdByUser.delete(uid);
   const listEl = document.getElementById("users-list");
   if (listEl.querySelectorAll(".user-item").length === 0) listEl.innerHTML = '<div class="empty">У вас пока нет чатов.</div>';
+  refreshWheelLayout();
 }
 
 // ======================= 11. ПОИСК =======================
@@ -2080,6 +2089,8 @@ async function openChatWith(otherUser) {
   if (mySeq !== openSeq) return;
   subscribeToChat(chatId); subscribeToReactions();
   await markChatRead(chatId);
+  setWheelSelected(chatId);
+  buildChatTimeline();
 }
 
 async function createChatWith(otherUserId) {
@@ -2356,6 +2367,7 @@ async function appendMessage(msg) {
     el.addEventListener("click", onMsgClick);
     box.appendChild(el);
     msgCache.set(msg.id, msg);
+    refreshMessageGroups();
     return;
   }
 
@@ -2370,6 +2382,7 @@ async function appendMessage(msg) {
   box.appendChild(el);
   msgCache.set(msg.id, msg);
   renderReactionsUI(msg.id);
+  refreshMessageGroups();
 }
 
 function updateMessageStatusInUI(msg) {
@@ -2431,6 +2444,505 @@ function subscribeToChannelViews(chatId) {
       updateMessageViewsInUI(mv.message_id, next);
     })
     .subscribe();
+}
+
+// ======================================================
+// 38. КОЛЕСО ЧАТОВ
+// ======================================================
+
+let wheelIndex = 0;
+let wheelSelectedChatId = null;
+let wheelScrollLock = false;
+
+function setupWheel() {
+  const wrap = document.getElementById("wheel-wrap");
+  if (!wrap) return;
+
+  wrap.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    if (wheelScrollLock) return;
+    const dir = e.deltaY > 0 ? 1 : -1;
+    wheelScrollLock = true;
+    setTimeout(() => { wheelScrollLock = false; }, 180);
+    wheelMove(dir);
+  }, { passive: false });
+
+  let touchStartY = 0;
+  wrap.addEventListener("touchstart", (e) => {
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  wrap.addEventListener("touchend", (e) => {
+    const dy = touchStartY - e.changedTouches[0].clientY;
+    if (Math.abs(dy) > 30) wheelMove(dy > 0 ? 1 : -1);
+  }, { passive: true });
+
+  document.addEventListener("keydown", (e) => {
+    if (!document.getElementById("chat-placeholder")?.classList.contains("hidden")) return;
+    if (e.target.matches("input, textarea, [contenteditable]")) return;
+    if (e.key === "ArrowUp" && e.altKey) { e.preventDefault(); wheelMove(-1); }
+    else if (e.key === "ArrowDown" && e.altKey) { e.preventDefault(); wheelMove(1); }
+  });
+}
+
+function wheelMove(dir) {
+  const listEl = document.getElementById("users-list");
+  const items = [...listEl.querySelectorAll(".user-item")];
+  if (!items.length) return;
+  let idx = items.findIndex((el) => el.dataset.chatId === wheelSelectedChatId);
+  if (idx === -1) idx = 0;
+  idx = Math.max(0, Math.min(items.length - 1, idx + dir));
+  wheelSelectedChatId = items[idx].dataset.chatId;
+  wheelIndex = idx;
+  refreshWheelLayout();
+}
+
+function setWheelSelected(chatId) {
+  if (!chatId) return;
+  wheelSelectedChatId = chatId;
+  refreshWheelLayout();
+}
+
+function refreshWheelLayout() {
+  const listEl = document.getElementById("users-list");
+  if (!listEl) return;
+  const items = [...listEl.querySelectorAll(".user-item")];
+  if (!items.length) return;
+
+  let idx = items.findIndex((el) => el.dataset.chatId === wheelSelectedChatId);
+  if (idx === -1) {
+    idx = 0;
+    wheelSelectedChatId = items[0].dataset.chatId;
+  }
+  wheelIndex = idx;
+
+  const SLOT = 82;
+  items.forEach((el, i) => {
+    const offset = i - idx;
+    const abs = Math.abs(offset);
+    let scale = 1, opacity = 1, ty = 0;
+    if (abs === 0)      { scale = 1.00; opacity = 1.00; }
+    else if (abs === 1) { scale = 0.86; opacity = 0.58; }
+    else if (abs === 2) { scale = 0.72; opacity = 0.30; }
+    else if (abs === 3) { scale = 0.60; opacity = 0.12; }
+    else                { scale = 0.55; opacity = 0.00; }
+    ty = offset * SLOT;
+    el.style.setProperty("--ty", ty + "px");
+    el.style.setProperty("--sc", String(scale));
+    el.style.opacity = String(opacity);
+    el.style.zIndex = String(100 - abs);
+    el.classList.toggle("wheel-active", abs === 0);
+
+    const hue = idToHue(el.dataset.chatId || "x");
+    el.style.setProperty("--chat-hue", String(hue));
+  });
+}
+
+function idToHue(id) {
+  if (!id) return 35;
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return Math.abs(h) % 360;
+}
+
+// ======================================================
+// 39. ГРУППИРОВКА СООБЩЕНИЙ + ПЛАВАЮЩАЯ ДАТА
+// ======================================================
+
+const MSG_GROUP_WINDOW = 5 * 60 * 1000;
+
+function refreshMessageGroups() {
+  const box = document.getElementById("messages");
+  if (!box) return;
+  const msgs = [...box.querySelectorAll(".msg")];
+  if (!msgs.length) return;
+
+  msgs.forEach((el, i) => {
+    el.classList.remove("group-first", "group-mid", "group-last");
+    const cur = msgCache.get(el.dataset.id);
+    if (!cur) return;
+    const prevEl = msgs[i - 1];
+    const nextEl = msgs[i + 1];
+    const prev = prevEl ? msgCache.get(prevEl.dataset.id) : null;
+    const next = nextEl ? msgCache.get(nextEl.dataset.id) : null;
+
+    const sameAsPrev = prev && prev.sender_id === cur.sender_id &&
+      (new Date(cur.created_at).getTime() - new Date(prev.created_at).getTime()) < MSG_GROUP_WINDOW;
+    const sameAsNext = next && next.sender_id === cur.sender_id &&
+      (new Date(next.created_at).getTime() - new Date(cur.created_at).getTime()) < MSG_GROUP_WINDOW;
+
+    if (!sameAsPrev && sameAsNext)      el.classList.add("group-first");
+    else if (sameAsPrev && sameAsNext)  el.classList.add("group-mid");
+    else if (sameAsPrev && !sameAsNext) el.classList.add("group-last");
+  });
+}
+
+function setupDateFloat() {
+  const box = document.getElementById("messages");
+  const floatEl = document.getElementById("date-float");
+  if (!box || !floatEl) return;
+
+  box.addEventListener("scroll", () => updateDateFloat(), { passive: true });
+}
+
+function updateDateFloat() {
+  const box = document.getElementById("messages");
+  const floatEl = document.getElementById("date-float");
+  if (!box || !floatEl) return;
+  if (!box.querySelector(".msg, .msg-system")) { floatEl.classList.add("hidden"); return; }
+
+  const boxRect = box.getBoundingClientRect();
+  let current = null;
+  const all = box.querySelectorAll(".msg, .msg-system");
+  for (const el of all) {
+    const r = el.getBoundingClientRect();
+    if (r.top - boxRect.top <= 8) current = el;
+    else break;
+  }
+  if (!current) current = all[0];
+  const msg = msgCache.get(current.dataset.id);
+  if (!msg) { floatEl.classList.add("hidden"); return; }
+
+  floatEl.textContent = formatDateHeader(new Date(msg.created_at));
+  floatEl.classList.remove("hidden");
+}
+
+function formatDateHeader(d) {
+  const today = new Date();
+  const yest = new Date(); yest.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Сегодня";
+  if (d.toDateString() === yest.toDateString()) return "Вчера";
+  const months = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+  if (d.getFullYear() === today.getFullYear()) return d.getDate() + " " + months[d.getMonth()];
+  return d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear();
+}
+
+// ======================================================
+// 40. ТАЙМЛАЙН-СКРАББЕР
+// ======================================================
+
+function buildChatTimeline() {
+  const box = document.getElementById("messages");
+  const tl = document.getElementById("chat-timeline");
+  if (!box || !tl) return;
+
+  const all = [...box.querySelectorAll(".msg, .msg-system")];
+  if (all.length < 3) { tl.classList.add("hidden"); return; }
+
+  const dayFirst = new Map();
+  all.forEach((el) => {
+    const m = msgCache.get(el.dataset.id);
+    if (!m) return;
+    const d = new Date(m.created_at);
+    const key = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
+    if (!dayFirst.has(key)) dayFirst.set(key, el.dataset.id);
+  });
+
+  const keys = [...dayFirst.keys()];
+  tl.innerHTML = keys.map((k) =>
+    `<div class="timeline-dot" data-day-key="${k}" data-first-id="${dayFirst.get(k)}" title="${formatDateHeader(new Date(k))}"></div>`
+  ).join("");
+  tl.classList.remove("hidden");
+
+  tl.querySelectorAll(".timeline-dot").forEach((dot) => {
+    dot.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = dot.dataset.firstId;
+      const target = box.querySelector(`[data-id="${id}"]`);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+
+  updateTimelineMarker();
+}
+
+function updateTimelineMarker() {
+  const box = document.getElementById("messages");
+  const tl = document.getElementById("chat-timeline");
+  if (!box || !tl || tl.classList.contains("hidden")) return;
+
+  const boxRect = box.getBoundingClientRect();
+  let currentId = null;
+  const all = box.querySelectorAll(".msg, .msg-system");
+  for (const el of all) {
+    const r = el.getBoundingClientRect();
+    if (r.top - boxRect.top <= 40) currentId = el.dataset.id;
+    else break;
+  }
+  const dots = tl.querySelectorAll(".timeline-dot");
+  dots.forEach((d) => d.classList.remove("timeline-current"));
+  if (!currentId) return;
+
+  const m = msgCache.get(currentId);
+  if (!m) return;
+  const d = new Date(m.created_at);
+  const key = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
+  const dot = tl.querySelector(`.timeline-dot[data-day-key="${key}"]`);
+  if (dot) dot.classList.add("timeline-current");
+}
+
+// Навешиваем обновление маркера на скролл
+(function attachTimelineScroll() {
+  const box = document.getElementById("messages");
+  if (!box) return;
+  box.addEventListener("scroll", () => updateTimelineMarker(), { passive: true });
+})();
+
+// ======================================================
+// 41. КОМАНДНАЯ ПАЛИТРА (Ctrl+K)
+// ======================================================
+
+let cmdPaletteOpen = false;
+let cmdPaletteResults = [];
+let cmdPaletteIndex = 0;
+let cmdPaletteSearchTimeout = null;
+
+function setupCommandPalette() {
+  const input = document.getElementById("cmd-palette-input");
+  const overlay = document.getElementById("cmd-palette-overlay");
+  if (!input || !overlay) return;
+
+  document.addEventListener("keydown", (e) => {
+    const isK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k";
+    if (isK) {
+      e.preventDefault();
+      openCmdPalette();
+    }
+    if (e.key === "Escape" && cmdPaletteOpen) {
+      closeCmdPalette();
+    }
+  });
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeCmdPalette();
+  });
+
+  input.addEventListener("input", () => {
+    clearTimeout(cmdPaletteSearchTimeout);
+    cmdPaletteSearchTimeout = setTimeout(() => runCmdPaletteSearch(input.value.trim()), 120);
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); cmdPaletteMove(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); cmdPaletteMove(-1); }
+    else if (e.key === "Enter") { e.preventDefault(); cmdPaletteRunSelected(); }
+  });
+}
+
+function openCmdPalette() {
+  cmdPaletteOpen = true;
+  const overlay = document.getElementById("cmd-palette-overlay");
+  const input = document.getElementById("cmd-palette-input");
+  overlay.classList.remove("hidden");
+  input.value = "";
+  runCmdPaletteSearch("");
+  setTimeout(() => input.focus(), 40);
+}
+
+function closeCmdPalette() {
+  cmdPaletteOpen = false;
+  document.getElementById("cmd-palette-overlay").classList.add("hidden");
+}
+
+async function runCmdPaletteSearch(q) {
+  const listEl = document.getElementById("cmd-palette-list");
+  listEl.innerHTML = "";
+
+  const commands = [
+    { kind: "cmd", title: "Создать канал", sub: "Открывает диалог создания канала", value: "create-channel", icon: "＋" },
+    { kind: "cmd", title: "Профиль", sub: "Свой профиль", value: "profile", icon: "👤" },
+    { kind: "cmd", title: "Подарки", sub: "Открыть мои подарки", value: "gifts", icon: "🎁" },
+    { kind: "cmd", title: "Настройки канала", sub: "Только для владельца/админа открытого канала", value: "channel-edit", icon: "⚙" },
+    { kind: "cmd", title: "О приложении", sub: "Cell · credits", value: "about", icon: "ℹ" },
+  ];
+
+  const ql = q.toLowerCase();
+  const isCmd = q.startsWith(">");
+
+  const chats = [];
+  document.querySelectorAll(".user-item[data-chat-id]").forEach((el) => {
+    const chatId = el.dataset.chatId;
+    const name = el.querySelector(".user-item-name")?.textContent?.trim() || "";
+    const preview = el.querySelector(".user-item-preview")?.textContent?.trim() || "";
+    const isChannel = el.dataset.chatType === "channel";
+    chats.push({ kind: isChannel ? "channel" : "chat", chatId, title: name, sub: preview, hue: idToHue(chatId) });
+  });
+
+  let profiles = [];
+  if (q.length >= 2 && !isCmd) {
+    const clean = q.replace(/^[@#]+/, "");
+    try {
+      const { data } = await supabase.from("profiles")
+        .select("id, username, display_name, avatar_url, last_seen")
+        .neq("id", currentUser.id)
+        .or(`username.ilike.%${clean}%,display_name.ilike.%${clean}%`)
+        .limit(8);
+      if (data) profiles = data.map((p) => ({
+        kind: "profile",
+        userId: p.id,
+        title: p.display_name,
+        sub: "@" + p.username,
+        profile: p,
+      }));
+    } catch (e) {}
+  }
+
+  let results = [];
+  if (isCmd || !q) {
+    const qq = q.replace(/^>\s*/, "").toLowerCase();
+    results = commands.filter((c) => !qq || c.title.toLowerCase().includes(qq) || c.sub.toLowerCase().includes(qq));
+  } else {
+    const qq = ql.replace(/^[@#]+/, "");
+    const chatsMatch = chats.filter((c) =>
+      c.title.toLowerCase().includes(qq) || c.sub.toLowerCase().includes(qq)
+    );
+    results = [...chatsMatch, ...profiles].slice(0, 12);
+  }
+
+  cmdPaletteResults = results;
+  cmdPaletteIndex = results.length ? 0 : -1;
+  renderCmdPalette();
+}
+
+function renderCmdPalette() {
+  const listEl = document.getElementById("cmd-palette-list");
+  if (!cmdPaletteResults.length) {
+    listEl.innerHTML = '<div class="empty">Ничего не найдено</div>';
+    return;
+  }
+  listEl.innerHTML = cmdPaletteResults.map((r, i) => {
+    const active = i === cmdPaletteIndex ? " active" : "";
+    if (r.kind === "cmd") {
+      return `<div class="cmd-palette-item${active}" data-idx="${i}">
+        <div class="avatar" style="display:flex;align-items:center;justify-content:center;background:var(--bg-input);color:var(--accent);clip-path:none;">${r.icon}</div>
+        <div class="cmd-palette-item-body">
+          <div class="cmd-palette-item-title">${escapeHtml(r.title)}</div>
+          <div class="cmd-palette-item-sub">${escapeHtml(r.sub)}</div>
+        </div>
+        <span class="cmd-palette-item-kind">cmd</span>
+      </div>`;
+    }
+    const kindLabel = r.kind === "channel" ? "канал" : r.kind === "chat" ? "чат" : "профиль";
+    const avatarHtml = r.profile
+      ? `<div class="avatar" data-avatar-for="${r.userId}">?</div>`
+      : `<div class="avatar" style="background: hsl(${r.hue}, 60%, 55%);"></div>`;
+    return `<div class="cmd-palette-item${active}" data-idx="${i}">
+      ${avatarHtml}
+      <div class="cmd-palette-item-body">
+        <div class="cmd-palette-item-title">${escapeHtml(r.title)}</div>
+        <div class="cmd-palette-item-sub">${escapeHtml(r.sub)}</div>
+      </div>
+      <span class="cmd-palette-item-kind">${kindLabel}</span>
+    </div>`;
+  }).join("");
+
+  listEl.querySelectorAll(".cmd-palette-item").forEach((el) => {
+    el.addEventListener("click", () => {
+      cmdPaletteIndex = parseInt(el.dataset.idx, 10);
+      cmdPaletteRunSelected();
+    });
+    el.addEventListener("mouseenter", () => {
+      cmdPaletteIndex = parseInt(el.dataset.idx, 10);
+      listEl.querySelectorAll(".cmd-palette-item").forEach((x, i) => x.classList.toggle("active", i === cmdPaletteIndex));
+    });
+  });
+
+  listEl.querySelectorAll(".avatar[data-avatar-for]").forEach((el) => {
+    const r = cmdPaletteResults.find((x) => x.userId === el.dataset.avatarFor);
+    if (r && r.profile) paintAvatar(el, r.profile);
+  });
+
+  const activeEl = listEl.querySelector(".cmd-palette-item.active");
+  if (activeEl) activeEl.scrollIntoView({ block: "nearest" });
+}
+
+function cmdPaletteMove(dir) {
+  if (!cmdPaletteResults.length) return;
+  cmdPaletteIndex = (cmdPaletteIndex + dir + cmdPaletteResults.length) % cmdPaletteResults.length;
+  renderCmdPalette();
+}
+
+async function cmdPaletteRunSelected() {
+  const r = cmdPaletteResults[cmdPaletteIndex];
+  if (!r) return;
+  closeCmdPalette();
+
+  if (r.kind === "cmd") {
+    if (r.value === "create-channel") openChannelCreateDialog();
+    else if (r.value === "profile") openProfilePanel();
+    else if (r.value === "gifts") openGiftsOverlay(currentUser.id);
+    else if (r.value === "channel-edit") { if (currentChannelObj && currentChannelIsAdmin) openChannelEditDialog(); }
+    else if (r.value === "about") document.getElementById("about-overlay").classList.remove("hidden");
+    return;
+  }
+
+  if (r.kind === "chat" || r.kind === "channel") {
+    const el = document.querySelector(`.user-item[data-chat-id="${r.chatId}"]`);
+    if (el) el.click();
+    return;
+  }
+
+  if (r.kind === "profile") {
+    if (r.profile) await openChatWith(r.profile);
+  }
+}
+
+// ======================================================
+// 42. МИНИ-ПРОФИЛЬ
+// ======================================================
+
+let miniProfileTimer = null;
+let miniProfileHideTimer = null;
+
+function setupMiniProfile() {
+  const mp = document.getElementById("mini-profile");
+  if (!mp) return;
+
+  document.addEventListener("mouseover", (e) => {
+    const avatar = e.target.closest(".user-item .avatar, #chat-header-text ~ .avatar, .chat-header .avatar");
+    if (!avatar) return;
+    const item = avatar.closest(".user-item");
+    if (!item) return;
+    if (item.dataset.chatType === "channel") return;
+    const userId = item.dataset.userId;
+    if (!userId) return;
+    clearTimeout(miniProfileHideTimer);
+    miniProfileTimer = setTimeout(() => showMiniProfile(userId, avatar), 550);
+  });
+
+  document.addEventListener("mouseout", (e) => {
+    const avatar = e.target.closest(".user-item .avatar");
+    if (!avatar) return;
+    clearTimeout(miniProfileTimer);
+    miniProfileHideTimer = setTimeout(() => hideMiniProfile(), 120);
+  });
+}
+
+async function showMiniProfile(userId, anchor) {
+  if (!userId) return;
+  const p = profileCache.get(userId) || await getProfile(userId);
+  if (!p) return;
+
+  const mp = document.getElementById("mini-profile");
+  paintAvatar(document.getElementById("mini-profile-avatar"), p);
+  document.getElementById("mini-profile-name").textContent = p.display_name || "—";
+  document.getElementById("mini-profile-username").textContent = "@" + (p.username || "");
+  const st = document.getElementById("mini-profile-status");
+  st.textContent = formatLastSeen(p) || "—";
+  st.classList.toggle("online", isUserOnline(p));
+
+  const rect = anchor.getBoundingClientRect();
+  mp.classList.remove("hidden");
+  const mw = mp.offsetWidth, mh = mp.offsetHeight;
+  let x = rect.right + 10;
+  let y = rect.top;
+  if (x + mw > window.innerWidth - 8) x = rect.left - mw - 10;
+  if (y + mh > window.innerHeight - 8) y = window.innerHeight - mh - 8;
+  mp.style.left = x + "px";
+  mp.style.top = y + "px";
+}
+
+function hideMiniProfile() {
+  document.getElementById("mini-profile").classList.add("hidden");
 }
 
 function onMsgClick(e) {
