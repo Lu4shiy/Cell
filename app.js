@@ -5396,6 +5396,21 @@ function getPatternChance(id) {
   return PATTERN_TIER_CHANCE[p.tier] !== undefined ? PATTERN_TIER_CHANCE[p.tier] : null;
 }
 
+// Собирает SVG-маску: иконка маленькая по центру большого тайла.
+// Тайл = gap-контейнер, иконка = сам паттерн внутри.
+// На hero 16/9 при тайле 90px видно ~17 иконок — как в Telegram.
+const PATTERN_TILE_SIZE  = 90;
+const PATTERN_ICON_SIZE  = 44;
+
+function buildPatternMaskUrl(iconUrl) {
+  const tile = PATTERN_TILE_SIZE;
+  const icon = PATTERN_ICON_SIZE;
+  const off = (tile - icon) / 2;
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${tile}' height='${tile}'><image href='${iconUrl}' x='${off}' y='${off}' width='${icon}' height='${icon}'/></svg>`;
+  const encoded = encodeURIComponent(svg).replace(/'/g, "%27");
+  return `url("data:image/svg+xml;charset=utf-8,${encoded}")`;
+}
+
 function getPatternIcon(id) {
   if (!id) return null;
   const p = GIFT_PATTERNS.find((x) => x.id === id);
@@ -5790,8 +5805,9 @@ async function renderGiftDetail(ownerId, ug) {
   const bgEdgeColor = (ug.background && ug.background.includes("|"))
     ? ug.background.split("|")[1]
     : (ug.background || "#000000");
-  const patternStyle = patternIcon
-    ? `background-color:${bgEdgeColor};-webkit-mask-image:url(${patternIcon});mask-image:url(${patternIcon});`
+  const maskUrl = patternIcon ? buildPatternMaskUrl(patternIcon) : null;
+  const patternStyle = maskUrl
+    ? `background-color:${bgEdgeColor};-webkit-mask-image:${maskUrl};mask-image:${maskUrl};`
     : "display:none;";
 
   // Количество
