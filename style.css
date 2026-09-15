@@ -3232,3 +3232,86 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   color: var(--text-dim);
   margin-top: 3px;
 }
+
+/* ====================================================== */
+/* ПОДАРКИ В СТИЛЕ TELEGRAM                                */
+/* ====================================================== */
+
+.gifts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.gift-tile {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.12s, border-color 0.12s, background 0.12s;
+}
+.gift-tile:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.gift-tile-emoji {
+  width: 72%;
+  height: 72%;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 44px;
+  line-height: 1;
+}
+
+.gift-tile-ribbon {
+  position: absolute;
+  top: 12px;
+  left: -36px;
+  width: 140px;
+  padding: 3px 0;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  transform: rotate(-45deg);
+  transform-origin: center center;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Стрелка «назад» в профиле (когда пришли из окна подарка) */
+.profile-back-btn {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: var(--text-sub);
+  cursor: pointer;
+  z-index: 10;
+  padding: 0;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+.profile-back-btn:hover { background: var(--bg-hover); color: var(--accent); }

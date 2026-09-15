@@ -274,6 +274,10 @@ let channelCreateVisibility = "public";
 let channelEditVisibility = "public";
 let currentChannelHasRequest = false;
 let channelRequestsChannel = null;
+// Возврат из профиля в окно подарка
+let profileFromGiftContext = null;     // { userId, ugId } — куда возвращаться
+let currentGiftDetailUserId = null;    // ownerId подарка, открытого в деталях
+let currentGiftDetailUgId = null;      // ug.id подарка, открытого в деталях
 
 // ======================= 3. АКЦЕНТ / АВАТАРЫ =======================
 function applyAccent(accent) { document.documentElement.setAttribute("data-accent", accent || "orange"); }
@@ -865,6 +869,10 @@ async function openUserProfileDialog(userOverride) {
   const user = userOverride || currentOtherUser || pendingOtherUser;
   if (!user) return;
   const overlay = document.getElementById("user-profile-overlay");
+
+  // Стрелка «назад» видна только если мы пришли из окна подарка
+  const backBtn = document.getElementById("user-profile-back");
+  if (backBtn) backBtn.classList.toggle("hidden", !profileFromGiftContext);
   const { data: freshProfile } = await supabase.from("profiles")
     .select("id, username, display_name, avatar_url, created_at, last_seen, gender, birthday")
     .eq("id", user.id).single();
@@ -3937,6 +3945,29 @@ function setupChatMenu() {
   const upCloseBtn = document.getElementById("user-profile-close");
   if (upCloseBtn) upCloseBtn.addEventListener("click", () => {
     document.getElementById("user-profile-overlay").classList.add("hidden");
+    document.getElementById("user-profile-back").classList.add("hidden");
+    profileFromGiftContext = null;
+  });
+
+  const upBackBtn = document.getElementById("user-profile-back");
+  if (upBackBtn) upBackBtn.addEventListener("click", async () => {
+    const ctx = profileFromGiftContext;
+    profileFromGiftContext = null;
+    document.getElementById("user-profile-overlay").classList.add("hidden");
+    document.getElementById("user-profile-back").classList.add("hidden");
+
+    if (ctx) {
+      // Возвращаемся в окно подарка — именно к тому же подарку
+      document.getElementById("gifts-overlay").classList.remove("hidden");
+      const { data: ug } = await supabase.from("user_gifts")
+        .select("*").eq("id", ctx.ugId).maybeSingle();
+      await refreshBalance();
+      if (ug) {
+        await renderGiftDetail(ctx.userId, ug);
+      } else {
+        renderGiftsMain(ctx.userId);
+      }
+    }
   });
 
   menuBtn.addEventListener("click", (e) => { e.stopPropagation(); menuEl.classList.toggle("hidden"); });
@@ -5228,16 +5259,31 @@ function setupGiftsUI() {
   const giftsCloseBtn = document.getElementById("gifts-close");
   if (giftsCloseBtn) giftsCloseBtn.addEventListener("click", closeGiftsOverlay);
 
-  // Клик по имени в «Подарок для X» открывает профиль пользователя
+  // Клик по имени в «Подарок для X»:
+  // закрываем окно подарка → открываем профиль → запоминаем контекст для возврата
   document.addEventListener("click", async (e) => {
     const link = e.target.closest(".gift-recipient-link");
     if (!link) return;
     e.preventDefault();
     e.stopPropagation();
+
     const uid = link.dataset.uid;
     if (!uid) return;
+
+    // Запоминаем, куда возвращаться
+    if (currentGiftDetailUserId && currentGiftDetailUgId) {
+      profileFromGiftContext = {
+        userId: currentGiftDetailUserId,
+        ugId: currentGiftDetailUgId,
+      };
+    }
+
+    // Закрываем окно подарка
+    document.getElementById("gifts-overlay").classList.add("hidden");
+
+    // Открываем профиль
     const p = profileCache.get(uid) || await getProfile(uid);
-    if (p) openUserProfileDialog(p);
+    if (p) await openUserProfileDialog(p);
   }, true);
 }
 
@@ -5325,29 +5371,22 @@ async function renderGiftsMain(userId) {
       ? `<div class="empty">У вас пока нет подарков.</div>`
       : `<div class="empty">У этого пользователя нет подарков.</div>`;
   } else {
+    html += `<div class="gifts-grid">`;
     gifts.forEach((ug) => {
       const cat = catalogMap.get(ug.gift_id);
       if (!cat) return;
       const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
-      // Кто изначально купил
-      const originalOwner = ug.original_owner_id ? profileCache.get(ug.original_owner_id) : null;
-      const origLabel = originalOwner ? ` · от ${escapeHtml(originalOwner.display_name)}` : "";
-      const recipientLine = ug.recipient_name
-        ? `<div class="gift-card-recipient">Подарок для ${ug.recipient_id
-            ? `<a href="#" class="gift-recipient-link" data-uid="${ug.recipient_id}">${escapeHtml(ug.recipient_name)}</a>`
-            : escapeHtml(ug.recipient_name)}</div>`
+      const isLimited = cat.max_supply !== null && cat.max_supply !== undefined;
+      const ribbon = isLimited
+        ? `<div class="gift-tile-ribbon">${ug.serial_number} из ${cat.max_supply}</div>`
         : "";
       html += `
-        <div class="gift-card" data-gift-ug-id="${ug.id}">
-          <div class="gift-card-emoji" style="${bg}">${cat.emoji}</div>
-          <div class="gift-card-body">
-            <div class="gift-card-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
-            <div class="gift-card-sub gift-rarity-${cat.rarity}">${giftRarityLabel(cat.rarity)}${cat.collection ? " · " + escapeHtml(cat.collection) : ""}${origLabel}</div>
-            ${recipientLine}
-          </div>
-          <div class="gift-card-price">🧩 ${cat.price}</div>
+        <div class="gift-tile" data-gift-ug-id="${ug.id}">
+          ${ribbon}
+          <div class="gift-tile-emoji" style="${bg}">${cat.emoji}</div>
         </div>`;
     });
+    html += `</div>`;
   }
 
   content.innerHTML = html;
@@ -5355,10 +5394,10 @@ async function renderGiftsMain(userId) {
   const openBtn = document.getElementById("open-catalog-btn");
   if (openBtn) openBtn.addEventListener("click", () => renderCatalog(userId));
 
-  content.querySelectorAll(".gift-card").forEach((el) => {
+  content.querySelectorAll(".gift-tile").forEach((el) => {
     el.addEventListener("click", () => {
       const ugId = el.dataset.giftUgId;
-      const ug = gifts.find((g) => g.id === ugId);
+      const ug = (gifts || []).find((g) => g.id === ugId);
       if (ug) renderGiftDetail(userId, ug);
     });
   });
@@ -5500,6 +5539,10 @@ function openGiftPurchase(gift, recipientId) {
 async function renderGiftDetail(ownerId, ug) {
   const { data: fresh } = await supabase.from("user_gifts").select("*").eq("id", ug.id).single();
   if (fresh) ug = fresh;
+
+  // Запоминаем контекст — чтобы вернуться именно к этому подарку
+  currentGiftDetailUserId = ownerId;
+  currentGiftDetailUgId = ug.id;
 
   const content = document.getElementById("gifts-content");
   const title = document.getElementById("gifts-title");
