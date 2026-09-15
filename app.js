@@ -5398,17 +5398,48 @@ function getPatternChance(id) {
 
 // Собирает SVG-маску: иконка маленькая по центру большого тайла.
 // Тайл = gap-контейнер, иконка = сам паттерн внутри.
-// На hero 16/9 при тайле 90px видно ~17 иконок — как в Telegram.
 const PATTERN_TILE_SIZE  = 90;
 const PATTERN_ICON_SIZE  = 44;
 
-function buildPatternMaskUrl(iconUrl) {
+// Кэш готовых mask-url: icon-url → data:image/svg+xml,...
+const PATTERN_MASK_CACHE = new Map();
+
+// Скачивает иконку, прогоняет через canvas → dataURL,
+// потом собирает SVG-маску. Внешние ресурсы в mask-image не грузятся,
+// поэтому без canvas никак.
+async function buildPatternMaskUrl(iconUrl) {
+  if (PATTERN_MASK_CACHE.has(iconUrl)) return PATTERN_MASK_CACHE.get(iconUrl);
+
+  const dataUrl = await new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth || img.width;
+        c.height = img.naturalHeight || img.height;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        resolve(c.toDataURL("image/png"));
+      } catch (e) {
+        console.warn("pattern canvas tainted:", e);
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = iconUrl;
+  });
+
+  if (!dataUrl) return null;
+
   const tile = PATTERN_TILE_SIZE;
   const icon = PATTERN_ICON_SIZE;
   const off = (tile - icon) / 2;
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${tile}' height='${tile}'><image href='${iconUrl}' x='${off}' y='${off}' width='${icon}' height='${icon}'/></svg>`;
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${tile}' height='${tile}'><image href='${dataUrl}' x='${off}' y='${off}' width='${icon}' height='${icon}'/></svg>`;
   const encoded = encodeURIComponent(svg).replace(/'/g, "%27");
-  return `url("data:image/svg+xml;charset=utf-8,${encoded}")`;
+  const maskUrl = `url("data:image/svg+xml;charset=utf-8,${encoded}")`;
+  PATTERN_MASK_CACHE.set(iconUrl, maskUrl);
+  return maskUrl;
 }
 
 function getPatternIcon(id) {
@@ -5805,7 +5836,7 @@ async function renderGiftDetail(ownerId, ug) {
   const bgEdgeColor = (ug.background && ug.background.includes("|"))
     ? ug.background.split("|")[1]
     : (ug.background || "#000000");
-  const maskUrl = patternIcon ? buildPatternMaskUrl(patternIcon) : null;
+  const maskUrl = patternIcon ? await buildPatternMaskUrl(patternIcon) : null;
   const patternStyle = maskUrl
     ? `background-color:${bgEdgeColor};-webkit-mask-image:${maskUrl};mask-image:${maskUrl};`
     : "display:none;";
