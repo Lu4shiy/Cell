@@ -5606,14 +5606,19 @@ function openGiftPurchase(gift, recipientId) {
 
     // Замораживаем имя получателя на момент покупки
     if (withName && newGiftId) {
-      const rp = isSelf ? myProfile : (profileCache.get(recipientId) || await getProfile(recipientId));
-      const freezeName = rp ? rp.display_name : "";
+      const rp = isSelf
+        ? myProfile
+        : (profileCache.get(recipientId) || await getProfile(recipientId));
+      const freezeName = rp ? (rp.display_name || "").trim() : "";
       if (freezeName) {
-        try {
-          await supabase.from("user_gifts")
-            .update({ recipient_id: recipientId, recipient_name: freezeName })
-            .eq("id", newGiftId);
-        } catch (e) { console.warn("freeze recipient:", e); }
+        const { error: upErr } = await supabase
+          .from("user_gifts")
+          .update({ recipient_id: recipientId, recipient_name: freezeName })
+          .eq("id", newGiftId);
+        if (upErr) {
+          console.error("Не удалось сохранить 'Подарок для':", upErr);
+          await showAlertDialog("Внимание", "Подарок куплен, но имя получателя сохранить не удалось: " + upErr.message);
+        }
       }
     }
 
