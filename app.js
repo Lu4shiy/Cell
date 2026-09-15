@@ -5374,9 +5374,9 @@ async function buildPatternMaskUrl(iconUrl) {
     const tile = PATTERN_TILE_SIZE;
     const icon = PATTERN_ICON_SIZE;
     const off = (tile - icon) / 2;
-    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${tile}' height='${tile}'><image href='${dataUrl}' x='${off}' y='${off}' width='${icon}' height='${icon}'/></svg>`;
-    // encodeURIComponent уберёт одинарные кавычки — они безопасны в style="..."
-    const maskUrl = `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${tile}" height="${tile}"><image href="${dataUrl}" x="${off}" y="${off}" width="${icon}" height="${icon}"/></svg>`;
+    // encodeURIComponent закодирует все " как %22, поэтому внутри style="..." безопасно использовать url('...')
+    const maskUrl = `url('data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}')`;
     PATTERN_MASK_CACHE.set(iconUrl, maskUrl);
     return maskUrl;
   } catch (e) {
