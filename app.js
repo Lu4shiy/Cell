@@ -5337,6 +5337,81 @@ function giftRarityLabel(r) {
   return r;
 }
 
+
+
+// ======================================================
+// ПАТТЕРНЫ ПОДАРКОВ (только для epic).
+// Тир 1 = лучший (🟦), тир 6 = обычный (🟫).
+// ======================================================
+const GIFT_PATTERNS = [
+  // Tier 1 — 🟦 (0.75% каждый)
+  { id: "Tiger",              icon: "https://i.ibb.co/twqHC62m/icons8-tiger-100.png",           tier: 1 },
+  { id: "Diamond",            icon: "https://i.ibb.co/HpDjsYGW/icons8-100.png",                  tier: 1 },
+  { id: "Lovely Rose",        icon: "https://i.ibb.co/m5wCnxZJ/icons8-100.png",                  tier: 1 },
+  { id: "Honeycomb",          icon: "https://i.ibb.co/VWx1VhTJ/icons8.png",                      tier: 1 },
+  // Tier 2 — 🟩 (1% каждый)
+  { id: "Dragon",             icon: "https://i.ibb.co/BHmvdSfj/icons8-dragon-100.png",           tier: 2 },
+  { id: "Turtle Fight",       icon: "https://i.ibb.co/LXnkDyqs/icons8-ninja-turtle-100.png",     tier: 2 },
+  { id: "Danger",             icon: "https://i.ibb.co/vxxbbKCc/icons8-poison-100.png",           tier: 2 },
+  { id: "Cybersport",         icon: "https://i.ibb.co/HfW2q7QC/icons8-100.png",                  tier: 2 },
+  { id: "Paw",                icon: "https://i.ibb.co/hJpC0Lk8/icons8-100.png",                  tier: 2 },
+  // Tier 3 — 🟨 (2% каждый)
+  { id: "Pizza",              icon: "https://i.ibb.co/35DsZYKS/icons8-salami-pizza-100.png",     tier: 3 },
+  { id: "Champion's Trophey", icon: "https://i.ibb.co/HJ7cKK7/icons8-trophy-100.png",            tier: 3 },
+  { id: "Shimmer",            icon: "https://i.ibb.co/ycRy1zV3/icons8-100-1.png",                tier: 3 },
+  { id: "Knight's Sword",     icon: "https://i.ibb.co/CpVpcNMp/icons8-100.png",                  tier: 3 },
+  { id: "Fire",               icon: "https://i.ibb.co/hxTvMMGK/icons8-90.png",                   tier: 3 },
+  { id: "Get out of here",    icon: "https://i.ibb.co/N635zXNp/icons8-100.png",                  tier: 3 },
+  // Tier 4 — 🟧 (3% каждый)
+  { id: "Compass",            icon: "https://i.ibb.co/39JNnHLp/icons8-adventures-100.png",       tier: 4 },
+  { id: "Crescent",           icon: "https://i.ibb.co/zTcHnrst/icons8-crescent-moon-100.png",    tier: 4 },
+  { id: "Crown",              icon: "https://i.ibb.co/hRLv5SNS/icons8-crown-100.png",            tier: 4 },
+  { id: "Laurel Wreath",      icon: "https://i.ibb.co/mVJK3dvW/icons8-laurel-wreath-100.png",    tier: 4 },
+  { id: "Horse",              icon: "https://i.ibb.co/43hjhyr/icons8-year-of-horse-100.png",     tier: 4 },
+  { id: "Thunderbolt",        icon: "https://i.ibb.co/VySF8T3/icons8-100.png",                   tier: 4 },
+  { id: "Hands Up!",          icon: "https://i.ibb.co/vxjzDkvv/icons8-100.png",                  tier: 4 },
+  // Tier 5 — 🟥 (4% каждый)
+  { id: "Happy Ice Cream",    icon: "https://i.ibb.co/mCJycjJZ/icons8-kawaii-ice-cream-100.png", tier: 5 },
+  { id: "Wolf",               icon: "https://i.ibb.co/cK67rPXt/icons8-wolf-100.png",             tier: 5 },
+  { id: "Box",                icon: "https://i.ibb.co/xtKBvzqv/icons8-100.png",                  tier: 5 },
+  { id: "Flight",             icon: "https://i.ibb.co/BVs0Y9ZB/icons8-100.png",                  tier: 5 },
+  { id: "Special Present",    icon: "https://i.ibb.co/wZwsmk3S/icons8-96.png",                   tier: 5 },
+  { id: "Rocket",             icon: "https://i.ibb.co/CstWw3w9/icons8-100.png",                  tier: 5 },
+  // Tier 6 — 🟫 (5% каждый)
+  { id: "Badminton",          icon: "https://i.ibb.co/gZtJJZ2W/icons8-badminton-100.png",        tier: 6 },
+  { id: "Basketball",         icon: "https://i.ibb.co/7NKNK0pw/icons8-basketball-100.png",       tier: 6 },
+  { id: "Kimono",             icon: "https://i.ibb.co/hxnc5b9K/icons8-kimono-100.png",           tier: 6 },
+  { id: "Ping-pong",          icon: "https://i.ibb.co/hRwj1Sh8/icons8-ping-pong-100.png",        tier: 6 },
+  { id: "Volleyball",         icon: "https://i.ibb.co/q3m8ty5z/icons8-volleyball-100.png",       tier: 6 },
+  { id: "Microphone",         icon: "https://i.ibb.co/tP2tK3cw/icons8-100-1.png",                tier: 6 },
+  { id: "Football",           icon: "https://i.ibb.co/ymkH14jy/icons8-100.png",                  tier: 6 }
+];
+
+const PATTERN_TIER_CHANCE = { 1: 0.75, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5 };
+
+function getPatternChance(id) {
+  if (!id) return null;
+  const p = GIFT_PATTERNS.find((x) => x.id === id);
+  if (!p) return null;
+  return PATTERN_TIER_CHANCE[p.tier] !== undefined ? PATTERN_TIER_CHANCE[p.tier] : null;
+}
+
+function getPatternIcon(id) {
+  if (!id) return null;
+  const p = GIFT_PATTERNS.find((x) => x.id === id);
+  return p ? p.icon : null;
+}
+
+function rollPatternForEpic() {
+  const totalWeight = GIFT_PATTERNS.reduce((s, p) => s + PATTERN_TIER_CHANCE[p.tier], 0);
+  let r = Math.random() * totalWeight;
+  for (const p of GIFT_PATTERNS) {
+    r -= PATTERN_TIER_CHANCE[p.tier];
+    if (r <= 0) return p.id;
+  }
+  return GIFT_PATTERNS[GIFT_PATTERNS.length - 1].id;
+}
+
 // Шансы фонов (в %) — должны совпадать с buy_gift в Supabase
 const BACKGROUND_CHANCES = {
   // Tier 1 — 0.5%
@@ -5612,6 +5687,18 @@ function openGiftPurchase(gift, recipientId) {
       return;
     }
 
+    // Роллим паттерн для epic-подарка
+    if (gift.rarity === "epic" && newGiftId) {
+      const patternId = rollPatternForEpic();
+      if (patternId) {
+        try {
+          await supabase.from("user_gifts")
+            .update({ pattern_id: patternId })
+            .eq("id", newGiftId);
+        } catch (e) { console.warn("pattern roll:", e); }
+      }
+    }
+
     // Замораживаем имя получателя на момент покупки
     if (withName && newGiftId) {
       const rp = isSelf
@@ -5688,6 +5775,25 @@ async function renderGiftDetail(ownerId, ug) {
   const bgChance = getBackgroundChance(ug.background_name);
   const bgChanceHtml = bgChance !== null ? `<span class="gir-badge">${bgChance}%</span>` : "";
 
+  // Паттерн
+  const patternIcon = getPatternIcon(ug.pattern_id);
+  const patternChance = getPatternChance(ug.pattern_id);
+  const patternChanceHtml = patternChance !== null ? `<span class="gir-badge">${patternChance}%</span>` : "";
+  const patternRow = ug.pattern_id
+    ? `<div class="gift-info-row">
+        <span class="gir-label">Паттерн</span>
+        <span class="gir-value">${escapeHtml(ug.pattern_id)}${patternChanceHtml}</span>
+      </div>`
+    : "";
+
+  // Цвет маски-паттерна = центр фона
+  const bgCenterColor = (ug.background && ug.background.includes("|"))
+    ? ug.background.split("|")[0]
+    : (ug.background || "#888888");
+  const patternStyle = patternIcon
+    ? `background-color:${bgCenterColor};-webkit-mask-image:url(${patternIcon});mask-image:url(${patternIcon});`
+    : "display:none;";
+
   // Количество
   const maxSupply = (cat.max_supply !== null && cat.max_supply !== undefined) ? cat.max_supply : null;
   const qtyValue = maxSupply !== null
@@ -5709,7 +5815,7 @@ async function renderGiftDetail(ownerId, ug) {
   content.innerHTML = `
     <div class="gift-detail">
       <div class="gift-hero">
-        <div class="gift-hero-pattern"></div>
+        <div class="gift-hero-pattern" style="${patternStyle}"></div>
         <div class="gift-hero-emoji" style="${bg}">${cat.emoji}</div>
       </div>
 
@@ -5732,6 +5838,7 @@ async function renderGiftDetail(ownerId, ug) {
           <span class="gir-label">Фон</span>
           <span class="gir-value">${escapeHtml(ug.background_name)}${bgChanceHtml}</span>
         </div>` : ""}
+        ${patternRow}
         <div class="gift-info-row">
           <span class="gir-label">Количество</span>
           <span class="gir-value">${qtyValue}</span>

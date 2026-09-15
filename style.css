@@ -3356,15 +3356,21 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   justify-content: center;
 }
 
-/* Паттерн — заполним в следующей правке */
+/* Паттерн — цвета задаются через JS, форма — через mask-image */
 .gift-hero-pattern {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.35;
-  background-repeat: repeat;
-  background-size: 44px 44px;
+  opacity: 0.38;
+  -webkit-mask-size: 44px 44px;
+  mask-size: 44px 44px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  z-index: 1;
 }
+.gift-hero-emoji { z-index: 2; }
 
 .gift-hero-emoji {
   position: relative;
