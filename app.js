@@ -5649,9 +5649,6 @@ window.addEventListener("unhandledrejection", (e) => {
   console.error("Unhandled promise rejection:", e.reason);
 });
 
-const { data: { session } } = await supabase.auth.getSession();
-if (session) showApp(session.user);
-
 // ======================================================
 // 30. КАНАЛЫ: СОЗДАНИЕ
 // ======================================================
@@ -7310,3 +7307,11 @@ function setupAttachPreviewDialog() {
     await handleAttachments(files, caption, asFile);
   });
 }
+
+// ======================================================
+// 45. АВТОЗАПУСК (в самом конце — чтобы все переменные,
+// включая scrollMode и SCROLL_MODE_KEY, уже были объявлены)
+// ======================================================
+
+const { data: { session } } = await supabase.auth.getSession();
+if (session) showApp(session.user);
