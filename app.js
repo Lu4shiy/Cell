@@ -1298,11 +1298,19 @@ async function refreshChannelRights(channelId) {
   currentChannelIsAdmin = await checkChannelAdmin(channelId, currentUser.id);
   const { data: mem } = await supabase.from("chat_members")
     .select("chat_id").eq("chat_id", channelId).eq("user_id", currentUser.id).maybeSingle();
+  const wasSubscribed = currentChannelIsSubscribed;
   currentChannelIsSubscribed = !!mem;
 
   await updateChannelSubtitle(channelId);
   await updateChannelComposerState();
   configureChatMenuForChannel(currentChannelObj);
+
+  // Если только что потеряли подписку — принудительно перезагружаем сообщения,
+  // чтобы сразу показать заглушку
+  if (wasSubscribed && !currentChannelIsSubscribed) {
+    await loadMessages(channelId, openSeq);
+    await loadReactionsForVisibleMessages();
+  }
 
   // Обновляем открытый профиль канала
   if (channelProfileChannelId === channelId && ch) {
@@ -1337,7 +1345,12 @@ async function updateChannelComposerState() {
   const subBtn = document.getElementById("channel-subscribe-btn");
   if (!currentChannelObj) return;
 
-  if (currentChannelIsAdmin) {
+  const isOwner = currentChannelObj.owner_id === currentUser.id;
+  // Писать может только владелец ИЛИ подписанный админ.
+  // Админ без подписки писать НЕ может.
+  const canWrite = isOwner || (currentChannelIsSubscribed && currentChannelIsAdmin);
+
+  if (canWrite) {
     composer.classList.remove("hidden");
     actionBar.classList.add("hidden");
     subBtn.disabled = false;
@@ -2094,16 +2107,24 @@ async function loadMessages(chatId, mySeq) {
   box.innerHTML = "";
   const isChannel = currentChannelObj && currentChannelObj.id === chatId;
 
-  // Приватный/заявочный канал — читать сообщения можно только подписчикам и админам
-  if (isChannel && !currentChannelIsSubscribed && !currentChannelIsAdmin) {
-    const vis = currentChannelObj.visibility || "public";
-    if (vis === "request") {
-      box.innerHTML = '<div class="empty">Вы не являетесь подписчиком.<br>Подайте заявку, чтобы читать сообщения.</div>';
-      return;
-    }
-    if (vis === "private") {
-      box.innerHTML = '<div class="empty">Этот канал приватный.<br>Читать сообщения могут только подписчики.</div>';
-      return;
+  // Проверка доступа к чтению: владелец всегда видит, остальные — только если подписаны
+  if (isChannel) {
+    const isOwner = currentChannelObj.owner_id === currentUser.id;
+    const hasReadAccess = isOwner || currentChannelIsSubscribed;
+    if (!hasReadAccess) {
+      const vis = currentChannelObj.visibility || "public";
+      if (vis === "request") {
+        box.innerHTML = '<div class="empty">Вы не являетесь подписчиком.<br>Подайте заявку, чтобы читать сообщения.</div>';
+        await loadPinned(chatId);
+        return;
+      }
+      if (vis === "private") {
+        box.innerHTML = '<div class="empty">Этот канал приватный.<br>Читать сообщения могут только подписчики.</div>';
+        await loadPinned(chatId);
+        return;
+      }
+      // Для публичных каналов без подписки оставляем возможность читать (как в Телеграме),
+      // но писать нельзя — это отдельно проверяется в updateChannelComposerState.
     }
   }
 
@@ -2785,8 +2806,10 @@ function buildAttachmentHtml(msg) {
 
 async function handleAttachments(files) {
   if (currentChannelObj) {
-    if (!currentChannelIsAdmin) {
-      await showAlertDialog("Нельзя", "Только администраторы могут прикреплять файлы в этом канале");
+    const isOwner = currentChannelObj.owner_id === currentUser.id;
+    const canWrite = isOwner || (currentChannelIsSubscribed && currentChannelIsAdmin);
+    if (!canWrite) {
+      await showAlertDialog("Нельзя", "Вы не являетесь подписчиком канала");
       return;
     }
   }
@@ -2951,15 +2974,18 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
 });
 
 async function sendMessage(chatId, content) {
-  // Защита: если chatId — это канал, отправка возможна только когда он реально открыт
+  // Защита: если chatId — это канал, отправка возможна только когда он открыт
+  // и только владельцем или подписанным админом
   const isKnownChannel = channelCache.has(chatId);
   if (isKnownChannel) {
     if (!currentChannelObj || currentChannelObj.id !== chatId) {
       console.error("sendMessage: попытка отправить в канал без его открытия", chatId);
       return;
     }
-    if (!currentChannelIsAdmin) {
-      await showAlertDialog("Нельзя", "Только администраторы могут писать в этом канале");
+    const isOwner = currentChannelObj.owner_id === currentUser.id;
+    const canWrite = isOwner || (currentChannelIsSubscribed && currentChannelIsAdmin);
+    if (!canWrite) {
+      await showAlertDialog("Нельзя", "Вы не являетесь подписчиком канала");
       return;
     }
   }
