@@ -5459,7 +5459,7 @@ async function renderGiftsMain(userId) {
       const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
       const isLimited = cat.max_supply !== null && cat.max_supply !== undefined;
       const ribbon = isLimited ? `<div class="gift-tile-ribbon">#${ug.serial_number}</div>` : "";
-      const pinMark = (isMe && ug.pinned_at)
+      const pinMark = ug.pinned_at
         ? `<div class="gift-tile-pin"><img class="gift-pin-icon" src="https://i.ibb.co/W4YMJWPd/icons8-94.png" alt=""></div>`
         : "";
       html += `
@@ -5672,50 +5672,76 @@ async function renderGiftDetail(ownerId, ug) {
   const isOwner = ug.owner_id === currentUser.id;
   const isInProfile = ug.in_profile === true;
 
-  // Кто изначально купил
-  let originalOwnerHtml = "";
-  if (ug.original_owner_id) {
-    const op = profileCache.get(ug.original_owner_id) || await getProfile(ug.original_owner_id);
-    if (op) originalOwnerHtml = `<div class="gift-detail-row"><span class="gdr-label">Купил(а)</span><span class="gdr-value">${escapeHtml(op.display_name)}</span></div>`;
-  }
-  let giftedFromHtml = "";
-  if (ug.gifted_from && ug.gifted_from !== ug.original_owner_id) {
-    const gp = profileCache.get(ug.gifted_from) || await getProfile(ug.gifted_from);
-    if (gp) giftedFromHtml = `<div class="gift-detail-row"><span class="gdr-label">Подарил(а)</span><span class="gdr-value">${escapeHtml(gp.display_name)}</span></div>`;
-  }
-  let bgRow = "";
-  if (ug.background_name) {
-    const chance = getBackgroundChance(ug.background_name);
-    const chanceStr = chance !== null ? ` (${chance}%)` : "";
-    bgRow = `<div class="gift-detail-row"><span class="gdr-label">Фон</span><span class="gdr-value">${escapeHtml(ug.background_name)}${chanceStr}</span></div>`;
-  }
+  // Владелец
+  const ownerProfile = profileCache.get(ug.owner_id) || await getProfile(ug.owner_id);
+  const ownerName = ownerProfile ? ownerProfile.display_name : "—";
+
+  // Шанс фона
+  const bgChance = getBackgroundChance(ug.background_name);
+  const bgChanceHtml = bgChance !== null ? `<span class="gir-badge">${bgChance}%</span>` : "";
+
+  // Количество
+  const maxSupply = (cat.max_supply !== null && cat.max_supply !== undefined) ? cat.max_supply : null;
+  const qtyValue = maxSupply !== null
+    ? `#${ug.serial_number} · выпущено ${maxSupply}`
+    : `#${ug.serial_number}`;
+
+  // Подпись
+  const captionHtml = ug.caption
+    ? `<div class="gift-info-row"><span class="gir-label">Подпись</span><span class="gir-value">${escapeHtml(ug.caption)}</span></div>`
+    : "";
+
+  // Подарок для кого
+  const recipientHtml = ug.recipient_name
+    ? `<div class="gift-recipient-caption">Подарок для ${ug.recipient_id
+        ? `<a href="#" class="gift-recipient-link" data-uid="${ug.recipient_id}">${escapeHtml(ug.recipient_name)}</a>`
+        : escapeHtml(ug.recipient_name)}</div>`
+    : "";
 
   content.innerHTML = `
     <div class="gift-detail">
-      <div class="gift-detail-emoji" style="${bg}">${cat.emoji}</div>
-      <div class="gift-detail-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
-      <div class="gift-detail-sub gift-rarity-${cat.rarity}">${giftRarityLabel(cat.rarity)}${cat.collection ? " · " + escapeHtml(cat.collection) : ""}</div>
-      ${ug.recipient_name ? `
-        <div class="gift-recipient-caption">
-          Подарок для ${ug.recipient_id
-            ? `<a href="#" class="gift-recipient-link" data-uid="${ug.recipient_id}">${escapeHtml(ug.recipient_name)}</a>`
-            : escapeHtml(ug.recipient_name)}
-        </div>` : ""}
-      <div class="gift-detail-rows">
-        ${originalOwnerHtml}
-        ${giftedFromHtml}
-        ${bgRow}
-        <div class="gift-detail-row"><span class="gdr-label">Стоимость</span><span class="gdr-value">🧩 ${cat.price}</span></div>
-        <div class="gift-detail-row"><span class="gdr-label">Дата получения</span><span class="gdr-value">${formatDateTime(ug.created_at)}</span></div>
-        ${ug.caption ? `<div class="gift-detail-row"><span class="gdr-label">Подпись</span><span class="gdr-value">${escapeHtml(ug.caption)}</span></div>` : ""}
+      <div class="gift-hero">
+        <div class="gift-hero-pattern"></div>
+        <div class="gift-hero-emoji" style="${bg}">${cat.emoji}</div>
       </div>
+
+      <div class="gift-detail-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
+      <div class="gift-detail-sub">${escapeHtml(cat.collection || "—")} · ${giftRarityLabel(cat.rarity)}</div>
+
+      ${recipientHtml}
+
+      <div class="gift-info-table">
+        <div class="gift-info-row">
+          <span class="gir-label">Владелец</span>
+          <span class="gir-value">${escapeHtml(ownerName)}</span>
+        </div>
+        <div class="gift-info-row">
+          <span class="gir-label">Модель</span>
+          <span class="gir-value">${escapeHtml(cat.name)} · ${giftRarityLabel(cat.rarity)}</span>
+        </div>
+        ${ug.background_name ? `
+        <div class="gift-info-row">
+          <span class="gir-label">Фон</span>
+          <span class="gir-value">${escapeHtml(ug.background_name)}${bgChanceHtml}</span>
+        </div>` : ""}
+        <div class="gift-info-row">
+          <span class="gir-label">Количество</span>
+          <span class="gir-value">${qtyValue}</span>
+        </div>
+        <div class="gift-info-row">
+          <span class="gir-label">Ценность</span>
+          <span class="gir-value">${NECTAR_HTML} ${cat.price}</span>
+        </div>
+        ${captionHtml}
+      </div>
+
       <div class="gift-detail-actions">
         ${isOwner ? `
           <button class="dialog-btn ${isInProfile ? "dialog-cancel" : "dialog-primary"}" id="gift-toggle-visible">
             ${isInProfile ? "Скрыть из профиля" : "Добавить в профиль"}
           </button>
           <button class="dialog-btn" id="gift-send">🎁 Подарить</button>
-          <button class="dialog-btn" id="gift-sell">💰 Продать за 🧩 ${Math.floor(cat.price * 0.85)}</button>
+          <button class="dialog-btn" id="gift-sell">💰 Продать за ${NECTAR_HTML} ${Math.floor(cat.price * 0.85)}</button>
         ` : `
           <div class="dialog-text" style="text-align:center;">Подарок принадлежит другому пользователю</div>
         `}
@@ -5736,7 +5762,7 @@ async function renderGiftDetail(ownerId, ug) {
 
     document.getElementById("gift-sell").addEventListener("click", async () => {
       const ok = await showConfirmDialog("Продать подарок",
-        `Продать за 🧩 ${Math.floor(cat.price * 0.85)} (комиссия 15%)?`, "Продать");
+        `Продать за ${Math.floor(cat.price * 0.85)} Nectar (комиссия 15%)?`, "Продать");
       if (!ok) return;
       const { error } = await supabase.rpc("sell_gift", { p_user_gift_id: ug.id });
       if (error) { await showAlertDialog("Ошибка", error.message); return; }

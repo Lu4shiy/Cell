@@ -3334,3 +3334,108 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   height: 16px;
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));
 }
+
+/* ====================================================== */
+/* НОВОЕ ОКНО ПОДАРКА                                      */
+/* ====================================================== */
+
+.gift-detail { text-align: center; }
+
+/* Hero — прямоугольник с эмодзи */
+.gift-hero {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 220px;
+  border-radius: 16px;
+  overflow: hidden;
+  margin: 0 0 16px;
+  background: #0c0e12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Паттерн — заполним в следующей правке */
+.gift-hero-pattern {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-repeat: repeat;
+  background-size: 44px 44px;
+}
+
+.gift-hero-emoji {
+  position: relative;
+  z-index: 1;
+  width: 108px;
+  height: 108px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 64px;
+  line-height: 1;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.gift-detail-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.gift-detail-sub {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 18px;
+}
+
+/* Таблица параметров */
+.gift-info-table {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.gift-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  background: var(--bg-input);
+  font-size: 14px;
+}
+
+.gift-info-row .gir-label {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.gift-info-row .gir-value {
+  color: var(--text);
+  font-weight: 500;
+  text-align: right;
+  word-break: break-word;
+  min-width: 0;
+}
+
+.gir-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+}
