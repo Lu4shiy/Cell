@@ -103,7 +103,7 @@
           <button id="chat-pin-btn" class="icon-btn" title="Закреплённые">📌<span class="pin-count-badge hidden" id="pin-count-badge">0</span></button>
           <button id="chat-menu-btn" class="icon-btn" title="Меню">⋮</button>
           <div id="chat-menu" class="menu hidden">
-            <button data-action="tokens">Отправить ImagiTokens</button>
+            <button data-action="tokens">Отправить Nectar</button>
             <button data-action="clear">Очистить чат</button>
             <button data-action="delete">Удалить чат</button>
             <button data-action="block" id="menu-block" class="danger">Заблокировать</button>
@@ -389,7 +389,7 @@
       <div class="gifts-header">
         <button class="gifts-back-btn hidden" id="gifts-back">←</button>
         <div class="gifts-title" id="gifts-title">Подарки</div>
-        <div class="gifts-balance">🧩 <span id="gifts-balance">0</span></div>
+        <div class="gifts-balance"><img class="nectar-icon" src="https://i.ibb.co/MkfVPGwZ/icons8-100.png" alt="Nectar" draggable="false"><span id="gifts-balance">0</span></div>
       </div>
       <div id="gifts-content" class="gifts-content"></div>
       <div class="dialog-actions">
@@ -429,7 +429,7 @@
 
   <div id="tokens-send-overlay" class="dialog-overlay hidden">
     <div class="dialog">
-      <div class="dialog-title">Отправить ImagiTokens</div>
+      <div class="dialog-title">Отправить Nectar</div>
       <div class="dialog-text" id="tokens-send-to">Кому: —</div>
       <input type="number" id="tokens-send-amount" placeholder="Сумма" min="1" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none;margin-bottom:12px;">
       <div class="dialog-text" id="tokens-send-balance" style="text-align:center;"></div>

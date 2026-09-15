@@ -67,6 +67,14 @@ try {
 } catch (e) { /* silent */ }
 document.documentElement.dataset.scrollMode = scrollMode;
 
+// ======================= Nectar (валюта) =======================
+const NECTAR_ICON_URL = "https://i.ibb.co/MkfVPGwZ/icons8-100.png";
+const NECTAR_HTML = `<img class="nectar-icon" src="${NECTAR_ICON_URL}" alt="Nectar" draggable="false">`;
+
+function nectarize(text) {
+  return escapeHtml(String(text || "")).replace(/🧩/g, NECTAR_HTML);
+}
+
 // ======================= 1. АВТОРИЗАЦИЯ =======================
 const tabs = document.querySelectorAll(".tab");
 const loginForm = document.getElementById("login-form");
@@ -2319,14 +2327,14 @@ async function renderSystemMessage(msg) {
     const senderName = msg.sender_id === currentUser.id ? "Вы" : (sender ? sender.display_name : "Кто-то");
     let text;
     if (msg.sender_id === currentUser.id) {
-      text = `<b>Вы</b> отправили <b>${msg.tokens_amount}</b> 🧩`;
+      text = `<b>Вы</b> отправили <b>${msg.tokens_amount}</b> ${NECTAR_HTML}`;
     } else {
       const g = sender ? sender.gender : null;
       let v;
       if (g === "female") v = "отправила вам";
       else if (g === "male") v = "отправил вам";
       else v = "отправил(а) вам";
-      text = `<b>${escapeHtml(senderName)}</b> ${v} <b>${msg.tokens_amount}</b> 🧩 ImagiTokens`;
+      text = `<b>${escapeHtml(senderName)}</b> ${v} <b>${msg.tokens_amount}</b> ${NECTAR_HTML} Nectar`;
     }
     return `<span class="msg-system-text">${text}</span>`;
   }
@@ -2349,7 +2357,7 @@ async function renderSystemMessage(msg) {
     }
     const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
     return `
-      <span class="msg-system-text">${senderName} ${verb} подарок за <b>${cat.price}</b> 🧩</span>
+      <span class="msg-system-text">${senderName} ${verb} подарок за <b>${cat.price}</b> ${NECTAR_HTML}</span>
       <div class="gift-card-inline">
         <div class="gci-emoji" style="${bg}">${cat.emoji}</div>
         <div class="gci-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
@@ -2581,7 +2589,7 @@ function refreshWheelLayout() {
     el.style.setProperty("--sc", String(scale));
     el.style.opacity = String(opacity);
     el.style.zIndex = String(100 - abs);
-    el.classList.toggle("wheel-active", abs === 0);
+    el.classList.toggle("wheel-active", abs === 0 && scrollMode === "wheel");
 
     const hue = idToHue(el.dataset.chatId || "x");
     el.style.setProperty("--chat-hue", String(hue));
@@ -5538,8 +5546,8 @@ async function renderCatalog(recipientId) {
     const supplyText = g.max_supply !== null ? `${soldCount} / ${g.max_supply}` : `${soldCount}`;
     let btnText;
     if (soldOut) btnText = "Распродано";
-    else if (!canAfford) btnText = `🧩 ${g.price} · мало`;
-    else btnText = `🧩 ${g.price}`;
+    else if (!canAfford) btnText = `${NECTAR_HTML} ${g.price} · мало`;
+    else btnText = `${NECTAR_HTML} ${g.price}`;
     return `
       <div class="gift-card" data-cat-id="${g.id}">
         <div class="gift-card-emoji" style="background: var(--bg-input);">${g.emoji}</div>
@@ -5581,7 +5589,7 @@ function openGiftPurchase(gift, recipientId) {
 
   titleEl.textContent = "Купить подарок " + recipientName;
   infoEl.textContent = `${gift.emoji} ${gift.name} — ${giftRarityLabel(gift.rarity)}${gift.collection ? " · " + gift.collection : ""}`;
-  costEl.textContent = `Стоимость: 🧩 ${gift.price}`;
+  costEl.innerHTML = `Стоимость: ${NECTAR_HTML} <b>${gift.price}</b>`;
   captionInput.value = "";
   if (withNameCb) withNameCb.checked = false;
   if (withNameLabel) withNameLabel.textContent = isSelf ? "С моим именем" : "С тем именем";
@@ -5894,7 +5902,7 @@ async function openTokensDialog() {
   myProfile.imagi_tokens = balance;
 
   document.getElementById("tokens-send-to").textContent = "Кому: " + currentOtherUser.display_name;
-  document.getElementById("tokens-send-balance").textContent = `У вас: 🧩 ${balance}`;
+  document.getElementById("tokens-send-balance").innerHTML = `У вас: ${NECTAR_HTML} <b>${balance}</b>`;
   const amountEl = document.getElementById("tokens-send-amount");
   amountEl.value = "";
   amountEl.max = balance;

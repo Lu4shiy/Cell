@@ -3202,7 +3202,7 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item.active {
   background: var(--bg-active);
 }
 html[data-scroll-mode="classic"] .wheel-wrap .user-item.wheel-active {
-  background: var(--bg-active);
+  background: transparent;
   border-color: transparent;
   box-shadow: none;
 }
@@ -3438,4 +3438,15 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   font-size: 11px;
   font-weight: 700;
   vertical-align: middle;
+}
+
+/* Иконка Nectar */
+.nectar-icon {
+  width: 1.05em;
+  height: 1.05em;
+  display: inline-block;
+  vertical-align: -0.18em;
+  border-radius: 50%;
+  user-select: none;
+  pointer-events: none;
 }
