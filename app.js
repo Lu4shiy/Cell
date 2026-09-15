@@ -5829,13 +5829,10 @@ async function renderGiftDetail(ownerId, ug) {
       </div>`
     : "";
 
-  // Цвет маски-паттерна = ТЁМНЫЙ край фона (как в Telegram — паттерн темнее фона)
-  const bgEdgeColor = (ug.background && ug.background.includes("|"))
-    ? ug.background.split("|")[1]
-    : (ug.background || "#000000");
+  // Паттерн всегда чёрный с низкой прозрачностью (как в Telegram — тёмный паттерн поверх фона)
   const maskUrl = patternIcon ? await buildPatternMaskUrl(patternIcon) : null;
   const patternStyle = maskUrl
-    ? `background-color:${bgEdgeColor};-webkit-mask-image:${maskUrl};mask-image:${maskUrl};`
+    ? `background-color:#000;-webkit-mask-image:${maskUrl};mask-image:${maskUrl};`
     : "display:none;";
 
   // Количество
@@ -5874,8 +5871,8 @@ async function renderGiftDetail(ownerId, ug) {
           <span class="gir-value">${escapeHtml(ownerName)}</span>
         </div>
         <div class="gift-info-row">
-          <span class="gir-label">Модель</span>
-          <span class="gir-value">${escapeHtml(cat.name)} · ${giftRarityLabel(cat.rarity)}</span>
+          <span class="gir-label">Редкость</span>
+          <span class="gir-value">${giftRarityLabel(cat.rarity)}</span>
         </div>
         ${ug.background_name ? `
         <div class="gift-info-row">
