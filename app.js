@@ -942,9 +942,12 @@ function subscribeToMemberships() {
       if (payload.old && payload.old.user_id === currentUser.id) {
         const { data: ch } = await supabase.from("channels").select("id").eq("id", chatId).maybeSingle();
         if (ch) {
-          // Канал: не закрываем и не убираем из списка — можно просматривать дальше.
+          // Канал: СРАЗУ убираем из списка чатов
           currentChannelIsSubscribed = false;
+          removeChatFromList(chatId);
           if (currentChannelObj && currentChannelObj.id === chatId) {
+            await updateChannelComposerState();
+            configureChatMenuForChannel(currentChannelObj);
             await loadMessages(chatId, openSeq);
             await loadReactionsForVisibleMessages();
           }
@@ -1927,6 +1930,8 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
     const { error } = await supabase.from("chat_members")
       .delete().eq("chat_id", ch.id).eq("user_id", currentUser.id);
     if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    // СРАЗУ убираем канал из списка чатов
+    removeChatFromList(ch.id);
     if (currentChannelObj && currentChannelObj.id === ch.id) {
       currentChannelIsSubscribed = false;
       await updateChannelComposerState();
@@ -1934,9 +1939,6 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
       configureChatMenuForChannel(currentChannelObj);
       await loadMessages(ch.id, openSeq);
       await loadReactionsForVisibleMessages();
-    } else {
-      removeChatFromList(ch.id);
-      channelCache.delete(ch.id);
     }
     return;
   }
@@ -3315,7 +3317,8 @@ function setupChatMenu() {
         .delete().eq("chat_id", chId).eq("user_id", currentUser.id);
       if (error) { await showAlertDialog("Ошибка", error.message); return; }
       currentChannelIsSubscribed = false;
-      // Не закрываем канал и не убираем его из списка — просто снимаем подписку
+      // СРАЗУ убираем канал из списка чатов
+      removeChatFromList(chId);
       await updateChannelSubtitle(chId);
       await updateChannelComposerState();
       configureChatMenuForChannel(currentChannelObj);
@@ -5064,11 +5067,11 @@ function setupChannelCreate() {
           .delete().eq("chat_id", chId).eq("user_id", currentUser.id);
         if (error) { await showAlertDialog("Ошибка отписки", error.message); return; }
         currentChannelIsSubscribed = false;
+        // СРАЗУ убираем канал из списка чатов
+        removeChatFromList(chId);
         if (currentChannelObj && currentChannelObj.id === chId) {
           await loadMessages(chId, openSeq);
           await loadReactionsForVisibleMessages();
-        } else {
-          removeChatFromList(chId);
         }
       } else if (vis === "request") {
         const { error } = await supabase.rpc("submit_join_request", { p_chat_id: chId });
