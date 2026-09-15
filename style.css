@@ -3272,6 +3272,26 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   justify-content: center;
   font-size: 44px;
   line-height: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.gift-tile-pattern {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.32;
+  -webkit-mask-size: 70px 70px;
+  mask-size: 70px 70px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  z-index: 0;
+  display: none;
+}
+
+.gift-tile-emoji-symbol {
+  position: relative;
+  z-index: 1;
 }
 
 .gift-tile-ribbon {
@@ -3440,6 +3460,17 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   font-size: 11px;
   font-weight: 700;
   vertical-align: middle;
+}
+
+/* Галочка верификации */
+.verified-badge {
+  width: 1em;
+  height: 1em;
+  margin-left: 4px;
+  vertical-align: -0.12em;
+  user-select: none;
+  display: inline-block;
+  cursor: help;
 }
 
 /* Иконка Nectar */

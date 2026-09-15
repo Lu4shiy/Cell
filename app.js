@@ -54,7 +54,13 @@ const ICONS = {
   saveAs:      "https://i.ibb.co/MkZN03VX/icons8-save-as-100.png",
   switchOff:   "https://i.ibb.co/0jsYMd1s/icons8-switch-off-100.png",
   switchOn:    "https://i.ibb.co/MDfhc887/icons8-switch-on-100.png",
+  verified:    "https://i.ibb.co/TB7T6kgN/image.png",
 };
+
+function verifiedBadge(profile) {
+  if (!profile || !profile.verified) return "";
+  return `<img class="verified-badge" src="${ICONS.verified}" alt="✓" title="Официальный аккаунт" draggable="false">`;
+}
 
 // ======================================================
 // РЕЖИМ СПИСКА ЧАТОВ — объявлено ДО initApp, иначе TDZ
@@ -531,13 +537,13 @@ async function pollMyMessageStatuses() {
 
 async function loadMyProfile() {
   const { data, error } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, accent_color, gender, last_seen, birthday, created_at, imagi_tokens")
+    .select("id, username, display_name, avatar_url, accent_color, gender, last_seen, birthday, created_at, imagi_tokens, verified")
     .eq("id", currentUser.id).single();
   if (error) { console.error(error); return; }
   myProfile = data; profileCache.set(currentUser.id, data);
   applyAccent(data.accent_color || "orange");
   paintAvatar(document.getElementById("me-avatar"), data);
-  document.getElementById("me-name").textContent = data.display_name;
+  document.getElementById("me-name").innerHTML = escapeHtml(data.display_name) + verifiedBadge(data);
   document.getElementById("me-username").textContent = "@" + data.username;
 }
 
@@ -558,7 +564,7 @@ function renderChatSubtitle() {
 async function getProfile(id) {
   if (profileCache.has(id)) return profileCache.get(id);
   const { data } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, accent_color, last_seen, gender, created_at, birthday")
+    .select("id, username, display_name, avatar_url, accent_color, last_seen, gender, created_at, birthday, verified")
     .eq("id", id).single();
   if (data) profileCache.set(id, data);
   return data;
@@ -882,12 +888,12 @@ async function openUserProfileDialog(userOverride) {
   const backBtn = document.getElementById("user-profile-back");
   if (backBtn) backBtn.classList.toggle("hidden", !profileFromGiftContext);
   const { data: freshProfile } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, created_at, last_seen, gender, birthday")
+    .select("id, username, display_name, avatar_url, created_at, last_seen, gender, birthday, verified")
     .eq("id", user.id).single();
   const p = freshProfile || user;
   profileCache.set(user.id, { ...profileCache.get(user.id), ...p });
   paintAvatar(document.getElementById("user-profile-avatar"), p);
-  document.getElementById("user-profile-name").textContent = p.display_name || "—";
+  document.getElementById("user-profile-name").innerHTML = escapeHtml(p.display_name || "—") + verifiedBadge(p);
   const statusEl = document.getElementById("user-profile-status");
   statusEl.textContent = formatLastSeen(p);
   statusEl.classList.toggle("online", isUserOnline(p));
@@ -1069,14 +1075,14 @@ function updateUserEverywhere(profile) {
     const nameEl = itemEl.querySelector(".user-item-name");
     if (nameEl) {
       const custom = itemEl.dataset.customName;
-      nameEl.textContent = (custom || profile.display_name) + (isBlockedByMe(profile.id) ? " 🚫" : "");
+      nameEl.innerHTML = escapeHtml(custom || profile.display_name) + verifiedBadge(profile) + (isBlockedByMe(profile.id) ? " 🚫" : "");
     }
   }
   if (currentOtherUser && currentOtherUser.id === profile.id) {
     Object.assign(currentOtherUser, profile);
     paintAvatar(document.getElementById("chat-avatar"), currentOtherUser);
     const custom = document.querySelector(`.user-item[data-user-id="${profile.id}"]`)?.dataset.customName;
-    document.getElementById("chat-title").textContent = custom || profile.display_name;
+    document.getElementById("chat-title").innerHTML = escapeHtml(custom || profile.display_name) + verifiedBadge(profile);
     renderChatSubtitle();
   }
 }
@@ -1089,7 +1095,7 @@ function subscribeToProfiles() {
       if (p.id === currentUser.id) {
         myProfile = { ...myProfile, ...p };
         paintAvatar(document.getElementById("me-avatar"), myProfile);
-        document.getElementById("me-name").textContent = p.display_name;
+        document.getElementById("me-name").innerHTML = escapeHtml(p.display_name) + verifiedBadge(p);
         document.getElementById("me-username").textContent = "@" + p.username;
       }
       updateUserEverywhere(p);
@@ -1186,7 +1192,7 @@ async function loadRecentChats() {
   let profilesData = [];
   if (uniqueUserIds.length) {
     const { data } = await supabase.from("profiles")
-      .select("id, username, display_name, avatar_url, last_seen, gender, birthday").in("id", uniqueUserIds);
+      .select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified").in("id", uniqueUserIds);
     profilesData = data || [];
     profilesData.forEach((p) => profileCache.set(p.id, p));
   }
@@ -1234,7 +1240,7 @@ function renderChatItem(it, user) {
       <div class="avatar"></div>
       <div class="user-item-body">
         <div class="user-item-row1">
-          <div class="user-item-name">${escapeHtml(name)}${blocked}</div>
+          <div class="user-item-name">${escapeHtml(name)}${verifiedBadge(user)}${blocked}</div>
           <div class="user-item-time">${time}</div>
         </div>
         <div class="user-item-row2">
@@ -1304,7 +1310,7 @@ function renderDmItemHtml(it, profileMap) {
       <div class="avatar"></div>
       <div class="user-item-body">
         <div class="user-item-row1">
-          <div class="user-item-name">${escapeHtml(name)}${blocked}</div>
+          <div class="user-item-name">${escapeHtml(name)}${verifiedBadge(user)}${blocked}</div>
           <div class="user-item-time">${time}</div>
         </div>
         <div class="user-item-row2">
@@ -1622,7 +1628,7 @@ async function addOrUpdateChatInList(chatId, otherUserId) {
 
   try {
     const { data: profile } = await supabase.from("profiles")
-      .select("id, username, display_name, avatar_url, last_seen, gender, birthday")
+      .select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified")
       .eq("id", otherUserId).single();
     if (!profile) return;
 
@@ -1743,7 +1749,7 @@ async function performSearch(query) {
   const reqId = ++searchReqId;
 
   const [profilesRes, customRes, channelsRes] = await Promise.all([
-    supabase.from("profiles").select("id, username, display_name, avatar_url, last_seen, gender, birthday")
+    supabase.from("profiles").select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified")
       .neq("id", currentUser.id).or(`username.ilike.%${clean}%,display_name.ilike.%${clean}%`).limit(20),
     supabase.from("chat_members").select("chat_id, custom_name").eq("user_id", currentUser.id).ilike("custom_name", `%${clean}%`),
     supabase.from("channels").select("*")
@@ -1779,7 +1785,7 @@ async function performSearch(query) {
   let allProfiles = [];
   if (resultIds.size) {
     const { data } = await supabase.from("profiles")
-      .select("id, username, display_name, avatar_url, last_seen, gender, birthday").in("id", [...resultIds]);
+      .select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified").in("id", [...resultIds]);
     allProfiles = data || [];
     allProfiles.forEach((p) => profileCache.set(p.id, p));
   }
@@ -1848,7 +1854,7 @@ function renderSearchUserHtml(u) {
     <div class="user-item" data-user-id="${u.id}" data-custom-name="${u._customName ? escapeHtml(u._customName) : ""}">
       <div class="avatar"></div>
       <div class="user-item-body">
-        <div class="user-item-row1"><div class="user-item-name">${displayName}${blocked}</div></div>
+        <div class="user-item-row1"><div class="user-item-name">${displayName}${verifiedBadge(u)}${blocked}</div></div>
         <div class="user-item-row2"><div class="user-item-preview">@${escapeHtml(u.username)}</div></div>
       </div>
     </div>`;
@@ -2096,7 +2102,7 @@ async function openChatWith(otherUser) {
   const itemEl = document.querySelector(`.user-item[data-user-id="${otherUser.id}"]`);
   const customName = itemEl ? itemEl.dataset.customName : null;
   paintAvatar(document.getElementById("chat-avatar"), otherUser);
-  document.getElementById("chat-title").textContent = customName || otherUser.display_name;
+  document.getElementById("chat-title").innerHTML = escapeHtml(customName || otherUser.display_name) + verifiedBadge(otherUser);
   renderChatSubtitle();
   document.getElementById("chat-placeholder").classList.add("hidden");
   document.getElementById("chat-content").classList.remove("hidden");
@@ -3003,7 +3009,7 @@ async function showMiniProfile(userId, anchor) {
 
   const mp = document.getElementById("mini-profile");
   paintAvatar(document.getElementById("mini-profile-avatar"), p);
-  document.getElementById("mini-profile-name").textContent = p.display_name || "—";
+  document.getElementById("mini-profile-name").innerHTML = escapeHtml(p.display_name || "—") + verifiedBadge(p);
   document.getElementById("mini-profile-username").textContent = "@" + (p.username || "");
   const st = document.getElementById("mini-profile-status");
   st.textContent = formatLastSeen(p) || "—";
@@ -3075,7 +3081,7 @@ async function updateMessageInUI(msg) {
 
 async function openChatByUsername(username) {
   const { data } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, last_seen, gender, birthday").eq("username", username).single();
+    .select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified").eq("username", username).single();
   if (!data) return;
   if (data.id === currentUser.id) return;
   document.getElementById("search-input").value = "";
@@ -5588,11 +5594,15 @@ async function renderGiftsMain(userId) {
       const pinMark = ug.pinned_at
         ? `<div class="gift-tile-pin"><img class="gift-pin-icon" src="https://i.ibb.co/W4YMJWPd/icons8-94.png" alt=""></div>`
         : "";
+      const patternIcon = cat.rarity === "epic" ? getPatternIcon(ug.pattern_id) : null;
       html += `
         <div class="gift-tile" data-gift-ug-id="${ug.id}" data-pinned="${ug.pinned_at ? "1" : "0"}">
           ${ribbon}
           ${pinMark}
-          <div class="gift-tile-emoji" style="${bg}">${cat.emoji}</div>
+          <div class="gift-tile-emoji" style="${bg}">
+            ${patternIcon ? `<div class="gift-tile-pattern" data-icon="${patternIcon}"></div>` : ""}
+            <span class="gift-tile-emoji-symbol">${cat.emoji}</span>
+          </div>
         </div>`;
     });
     html += `</div>`;
@@ -5602,6 +5612,19 @@ async function renderGiftsMain(userId) {
 
   const openBtn = document.getElementById("open-catalog-btn");
   if (openBtn) openBtn.addEventListener("click", () => renderCatalog(userId));
+
+  // Асинхронно дорисовываем паттерны на плитках
+  content.querySelectorAll(".gift-tile-pattern[data-icon]").forEach((el) => {
+    const iconUrl = el.dataset.icon;
+    if (!iconUrl) return;
+    buildPatternMaskUrl(iconUrl).then((maskUrl) => {
+      if (!maskUrl) return;
+      el.style.display = "block";
+      el.style.backgroundColor = "#000";
+      el.style.webkitMaskImage = maskUrl;
+      el.style.maskImage = maskUrl;
+    });
+  });
 
   content.querySelectorAll(".gift-tile").forEach((el) => {
     el.addEventListener("click", () => {
@@ -5652,7 +5675,10 @@ async function renderCatalog(recipientId) {
   const catalog = await loadGiftCatalog();
   if (!catalog.length) { content.innerHTML = '<div class="empty">Каталог пуст</div>'; return; }
 
-  const { data: sold } = await supabase.from("user_gifts").select("gift_id");
+  // Считаем только те подарки, у которых есть владелец (проданные/уничтоженные через sell_gift имеют owner_id = null)
+  const { data: sold } = await supabase.from("user_gifts")
+    .select("gift_id")
+    .not("owner_id", "is", null);
   const soldMap = new Map();
   (sold || []).forEach((s) => soldMap.set(s.gift_id, (soldMap.get(s.gift_id) || 0) + 1));
 
@@ -5782,14 +5808,22 @@ function openGiftPurchase(gift, recipientId) {
     if (recipientId === currentUser.id) await refreshMyGiftsCount();
     giftCatalogCache = [];
     await loadGiftCatalog();
+
+    // Открываем страницу только что купленного подарка
+    if (newGiftId) {
+      const { data: created } = await supabase.from("user_gifts").select("*").eq("id", newGiftId).maybeSingle();
+      if (created) {
+        await renderGiftDetail(recipientId, created);
+        return;
+      }
+    }
     renderGiftsMain(recipientId);
   };
   cancelBtn.onclick = () => overlay.classList.add("hidden");
 }
 
 async function renderGiftDetail(ownerId, ug) {
-  const { data: fresh } = await supabase.from("user_gifts").select("*").eq("id", ug.id).single();
-  if (fresh) ug = fresh;
+  // Данные уже приходят свежими из списка — не делаем лишний запрос
 
   // Запоминаем контекст — чтобы вернуться именно к этому подарку
   currentGiftDetailUserId = ownerId;
@@ -5829,11 +5863,8 @@ async function renderGiftDetail(ownerId, ug) {
       </div>`
     : "";
 
-  // Паттерн — всегда чёрный с прозрачностью, читается на любом фоне
-  const maskUrl = patternIcon ? await buildPatternMaskUrl(patternIcon) : null;
-  const patternStyle = maskUrl
-    ? `background-color:#000;-webkit-mask-image:${maskUrl};mask-image:${maskUrl};`
-    : "display:none;";
+  // Паттерн — рендерим асинхронно, чтобы не блокировать открытие окна
+  const patternStyle = "display:none;";
 
   // Количество
   const maxSupply = (cat.max_supply !== null && cat.max_supply !== undefined) ? cat.max_supply : null;
@@ -5903,6 +5934,19 @@ async function renderGiftDetail(ownerId, ug) {
         `}
       </div>
     </div>`;
+
+  // Асинхронно дорисовываем паттерн
+  if (patternIcon) {
+    buildPatternMaskUrl(patternIcon).then((maskUrl) => {
+      if (!maskUrl) return;
+      const el = content.querySelector(".gift-hero-pattern");
+      if (!el) return;
+      el.style.display = "block";
+      el.style.backgroundColor = "#000";
+      el.style.webkitMaskImage = maskUrl;
+      el.style.maskImage = maskUrl;
+    });
+  }
 
   if (isOwner) {
     document.getElementById("gift-toggle-visible").addEventListener("click", async () => {
