@@ -861,8 +861,8 @@ async function checkUsernameLive(value) {
 }
 
 // ======================= 8. ПРОФИЛЬ СОБЕСЕДНИКА =======================
-async function openUserProfileDialog() {
-  const user = currentOtherUser || pendingOtherUser;
+async function openUserProfileDialog(userOverride) {
+  const user = userOverride || currentOtherUser || pendingOtherUser;
   if (!user) return;
   const overlay = document.getElementById("user-profile-overlay");
   const { data: freshProfile } = await supabase.from("profiles")
@@ -883,14 +883,19 @@ async function openUserProfileDialog() {
   document.getElementById("user-profile-birthday").innerHTML = escapeHtml(bdStr) + (isBd && bdStr !== "—" ? '<span class="bd-party">🎉</span>' : "");
   document.getElementById("user-profile-created").textContent = p.created_at ? new Date(p.created_at).toLocaleDateString("ru-RU") : "—";
   let msgCount = 0;
-  if (currentChatId) {
+  if (currentChatId && currentOtherUser && currentOtherUser.id === user.id) {
     const { data: msgs } = await supabase.from("messages").select("id").eq("chat_id", currentChatId);
     msgCount = (msgs || []).filter((m) => !hiddenMsgIds.has(m.id)).length;
   }
   document.getElementById("user-profile-msgcount").textContent = String(msgCount);
-  const { count: totalGifts } = await supabase.from("user_gifts")
+
+  // Себе — все свои подарки. Другому — только те, что владелец выставил в профиль.
+  const isMe = user.id === currentUser.id;
+  let giftsQ = supabase.from("user_gifts")
     .select("id", { count: "exact", head: true })
-    .eq("owner_id", user.id).eq("in_profile", true);
+    .eq("owner_id", user.id);
+  if (!isMe) giftsQ = giftsQ.eq("in_profile", true);
+  const { count: totalGifts } = await giftsQ;
   document.getElementById("user-profile-gifts-count").textContent = String(totalGifts || 0);
   document.getElementById("user-profile-gifts-btn").onclick = () => openGiftsOverlay(user.id);
   overlay.classList.remove("hidden");
@@ -1745,8 +1750,11 @@ async function performSearch(query) {
   }
 
   let channels = channelsRes.data || [];
-  // Приватные каналы не показываем в поиске (только по ссылке-приглашению)
-  channels = channels.filter((c) => (c.visibility || "public") !== "private");
+  // Приватные каналы не показываем в поиске (только по ссылке-приглашению),
+  // кроме случая, когда текущий пользователь — владелец канала.
+  channels = channels.filter((c) =>
+    (c.visibility || "public") !== "private" || c.owner_id === currentUser.id
+  );
   if (!resultIds.size && !channels.length) {
     listEl.innerHTML = `<div class="empty">Никого не найдено по «${escapeHtml(query)}»</div>`;
     return;
@@ -3060,7 +3068,30 @@ async function openChatByUsername(username) {
 
 function scrollToBottom() {
   const box = document.getElementById("messages");
+  if (!box) return;
   box.scrollTop = box.scrollHeight;
+  // Пересчёт после того, как подгрузятся картинки/видео/файлы —
+  // без этого чат при перезагрузке остаётся чуть выше низа
+  const adjust = () => {
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 220;
+    if (nearBottom) box.scrollTop = box.scrollHeight;
+  };
+  requestAnimationFrame(adjust);
+  box.querySelectorAll("img:not([data-scrollbound]), video:not([data-scrollbound])").forEach((el) => {
+    el.dataset.scrollbound = "1";
+    if (el.tagName === "IMG") {
+      if (el.complete) adjust();
+      else el.addEventListener("load", adjust, { once: true });
+      el.addEventListener("error", adjust, { once: true });
+    } else {
+      el.addEventListener("loadedmetadata", adjust, { once: true });
+      el.addEventListener("loadeddata", adjust, { once: true });
+    }
+  });
+  // Резервные таймеры — на случай очень медленной сети
+  setTimeout(adjust, 120);
+  setTimeout(adjust, 400);
+  setTimeout(adjust, 900);
 }
 
 function setupScrollBottomButton() {
@@ -3099,12 +3130,25 @@ const EMOJI_MAX_RECENT = 24;
 
 // Windows не умеет показывать цветные эмодзи-флаги — заменяем их на SVG Twemoji
 function isFlagEmoji(emoji) {
-  if (!emoji || emoji.length < 2) return false;
+  if (!emoji) return false;
   const cp = emoji.codePointAt(0);
-  return cp >= 0x1F1E6 && cp <= 0x1F1FF;
+  // Обычные страны — региональные индикаторы
+  if (cp >= 0x1F1E6 && cp <= 0x1F1FF) return true;
+  // 🏴 (чёрный флаг + tag-символы) — Шотландия, Уэльс, Англия
+  if (cp === 0x1F3F4) return true;
+  // 🏳️ — белый флаг (радужный, транс, лесбийский)
+  if (cp === 0x1F3F3) return true;
+  return false;
 }
 
+// Подмена эмодзи на собственные URL (лесбийский флаг вместо транс-флага)
+const FLAG_URL_OVERRIDES = {
+  "\u{1F3F3}\uFE0F\u200D\u26A7\uFE0F":
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Lesbian_pride_flag_2018.svg/64px-Lesbian_pride_flag_2018.svg.png"
+};
+
 function twemojiUrl(emoji) {
+  if (FLAG_URL_OVERRIDES[emoji]) return FLAG_URL_OVERRIDES[emoji];
   const codepoints = [...emoji]
     .map((c) => c.codePointAt(0).toString(16))
     .filter((cp) => cp !== "fe0f")
@@ -5183,6 +5227,18 @@ async function updateMyLastSeen() {
 function setupGiftsUI() {
   const giftsCloseBtn = document.getElementById("gifts-close");
   if (giftsCloseBtn) giftsCloseBtn.addEventListener("click", closeGiftsOverlay);
+
+  // Клик по имени в «Подарок для X» открывает профиль пользователя
+  document.addEventListener("click", async (e) => {
+    const link = e.target.closest(".gift-recipient-link");
+    if (!link) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const uid = link.dataset.uid;
+    if (!uid) return;
+    const p = profileCache.get(uid) || await getProfile(uid);
+    if (p) openUserProfileDialog(p);
+  }, true);
 }
 
 async function refreshMyGiftsCount() {
@@ -5276,12 +5332,18 @@ async function renderGiftsMain(userId) {
       // Кто изначально купил
       const originalOwner = ug.original_owner_id ? profileCache.get(ug.original_owner_id) : null;
       const origLabel = originalOwner ? ` · от ${escapeHtml(originalOwner.display_name)}` : "";
+      const recipientLine = ug.recipient_name
+        ? `<div class="gift-card-recipient">Подарок для ${ug.recipient_id
+            ? `<a href="#" class="gift-recipient-link" data-uid="${ug.recipient_id}">${escapeHtml(ug.recipient_name)}</a>`
+            : escapeHtml(ug.recipient_name)}</div>`
+        : "";
       html += `
         <div class="gift-card" data-gift-ug-id="${ug.id}">
           <div class="gift-card-emoji" style="${bg}">${cat.emoji}</div>
           <div class="gift-card-body">
             <div class="gift-card-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
             <div class="gift-card-sub gift-rarity-${cat.rarity}">${giftRarityLabel(cat.rarity)}${cat.collection ? " · " + escapeHtml(cat.collection) : ""}${origLabel}</div>
+            ${recipientLine}
           </div>
           <div class="gift-card-price">🧩 ${cat.price}</div>
         </div>`;
@@ -5361,6 +5423,8 @@ function openGiftPurchase(gift, recipientId) {
   const infoEl = document.getElementById("gift-purchase-info");
   const costEl = document.getElementById("gift-purchase-cost");
   const captionInput = document.getElementById("gift-purchase-caption");
+  const withNameCb = document.getElementById("gift-purchase-with-name");
+  const withNameLabel = document.getElementById("gift-purchase-with-name-label");
   const confirmBtn = document.getElementById("gift-purchase-confirm");
   const cancelBtn = document.getElementById("gift-purchase-cancel");
 
@@ -5372,40 +5436,57 @@ function openGiftPurchase(gift, recipientId) {
   infoEl.textContent = `${gift.emoji} ${gift.name} — ${giftRarityLabel(gift.rarity)}${gift.collection ? " · " + gift.collection : ""}`;
   costEl.textContent = `Стоимость: 🧩 ${gift.price}`;
   captionInput.value = "";
+  if (withNameCb) withNameCb.checked = false;
+  if (withNameLabel) withNameLabel.textContent = isSelf ? "С моим именем" : "С тем именем";
   overlay.classList.remove("hidden");
 
   confirmBtn.onclick = async () => {
     confirmBtn.disabled = true;
     confirmBtn.textContent = "Покупаю...";
     const caption = captionInput.value.trim() || null;
-    const { error } = await supabase.rpc("buy_gift", {
+    const withName = !!(withNameCb && withNameCb.checked);
+
+    const { data: newGiftId, error } = await supabase.rpc("buy_gift", {
       p_gift_id: gift.id, p_recipient_id: recipientId, p_caption: caption,
     });
-    confirmBtn.disabled = false;
-    confirmBtn.textContent = "Купить";
-    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+
+    if (error) {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = "Купить";
+      await showAlertDialog("Ошибка", error.message);
+      return;
+    }
+
+    // Замораживаем имя получателя на момент покупки
+    if (withName && newGiftId) {
+      const rp = isSelf ? myProfile : (profileCache.get(recipientId) || await getProfile(recipientId));
+      const freezeName = rp ? rp.display_name : "";
+      if (freezeName) {
+        try {
+          await supabase.from("user_gifts")
+            .update({ recipient_id: recipientId, recipient_name: freezeName })
+            .eq("id", newGiftId);
+        } catch (e) { console.warn("freeze recipient:", e); }
+      }
+    }
 
     // Если подарок куплен другому — отправляем системное сообщение в чат
     if (!isSelf) {
       const chatId = chatIdByUser.get(recipientId);
-      if (chatId) {
-        // Найдём последний купленный подарок
-        const { data: lastGift } = await supabase.from("user_gifts")
-          .select("id").eq("owner_id", recipientId).eq("gift_id", gift.id)
-          .order("created_at", { ascending: false }).limit(1).maybeSingle();
-        if (lastGift) {
-          await supabase.from("messages").insert({
-            chat_id: chatId,
-            sender_id: currentUser.id,
-            content: "",
-            message_type: "gift",
-            gift_ref_id: lastGift.id,
-            delivered_at: new Date().toISOString(),
-          });
-        }
+      if (chatId && newGiftId) {
+        await supabase.from("messages").insert({
+          chat_id: chatId,
+          sender_id: currentUser.id,
+          content: "",
+          message_type: "gift",
+          gift_ref_id: newGiftId,
+          delivered_at: new Date().toISOString(),
+        });
       }
     }
 
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = "Купить";
     overlay.classList.add("hidden");
     await refreshBalance();
     if (recipientId === currentUser.id) await refreshMyGiftsCount();
@@ -5456,6 +5537,12 @@ async function renderGiftDetail(ownerId, ug) {
       <div class="gift-detail-emoji" style="${bg}">${cat.emoji}</div>
       <div class="gift-detail-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
       <div class="gift-detail-sub gift-rarity-${cat.rarity}">${giftRarityLabel(cat.rarity)}${cat.collection ? " · " + escapeHtml(cat.collection) : ""}</div>
+      ${ug.recipient_name ? `
+        <div class="gift-recipient-caption">
+          Подарок для ${ug.recipient_id
+            ? `<a href="#" class="gift-recipient-link" data-uid="${ug.recipient_id}">${escapeHtml(ug.recipient_name)}</a>`
+            : escapeHtml(ug.recipient_name)}
+        </div>` : ""}
       <div class="gift-detail-rows">
         ${originalOwnerHtml}
         ${giftedFromHtml}

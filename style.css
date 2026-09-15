@@ -906,7 +906,7 @@ input:focus {
   max-height: 140px;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px 20px;
+  padding: 12px 32px 12px 20px;
   border-radius: 22px;
   background: var(--bg-input);
   border: 1px solid var(--border);
@@ -3212,3 +3212,23 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .avatar { box-shadow: no
 html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color: var(--text); font-weight: 500; }
 
 /* Отступ при режиме «wheel» — применим динамически через JS */
+
+.gift-recipient-caption {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-sub);
+  margin: -8px 0 14px;
+}
+.gift-recipient-caption a,
+.gift-card-recipient a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+.gift-recipient-caption a:hover,
+.gift-card-recipient a:hover { text-decoration: underline; }
+.gift-card-recipient {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 3px;
+}
