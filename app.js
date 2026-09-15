@@ -5259,6 +5259,24 @@ function setupGiftsUI() {
   const giftsCloseBtn = document.getElementById("gifts-close");
   if (giftsCloseBtn) giftsCloseBtn.addEventListener("click", closeGiftsOverlay);
 
+  // Контекстное меню подарка (ПКМ → Закрепить/Открепить)
+  const giftMenu = document.getElementById("gift-context-menu");
+  if (giftMenu) {
+    giftMenu.addEventListener("click", async (e) => {
+      const btn = e.target.closest("button"); if (!btn) return;
+      e.stopPropagation();
+      const ugId = giftMenu.dataset.ugId;
+      giftMenu.classList.add("hidden");
+      if (!ugId || btn.dataset.action !== "pin") return;
+      const { data: ug } = await supabase.from("user_gifts").select("pinned_at").eq("id", ugId).maybeSingle();
+      const newVal = (ug && ug.pinned_at) ? null : new Date().toISOString();
+      const { error } = await supabase.from("user_gifts").update({ pinned_at: newVal }).eq("id", ugId);
+      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      renderGiftsMain(currentUser.id);
+    });
+    document.addEventListener("click", () => giftMenu.classList.add("hidden"));
+  }
+
   // Клик по имени в «Подарок для X»:
   // закрываем окно подарка → открываем профиль → запоминаем контекст для возврата
   document.addEventListener("click", async (e) => {
@@ -5414,16 +5432,22 @@ async function renderGiftsMain(userId) {
 
   let giftsQuery = supabase.from("user_gifts").select("*").eq("owner_id", userId);
   if (!isMe) giftsQuery = giftsQuery.eq("in_profile", true);
-  const { data: gifts } = await giftsQuery.order("created_at", { ascending: false });
+  const { data: giftsRaw } = await giftsQuery.order("created_at", { ascending: false });
+
+  // Закреплённые — наверх (свежезакреплённые выше), затем по дате создания
+  const allGifts = giftsRaw || [];
+  const pinned = allGifts.filter((g) => g.pinned_at)
+    .sort((a, b) => new Date(b.pinned_at) - new Date(a.pinned_at));
+  const unpinned = allGifts.filter((g) => !g.pinned_at);
+  const gifts = [...pinned, ...unpinned];
 
   const catalog = await loadGiftCatalog();
   const catalogMap = new Map(catalog.map((g) => [g.id, g]));
 
   let html = "";
-  // Кнопка покупки — и для себя, и для собеседника
   html += `<button class="gift-card-button" style="width:100%;padding:12px;margin-bottom:12px;" id="open-catalog-btn">🛍️ Купить подарок${!isMe ? " для " + escapeHtml((profileCache.get(userId) || {}).display_name || "") : ""}</button>`;
 
-  if (!gifts || gifts.length === 0) {
+  if (!gifts.length) {
     html += isMe
       ? `<div class="empty">У вас пока нет подарков.</div>`
       : `<div class="empty">У этого пользователя нет подарков.</div>`;
@@ -5434,12 +5458,14 @@ async function renderGiftsMain(userId) {
       if (!cat) return;
       const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
       const isLimited = cat.max_supply !== null && cat.max_supply !== undefined;
-      const ribbon = isLimited
-        ? `<div class="gift-tile-ribbon">${ug.serial_number} из ${cat.max_supply}</div>`
+      const ribbon = isLimited ? `<div class="gift-tile-ribbon">#${ug.serial_number}</div>` : "";
+      const pinMark = (isMe && ug.pinned_at)
+        ? `<div class="gift-tile-pin"><img class="gift-pin-icon" src="https://i.ibb.co/W4YMJWPd/icons8-94.png" alt=""></div>`
         : "";
       html += `
-        <div class="gift-tile" data-gift-ug-id="${ug.id}">
+        <div class="gift-tile" data-gift-ug-id="${ug.id}" data-pinned="${ug.pinned_at ? "1" : "0"}">
           ${ribbon}
+          ${pinMark}
           <div class="gift-tile-emoji" style="${bg}">${cat.emoji}</div>
         </div>`;
     });
@@ -5454,10 +5480,35 @@ async function renderGiftsMain(userId) {
   content.querySelectorAll(".gift-tile").forEach((el) => {
     el.addEventListener("click", () => {
       const ugId = el.dataset.giftUgId;
-      const ug = (gifts || []).find((g) => g.id === ugId);
+      const ug = gifts.find((g) => g.id === ugId);
       if (ug) renderGiftDetail(userId, ug);
     });
+    if (isMe) {
+      el.addEventListener("contextmenu", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const ug = gifts.find((g) => g.id === el.dataset.giftUgId);
+        if (ug) openGiftTileContextMenu(ev, ug.id, !!ug.pinned_at);
+      });
+    }
   });
+}
+
+function openGiftTileContextMenu(ev, ugId, isPinned) {
+  const menu = document.getElementById("gift-context-menu");
+  if (!menu) return;
+  const btn = menu.querySelector('button[data-action="pin"]');
+  if (btn) btn.textContent = isPinned ? "Открепить" : "Закрепить";
+  menu.dataset.ugId = ugId;
+  menu.classList.remove("hidden");
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  const rect = menu.getBoundingClientRect();
+  let x = ev.clientX, y = ev.clientY;
+  if (x + rect.width > window.innerWidth - 8) x = window.innerWidth - rect.width - 8;
+  if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
+  menu.style.left = x + "px";
+  menu.style.top = y + "px";
 }
 
 async function renderCatalog(recipientId) {
