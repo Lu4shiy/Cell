@@ -5376,7 +5376,7 @@ async function buildPatternMaskUrl(iconUrl) {
     const off = (tile - icon) / 2;
     const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${tile}' height='${tile}'><image href='${dataUrl}' x='${off}' y='${off}' width='${icon}' height='${icon}'/></svg>`;
     // encodeURIComponent уберёт одинарные кавычки — они безопасны в style="..."
-    const maskUrl = `url('data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}')`;
+    const maskUrl = `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`;
     PATTERN_MASK_CACHE.set(iconUrl, maskUrl);
     return maskUrl;
   } catch (e) {
@@ -5829,13 +5829,10 @@ async function renderGiftDetail(ownerId, ug) {
       </div>`
     : "";
 
-  // Паттерн — тёмный край градиента с повышенной непрозрачностью (как в Telegram)
-  const bgEdge = (ug.background && ug.background.includes("|"))
-    ? ug.background.split("|")[1]
-    : "#000";
+  // Паттерн — всегда чёрный с прозрачностью, читается на любом фоне
   const maskUrl = patternIcon ? await buildPatternMaskUrl(patternIcon) : null;
   const patternStyle = maskUrl
-    ? `background-color:${bgEdge};-webkit-mask-image:${maskUrl};mask-image:${maskUrl};`
+    ? `background-color:#000;-webkit-mask-image:${maskUrl};mask-image:${maskUrl};`
     : "display:none;";
 
   // Количество
