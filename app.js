@@ -5829,10 +5829,13 @@ async function renderGiftDetail(ownerId, ug) {
       </div>`
     : "";
 
-  // Паттерн всегда чёрный с низкой прозрачностью (как в Telegram — тёмный паттерн поверх фона)
+  // Паттерн — тёмный край градиента с повышенной непрозрачностью (как в Telegram)
+  const bgEdge = (ug.background && ug.background.includes("|"))
+    ? ug.background.split("|")[1]
+    : "#000";
   const maskUrl = patternIcon ? await buildPatternMaskUrl(patternIcon) : null;
   const patternStyle = maskUrl
-    ? `background-color:#000;-webkit-mask-image:${maskUrl};mask-image:${maskUrl};`
+    ? `background-color:${bgEdge};-webkit-mask-image:${maskUrl};mask-image:${maskUrl};`
     : "display:none;";
 
   // Количество
