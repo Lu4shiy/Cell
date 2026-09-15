@@ -5345,7 +5345,7 @@ function giftRarityLabel(r) {
 // ======================================================
 
 // Маленькая иконка внутри большого тайла — как в Telegram.
-const PATTERN_TILE_SIZE = 115;   // шаг сетки (больше = реже)
+const PATTERN_TILE_SIZE = 100;   // шаг сетки (больше = реже)
 const PATTERN_ICON_SIZE = 25;    // размер иконки внутри тайла
 
 const PATTERN_MASK_CACHE = new Map();
