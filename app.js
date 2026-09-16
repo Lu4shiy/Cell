@@ -1319,6 +1319,17 @@ async function encryptOutgoingChannelText(chatId, text) {
   if (!channelEncryptable.get(chatId)) return { content: text, encrypted: false };
   const key = await getChannelKeyForMe(chatId);
   if (!key) return { content: text, encrypted: false };
+
+  // Ключ есть — убедимся, что он раздан ВСЕМ подписчикам ДО отправки.
+  // Это избавляет от гонки: подписчик может получить realtime-сообщение
+  // раньше, чем у него появится своя копия ключа в channel_keys.
+  // Ошибки здесь не критичны — если раздача упадёт, отправим как есть.
+  try {
+    await shareChannelKeysWithMembers(chatId);
+  } catch (e) {
+    console.warn("shareChannelKeysWithMembers (pre-send):", e);
+  }
+
   try {
     const cipher = await Crypto.encryptMessage(key, text);
     return { content: cipher, encrypted: true };
@@ -1519,13 +1530,15 @@ async function decryptChatPreview(msg, otherId, chatId, _attempt) {
       return;
     }
 
-    // 3) Retry: если не удалось расшифровать и попытки ещё есть — повторим.
-    // Это нужно, когда ключ канала ещё не раздан (realtime пришёл раньше
-    // раздачи ключей подписчикам). Обычно достаточно 1–2 повторов.
-    if (attempt < 2) {
+    // 3) Retry: если не удалось расшифровать — попробуем ещё несколько раз
+    // с нарастающей задержкой. Это нужно, когда ключ канала ещё не раздан
+    // (realtime пришёл раньше, чем владелец разложил ключи в channel_keys).
+    // Хватает обычно 1–2 повторов, но до 4 попыток включительно.
+    const RETRY_DELAYS = [800, 1600, 3200, 5000];
+    if (attempt < RETRY_DELAYS.length) {
       setTimeout(
         () => decryptChatPreview(msg, otherId, chatId, attempt + 1),
-        1500
+        RETRY_DELAYS[attempt]
       );
     }
   } catch (e) {
@@ -3052,6 +3065,24 @@ function resortChatsList() {
   refreshWheelLayout();
 }
 
+// Прокручивает список к самому верху и подсвечивает чат, в который
+// только что пришло/ушло сообщение. Нужно, чтобы после отправки
+// современный список «пружинил» наверх и активный чат был виден.
+function bringChatToTop(chatId) {
+  if (!chatId) return;
+  const listEl = document.getElementById("users-list");
+  if (!listEl) return;
+  // Чат уже встал наверх после resortChatsList — просто скроллим.
+  listEl.scrollTo({ top: 0, behavior: "smooth" });
+  wheelSelectedChatId = chatId;
+  if (scrollMode === "wheel") {
+    // Снимем подсветку с других и поставим на наш.
+    listEl.querySelectorAll(".user-item").forEach((el) => {
+      el.classList.toggle("wheel-active", el.dataset.chatId === chatId);
+    });
+  }
+}
+
 async function addOrUpdateChatInList(chatId, otherUserId) {
   if (document.getElementById("search-input").value.trim()) return;
   // Защита: не добавляем канал как DM
@@ -4153,9 +4184,10 @@ function setupWheel() {
   const listEl = document.getElementById("users-list");
   if (!wrap) return;
 
-  // Навигация по чатам с клавиатуры (Alt+↑/↓)
+  // Навигация по чатам с клавиатуры (Alt+↑/↓).
+  // Работает в любом режиме и даже когда чат ещё не открыт —
+  // список чатов доступен всегда, если он непустой.
   document.addEventListener("keydown", (e) => {
-    if (!document.getElementById("chat-placeholder")?.classList.contains("hidden")) return;
     if (e.target.matches("input, textarea, [contenteditable]")) return;
     if (e.key === "ArrowUp" && e.altKey) { e.preventDefault(); wheelMove(-1); }
     else if (e.key === "ArrowDown" && e.altKey) { e.preventDefault(); wheelMove(1); }
@@ -4199,7 +4231,12 @@ function wheelMove(dir) {
   const cur = getTopVisibleIndex(items, listEl);
   const next = Math.max(0, Math.min(items.length - 1, cur + dir));
   const target = items[next];
-  if (target) listEl.scrollTo({ top: target.offsetTop, behavior: "smooth" });
+  if (!target) return;
+  listEl.scrollTo({ top: target.offsetTop, behavior: "smooth" });
+  // Открываем выбранный чат — как будто пользователь по нему кликнул.
+  // openSeq внутри openChatWith/openChannel отменит предыдущий открытый чат,
+  // если пользователь быстро пробежал несколько шагов подряд.
+  target.click();
 }
 
 function setWheelSelected(chatId) {
@@ -5464,6 +5501,7 @@ async function uploadAndSendAttachment(file, chatId, caption, asFile) {
   });
   updateChatItemPreview(chatId);
   resortChatsList();
+  bringChatToTop(chatId);
 }
 
 document.getElementById("composer").addEventListener("submit", async (e) => {
@@ -5577,6 +5615,7 @@ async function sendMessage(chatId, content) {
   });
   updateChatItemPreview(chatId);
   resortChatsList();
+  bringChatToTop(chatId);
 
   // Если это канал — сразу помечаем свой просмотр (баг №1)
   if (currentChannelObj && currentChannelObj.id === chatId) {
