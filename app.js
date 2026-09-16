@@ -856,6 +856,7 @@ function lockE2ee() {
   cryptoUnlocked = false;
   sharedKeyCache.clear();
   revokeDecryptedFiles();
+  resetChannelKeyState();
 }
 
 async function openE2eeSetup() {
@@ -1132,6 +1133,20 @@ const decryptedCache = new Map();
 // Blob URL надо освобождать через URL.revokeObjectURL, чтобы не текла память.
 const decryptedFileCache = new Map();
 
+// Фаза 4: E2EE каналов.
+// Ключ канала (AES-256 CryptoKey) для текущей сессии. Ключ — chatId.
+const channelKeyCache = new Map();
+// Флаг: можно ли шифровать сообщения в канале (все подписчики с E2EE).
+const channelEncryptable = new Map();
+// Защита от параллельных sync одного и того же канала.
+const syncingChannelIds = new Set();
+
+function resetChannelKeyState() {
+  channelKeyCache.clear();
+  channelEncryptable.clear();
+  syncingChannelIds.clear();
+}
+
 function revokeDecryptedFiles() {
   decryptedFileCache.forEach((entry) => {
     try { URL.revokeObjectURL(entry.url); } catch (e) { /* silent */ }
@@ -1142,12 +1157,14 @@ function revokeDecryptedFiles() {
 // Шифрует исходящий текст. Возвращает {content, encrypted}.
 // Если E2EE недоступен (мы не разблокированы / у собеседника нет ключа) — отдаёт как есть.
 async function encryptOutgoingText(chatId, text) {
-  // Не шифруем: пусто, служебные типы, каналы
+  // Не шифруем: пусто
   if (!text) return { content: text, encrypted: false };
   if (!cryptoUnlocked || !myIdentityPrivateJwk) return { content: text, encrypted: false };
 
-  // Каналы пока НЕ шифруем (отдельная фаза)
-  if (channelCache.has(chatId)) return { content: text, encrypted: false };
+  // Каналы — отдельный путь (Фаза 4)
+  if (channelCache.has(chatId)) {
+    return await encryptOutgoingChannelText(chatId, text);
+  }
 
   // Нужен собеседник. В DM — currentOtherUser.
   if (!currentOtherUser || !currentOtherUser.id) return { content: text, encrypted: false };
@@ -1174,6 +1191,156 @@ async function encryptOutgoingText(chatId, text) {
   }
 }
 
+// ======================================================
+// ФАЗА 4 — E2EE каналов
+// ======================================================
+
+// Получает ключ канала, расшифрованный моим приватным ключом.
+// Кэширует только успешный результат — если ключа нет, при следующем
+// вызове снова попробует (чтобы подхватить ключ после раздачи владельцем).
+async function getChannelKeyForMe(chatId) {
+  if (channelKeyCache.has(chatId)) return channelKeyCache.get(chatId);
+  if (!cryptoUnlocked || !myIdentityPrivateJwk) return null;
+  try {
+    const { data, error } = await supabase.rpc("get_my_channel_key", { p_channel_id: chatId });
+    if (error || !data || !data.length) return null;
+    const { encrypted_key, wrapped_by } = data[0];
+    if (!encrypted_key || !wrapped_by) return null;
+    // Расшифровываем ключ канала через ECDH с тем, кто его для нас упаковал
+    const sharedKey = await getSharedKeyFor(wrapped_by);
+    if (!sharedKey) return null;
+    const keyB64 = await Crypto.decryptMessage(sharedKey, encrypted_key);
+    // keyB64 — base64 от 32 байт AES-ключа. Импортируем как AES-GCM.
+    const key = await Crypto.importFileKey(keyB64);
+    channelKeyCache.set(chatId, key);
+    return key;
+  } catch (e) {
+    console.warn("getChannelKeyForMe:", e);
+    return null;
+  }
+}
+
+// Раздаёт текущий ключ канала всем подписчикам (bulk-запросом).
+async function shareChannelKeysWithMembers(chatId) {
+  const myKey = channelKeyCache.get(chatId);
+  if (!myKey) return;
+
+  const { data: subs, error } = await supabase.rpc("get_channel_subscribers", { p_channel_id: chatId });
+  if (error || !subs || !subs.length) return;
+
+  const others = subs.filter((s) => s.user_id !== currentUser.id);
+  if (!others.length) return;
+
+  // Забираем публичные ключи всех подписчиков одним запросом
+  const ids = others.map((s) => s.user_id);
+  const { data: profs } = await supabase.from("profiles")
+    .select("id, public_key").in("id", ids);
+  const pubMap = new Map((profs || []).map((p) => [p.id, p.public_key]));
+
+  // Владелец/админ должен ещё иметь возможность писать, а остальные — читать.
+  // Если у кого-то из подписчиков нет public_key — канал целиком НЕ шифруем.
+  let allHaveE2ee = true;
+  const items = [];
+  const keyB64 = await Crypto.exportFileKey(myKey);
+
+  for (const s of others) {
+    const pub = pubMap.get(s.user_id);
+    if (!pub) { allHaveE2ee = false; break; }
+    try {
+      const theirPubJwk = JSON.parse(pub);
+      const shared = await Crypto.deriveSharedKey(myIdentityPrivateJwk, theirPubJwk);
+      const encKey = await Crypto.encryptMessage(shared, keyB64);
+      items.push({ user_id: s.user_id, encrypted_key: encKey });
+    } catch (e) {
+      allHaveE2ee = false;
+      break;
+    }
+  }
+
+  channelEncryptable.set(chatId, allHaveE2ee);
+
+  if (!items.length) return;
+  const { error: e2 } = await supabase.rpc("share_channel_keys_bulk", {
+    p_channel_id: chatId,
+    p_items: items,
+  });
+  if (e2) console.warn("share_channel_keys_bulk:", e2);
+}
+
+// Синхронизация ключа канала при открытии.
+// Владелец: если ключа нет — генерирует и кладёт себе, потом раздаёт всем.
+// Админ: если ключ есть — раздаёт; если нет — ничего (не может создать).
+async function syncChannelKeys(chatId) {
+  if (!cryptoUnlocked || !myIdentityPrivateJwk) return;
+  if (syncingChannelIds.has(chatId)) return;
+  const ch = channelCache.get(chatId);
+  if (!ch) return;
+  const isOwner = ch.owner_id === currentUser.id;
+  const isAdmin = currentChannelIsAdmin;
+  if (!isOwner && !isAdmin) return;
+
+  syncingChannelIds.add(chatId);
+  try {
+    let myKey = await getChannelKeyForMe(chatId);
+
+    // Если ключа нет и я владелец — генерируем новый
+    if (!myKey && isOwner) {
+      const rawKey = crypto.getRandomValues(new Uint8Array(32));
+      const keyB64 = Crypto.abToB64(rawKey);
+      const keyCrypto = await Crypto.importFileKey(keyB64);
+      // Шифруем ключ самому себе (ECDH с собственным публичным ключом)
+      const sharedSelf = await getSharedKeyFor(currentUser.id);
+      if (!sharedSelf) return;
+      const encSelf = await Crypto.encryptMessage(sharedSelf, keyB64);
+      const { error } = await supabase.rpc("put_my_channel_key", {
+        p_channel_id: chatId,
+        p_encrypted_key: encSelf,
+      });
+      if (error) { console.warn("put_my_channel_key:", error); return; }
+      channelKeyCache.set(chatId, keyCrypto);
+      myKey = keyCrypto;
+    }
+
+    if (!myKey) return;
+    await shareChannelKeysWithMembers(chatId);
+  } finally {
+    syncingChannelIds.delete(chatId);
+  }
+}
+
+// Шифрует исходящий текст для канала.
+async function encryptOutgoingChannelText(chatId, text) {
+  if (!cryptoUnlocked) return { content: text, encrypted: false };
+  if (!channelEncryptable.get(chatId)) return { content: text, encrypted: false };
+  const key = await getChannelKeyForMe(chatId);
+  if (!key) return { content: text, encrypted: false };
+  try {
+    const cipher = await Crypto.encryptMessage(key, text);
+    return { content: cipher, encrypted: true };
+  } catch (e) {
+    console.warn("encryptOutgoingChannelText:", e);
+    return { content: text, encrypted: false };
+  }
+}
+
+// Расшифровывает сообщение канала.
+async function getChannelPlaintext(msg) {
+  if (!msg || !msg.encrypted) return msg.content || "";
+  if (decryptedCache.has(msg.id)) return decryptedCache.get(msg.id);
+  if (!cryptoUnlocked || !myIdentityPrivateJwk) {
+    return "🔒 Зашифровано — разблокируйте в настройках";
+  }
+  const key = await getChannelKeyForMe(msg.chat_id);
+  if (!key) return "🔒 Нет ключа канала";
+  try {
+    const plain = await Crypto.decryptMessage(key, msg.content);
+    decryptedCache.set(msg.id, plain);
+    return plain;
+  } catch (e) {
+    return "🔒 Не удалось расшифровать";
+  }
+}
+
 // Расшифровывает сообщение. Возвращает plaintext (или исходный content, если не расшифровать).
 async function getPlaintext(msg, otherIdOverride) {
   if (!msg) return "";
@@ -1189,6 +1356,12 @@ async function getPlaintext(msg, otherIdOverride) {
   if (!cryptoUnlocked || !myIdentityPrivateJwk) {
     return "🔒 Зашифровано — разблокируйте в настройках";
   }
+
+  // Если это канал — свой путь расшифровки
+  if (channelCache.has(msg.chat_id)) {
+    return await getChannelPlaintext(msg);
+  }
+
   // В DM собеседник — sender. Если это моё сообщение — собеседник всё равно противоположная сторона.
   // otherIdOverride передаётся, когда сообщение рендерится вне открытого чата (например, в превью списка).
   const otherId = otherIdOverride || (msg.sender_id === currentUser.id
@@ -1472,6 +1645,7 @@ function showAuth() {
   clearE2eeStoredKeys();
   decryptedCache.clear();
   revokeDecryptedFiles();
+  resetChannelKeyState();
   currentUser = null; myProfile = null;
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
   myBlockedIds = new Set(); blockedMeIds = new Set();
@@ -2762,6 +2936,11 @@ async function openChannel(chatId) {
 
   currentChatId = chatId;
   restoreDraftFor(chatId);
+
+  // Фаза 4: если я владелец/админ и E2EE разблокирована —
+  // синхронизируем ключ канала (создание, раздача подписчикам).
+  syncChannelKeys(chatId).catch((e) => console.warn("syncChannelKeys:", e));
+
   await loadMessages(chatId, mySeq);
   if (mySeq !== openSeq) return;
   await loadReactionsForVisibleMessages();
@@ -5716,6 +5895,7 @@ function closeCurrentChat() {
   if (currentChatId) saveDraftFor(currentChatId);
   decryptedCache.clear();
   revokeDecryptedFiles();
+  resetChannelKeyState();
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
   currentChannelObj = null; currentChannelIsAdmin = false;
   currentChannelIsSubscribed = false;
