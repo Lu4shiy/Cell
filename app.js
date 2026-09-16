@@ -2451,18 +2451,34 @@ function subscribeToGlobalMessages() {
       else if (m.encrypted) previewText = "🔒 Зашифровано";
       else previewText = (m.content || "");
 
+      // Если это своё только что отправленное сообщение — сохраняем
+      // плейнтекст, который мы уже положили при отправке, и не перетираем
+      // его «🔒 Зашифровано» от realtime.
+      let finalPreviewText = previewText;
+      if (isMine && m.encrypted && prev && prev.msgId === m.id &&
+          prev.text && prev.text !== "🔒 Зашифровано") {
+        finalPreviewText = prev.text;
+      }
+
       chatLastMsg.set(m.chat_id, {
-        text: previewText,
+        text: finalPreviewText,
         time, senderId: m.sender_id,
         msgId: m.id,
         unread: isMine ? (prev.unread || 0) : (prev.unread || 0) + 1,
       });
-      // Если сообщение зашифровано — попробуем расшифровать превью асинхронно
-      if (m.encrypted && m.message_type !== "attachment") {
-        const otherId = isMine
-          ? (chatOtherUserCache.get(m.chat_id) || (currentOtherUser && currentOtherUser.id))
-          : m.sender_id;
-        if (otherId) decryptChatPreview(m, otherId, m.chat_id);
+
+      // Расшифровываем превью, если оно зашифровано и не расшифровано локально.
+      if (m.encrypted && m.message_type !== "attachment" && finalPreviewText === "🔒 Зашифровано") {
+        if (channelCache.has(m.chat_id)) {
+          // Для канала otherId не нужен — decryptChatPreview сам возьмёт
+          // канальный ключ через getChannelKeyForMe (и для чужих, и для своих).
+          decryptChatPreview(m, null, m.chat_id);
+        } else {
+          const otherId = isMine
+            ? (chatOtherUserCache.get(m.chat_id) || (currentOtherUser && currentOtherUser.id))
+            : m.sender_id;
+          if (otherId) decryptChatPreview(m, otherId, m.chat_id);
+        }
       }
       if (!document.getElementById("search-input").value.trim()) {
         updateChatItemPreview(m.chat_id);
