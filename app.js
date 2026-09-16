@@ -2494,6 +2494,7 @@ async function appendMessageBefore(msg, firstExisting) {
     el.addEventListener("click", onMsgClick);
     box.insertBefore(el, firstExisting);
     msgCache.set(msg.id, msg);
+    fillGiftPatternsIn(el);
     return;
   }
 
@@ -2576,10 +2577,12 @@ async function renderSystemMessage(msg) {
       else verb = "отправил(а) вам";
     }
     const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
+    const patternIcon = cat.rarity === "epic" ? getPatternIcon(ug.pattern_id) : null;
     return `
       <span class="msg-system-text">${senderName} ${verb} подарок за <b>${cat.price}</b> ${NECTAR_HTML}</span>
-      <div class="gift-card-inline">
-        <div class="gci-emoji" style="${bg}">${cat.emoji}</div>
+      <div class="gift-card-inline" style="${bg}">
+        ${patternIcon ? `<div class="gift-card-inline-pattern" data-icon="${patternIcon}"></div>` : ""}
+        <div class="gci-emoji">${cat.emoji}</div>
         <div class="gci-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
         <div class="gci-sub gift-rarity-${cat.rarity}">${giftRarityLabel(cat.rarity)}${cat.collection ? " · " + escapeHtml(cat.collection) : ""}</div>
       </div>`;
@@ -2646,6 +2649,7 @@ async function appendMessage(msg) {
     el.addEventListener("click", onMsgClick);
     box.appendChild(el);
     msgCache.set(msg.id, msg);
+    fillGiftPatternsIn(el);
     refreshMessageGroups();
     return;
   }
@@ -3287,6 +3291,7 @@ async function updateMessageInUI(msg) {
   msgCache.set(msg.id, msg);
   if (msg.message_type === "tokens" || msg.message_type === "gift") {
     el.innerHTML = await renderSystemMessage(msg);
+    fillGiftPatternsIn(el);
   } else {
     el.innerHTML = await buildMsgHtml(msg);
     renderReactionsUI(msg.id);
@@ -5610,16 +5615,53 @@ async function buildPatternMaskUrl(iconUrl) {
   if (!iconUrl) return null;
   if (PATTERN_MASK_CACHE.has(iconUrl)) return PATTERN_MASK_CACHE.get(iconUrl);
 
-  const tile = PATTERN_SVG_TILE;
-  const icon = PATTERN_SVG_ICON;
-  const off = (tile - icon) / 2;
+  try {
+    // ВАЖНО: SVG внутри data:URI не имеет права грузить внешние картинки —
+    // браузер молча рисует «битую иконку». Поэтому сначала качаем картинку
+    // через wsrv.nl (обход CORS у i.ibb.co), кодируем в base64 и вставляем в SVG.
+    const bare = iconUrl.replace(/^https?:\/\//, "");
+    const proxied = `https://wsrv.nl/?url=${encodeURIComponent(bare)}&output=png`;
+    const res = await fetch(proxied);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const blob = await res.blob();
 
-  // Оборачиваем иконку в SVG: сама иконка маленькая по центру, вокруг — прозрачный зазор.
-  // encodeURIComponent экранирует кавычки, поэтому внутри url('...') безопасно.
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${tile}" height="${tile}"><image href="${iconUrl}" x="${off}" y="${off}" width="${icon}" height="${icon}"/></svg>`;
-  const bgUrl = `url('data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}')`;
-  PATTERN_MASK_CACHE.set(iconUrl, bgUrl);
-  return bgUrl;
+    const dataUrl = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(new Error("FileReader"));
+      r.readAsDataURL(blob);
+    });
+
+    const tile = PATTERN_SVG_TILE;
+    const icon = PATTERN_SVG_ICON;
+    const off = (tile - icon) / 2;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${tile}" height="${tile}"><image href="${dataUrl}" x="${off}" y="${off}" width="${icon}" height="${icon}"/></svg>`;
+    const bgUrl = `url('data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}')`;
+    PATTERN_MASK_CACHE.set(iconUrl, bgUrl);
+    return bgUrl;
+  } catch (e) {
+    console.warn("pattern build failed:", e);
+    PATTERN_MASK_CACHE.set(iconUrl, null);
+    return null;
+  }
+}
+
+// Заполняет все плейсхолдеры паттернов внутри rootEl:
+// — плитки в списке подарков и в hero (.gift-tile-pattern / .gift-hero-pattern);
+// — карточки подарков в чате (.gift-card-inline-pattern).
+function fillGiftPatternsIn(rootEl) {
+  if (!rootEl) return;
+  rootEl.querySelectorAll(".gift-tile-pattern[data-icon], .gift-hero-pattern[data-icon], .gift-card-inline-pattern[data-icon]")
+    .forEach((el) => {
+      const iconUrl = el.dataset.icon;
+      if (!iconUrl) return;
+      buildPatternMaskUrl(iconUrl).then((bgUrl) => {
+        if (!bgUrl) return;
+        el.style.display = "block";
+        el.style.backgroundImage = bgUrl;
+        el.style.backgroundRepeat = "repeat";
+      });
+    });
 }
 
 // Предзагрузка всех иконок паттернов в кэш браузера.
@@ -5629,11 +5671,10 @@ let patternIconsPreloaded = false;
 function preloadPatternIcons() {
   if (patternIconsPreloaded) return;
   patternIconsPreloaded = true;
+  // Строим SVG-маски заранее — так после покупки паттерн рисуется мгновенно.
   GIFT_PATTERNS.forEach((p) => {
     if (!p.icon) return;
-    const img = new Image();
-    img.decoding = "async";
-    img.src = p.icon;
+    buildPatternMaskUrl(p.icon).catch(() => {});
   });
 }
 

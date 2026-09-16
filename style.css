@@ -736,6 +736,7 @@ input:focus {
 .msg-system.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .msg-system .gift-card-inline {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -743,10 +744,35 @@ input:focus {
   padding: 14px 20px;
   margin-top: 8px;
   border-radius: 14px;
-  background: var(--bg-side);
   border: 1px solid var(--border);
   min-width: 200px;
+  overflow: hidden;
+  /* фон и градиент задаются инлайн-стилем (bg подарка) — они теперь
+     растягиваются на весь прямоугольник карточки */
 }
+
+/* Паттерн внутри карточки подарка в чате — те же пропорции,
+   что в списке подарков и в hero */
+.msg-system .gift-card-inline .gift-card-inline-pattern {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.45;
+  background-size: 30px 30px;
+  background-repeat: repeat;
+  background-position: 0 0;
+  z-index: 0;
+  display: none;
+}
+
+/* Эмодзи, имя и подзаголовок — поверх паттерна */
+.msg-system .gift-card-inline .gci-emoji,
+.msg-system .gift-card-inline .gci-name,
+.msg-system .gift-card-inline .gci-sub {
+  position: relative;
+  z-index: 1;
+}
+
 .msg-system .gift-card-inline .gci-emoji {
   width: 84px; height: 84px;
   border-radius: 14px;
@@ -755,11 +781,13 @@ input:focus {
   justify-content: center;
   font-size: 46px;
 }
+
 .msg-system .gift-card-inline .gci-name {
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
 }
+
 .msg-system .gift-card-inline .gci-sub { font-size: 12px; }
 
 /* Токены */
@@ -3296,7 +3324,7 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   inset: 0;
   pointer-events: none;
   opacity: 0.45;
-  background-size: 20px 20px;
+  background-size: 30px 30px;
   background-repeat: repeat;
   background-position: 0 0;
   z-index: 0;
@@ -3396,7 +3424,7 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   inset: 0;
   pointer-events: none;
   opacity: 0.42;
-  background-size: 40px 40px;
+  background-size: 60px 60px;
   background-repeat: repeat;
   background-position: 0 0;
   z-index: 1;
