@@ -691,6 +691,12 @@
       </div>
 
       <div class="profile-section">
+        <div class="profile-label">Шифрование</div>
+        <div id="e2ee-status-row" style="font-size:13px;color:var(--text-sub);margin-bottom:10px;"></div>
+        <button type="button" class="dialog-btn" id="e2ee-manage-btn" style="width:100%;">Управлять шифрованием</button>
+      </div>
+
+      <div class="profile-section">
         <div class="profile-label">Режим списка чатов</div>
         <div class="visibility-toggle" id="settings-scroll-mode">
           <button type="button" data-mode="classic">Обычный</button>
@@ -789,6 +795,42 @@
       <div id="mfa-setup-body"></div>
       <div class="dialog-actions">
         <button class="dialog-btn dialog-cancel" id="mfa-setup-close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ E2EE: мастер включения ═══════ -->
+  <div id="e2ee-setup-overlay" class="dialog-overlay hidden" style="z-index:9000;">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title" id="e2ee-setup-title">Шифрование сообщений</div>
+      <div id="e2ee-setup-body"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="e2ee-setup-close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ E2EE: показ recovery-кода ═══════ -->
+  <div id="e2ee-recovery-overlay" class="dialog-overlay hidden" style="z-index:9100;">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title">⚠️ Код восстановления</div>
+      <div class="dialog-text">
+        Сохрани эти 12 слов в надёжном месте (менеджер паролей или бумага).
+        Если забудешь пароль — <b>только с их помощью</b> сможешь восстановить
+        доступ к зашифрованным сообщениям. Мы не сможем тебе помочь.
+      </div>
+      <div id="e2ee-recovery-words"
+           style="background:var(--bg-input);border:1px solid var(--border);
+                  border-radius:12px;padding:16px;font-size:15px;line-height:1.8;
+                  text-align:center;font-family:ui-monospace,Menlo,monospace;
+                  user-select:all;margin-bottom:12px;"></div>
+      <label class="toggle-row">
+        <input type="checkbox" id="e2ee-recovery-confirm">
+        <span>Я сохранил код и понимаю, что без него не восстановлю доступ</span>
+      </label>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="e2ee-recovery-continue" disabled>Продолжить</button>
+        <button class="dialog-btn dialog-cancel" id="e2ee-recovery-back">Отмена</button>
       </div>
     </div>
   </div>

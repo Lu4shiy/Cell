@@ -5,6 +5,7 @@
 const SUPABASE_URL = "https://uiktqkxfsoewjpgjpizf.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpa3Rxa3hmc29ld2pwZ2pwaXpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyODY5MjksImV4cCI6MjEwNDg2MjkyOX0.2OC3vrfusHK6Lqv1Yh5KfZ42Ypm02sE1XAloTSUxo2k";
 
+import * as Crypto from "./crypto.js";
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
@@ -565,6 +566,13 @@ function resetInactivityTimer() {
   }, INACTIVITY_MS);
 }
 
+// E2EE state
+let myE2eeSecret = null;
+let myIdentityPrivateJwk = null;
+let myIdentityPublicJwk = null;
+let sharedKeyCache = new Map();
+let cryptoUnlocked = false;
+
 // ======================= 2. СОСТОЯНИЕ =======================
 let currentUser = null, myProfile = null;
 let currentChatId = null, currentOtherUser = null, pendingOtherUser = null;
@@ -638,6 +646,306 @@ let channelRequestsChannel = null;
 let profileFromGiftContext = null;     // { userId, ugId } — куда возвращаться
 let currentGiftDetailUserId = null;    // ownerId подарка, открытого в деталях
 let currentGiftDetailUgId = null;      // ug.id подарка, открытого в деталях
+
+// ═══════════════════════════════════════════════════════
+// E2EE
+// ═══════════════════════════════════════════════════════
+
+async function refreshE2eeStatus() {
+  const row = document.getElementById("e2ee-status-row");
+  if (!row) return;
+  if (!currentUser) return;
+
+  try {
+    const { data: prof } = await supabase.from("profiles")
+      .select("e2ee_enabled, public_key")
+      .eq("id", currentUser.id).single();
+    const { data: sec } = await supabase.from("user_e2ee_secrets")
+      .select("*").eq("user_id", currentUser.id).maybeSingle();
+
+    myE2eeSecret = sec || null;
+    if (myProfile && prof) {
+      myProfile.e2ee_enabled = prof.e2ee_enabled;
+      myProfile.public_key = prof.public_key;
+    }
+
+    if (!prof || !prof.e2ee_enabled) {
+      row.innerHTML = `🔓 <b>Выключено</b>. Сообщения хранятся в открытом виде.`;
+    } else if (!sec) {
+      row.innerHTML = `⚠️ <b>Что-то не так</b>: флаг стоит, но ключи не найдены.`;
+    } else if (cryptoUnlocked) {
+      row.innerHTML = `🔒 <b>Включено и разблокировано</b>.`;
+    } else {
+      row.innerHTML = `🔒 <b>Включено</b>, но ключ заблокирован. Разблокируй паролем.`;
+    }
+  } catch (e) {
+    row.textContent = "Не удалось проверить статус";
+  }
+}
+
+async function unlockE2eeWithPassword(password) {
+  if (!myE2eeSecret) {
+    const { data } = await supabase.from("user_e2ee_secrets")
+      .select("*").eq("user_id", currentUser.id).maybeSingle();
+    myE2eeSecret = data || null;
+  }
+  if (!myE2eeSecret) throw new Error("Нет сохранённых ключей");
+
+  const { kek } = await Crypto.deriveKEK(password, myE2eeSecret.private_key_salt);
+  const privJwk = await Crypto.unwrapPrivateKey(
+    kek,
+    myE2eeSecret.private_key_iv,
+    myE2eeSecret.encrypted_private_key
+  );
+
+  myIdentityPrivateJwk = privJwk;
+
+  // Публичный ключ из профиля
+  const { data: prof } = await supabase.from("profiles")
+    .select("public_key").eq("id", currentUser.id).single();
+  if (prof && prof.public_key) {
+    try { myIdentityPublicJwk = JSON.parse(prof.public_key); } catch (e) {}
+  }
+
+  cryptoUnlocked = true;
+  sharedKeyCache.clear();
+  await refreshE2eeStatus();
+}
+
+function lockE2ee() {
+  myIdentityPrivateJwk = null;
+  cryptoUnlocked = false;
+  sharedKeyCache.clear();
+}
+
+async function openE2eeSetup() {
+  const overlay = document.getElementById("e2ee-setup-overlay");
+  const body = document.getElementById("e2ee-setup-body");
+  const title = document.getElementById("e2ee-setup-title");
+  overlay.classList.remove("hidden");
+  body.innerHTML = '<div class="empty">Загрузка...</div>';
+
+  await refreshE2eeStatus();
+
+  const enabled = myProfile && myProfile.e2ee_enabled;
+
+  if (enabled && cryptoUnlocked) {
+    title.textContent = "Шифрование включено";
+    body.innerHTML = `
+      <div class="dialog-text">
+        🔒 Все новые личные сообщения шифруются на твоём устройстве.
+        Сервер видит только шифротекст.
+      </div>
+      <button class="dialog-btn dialog-primary" id="e2ee-show-safety" style="width:100%;">
+        🔑 Показать safety number
+      </button>
+      <button class="dialog-btn" id="e2ee-disable" style="width:100%;margin-top:8px;
+              background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger);">
+        Отключить шифрование
+      </button>`;
+    document.getElementById("e2ee-show-safety").addEventListener("click", () => {
+      if (currentOtherUser) openSafetyNumberDialog(currentOtherUser);
+      else showAlertDialog("Нет чата", "Открой чат с собеседником и нажми ещё раз.");
+    });
+    document.getElementById("e2ee-disable").addEventListener("click", disableE2ee);
+    return;
+  }
+
+  if (enabled && !cryptoUnlocked) {
+    title.textContent = "Разблокировать шифрование";
+    body.innerHTML = `
+      <div class="dialog-text">
+        Приватный ключ хранится в зашифрованном виде. Чтобы читать
+        зашифрованные сообщения, введи свой пароль.
+      </div>
+      <input type="password" id="e2ee-unlock-pw" placeholder="Пароль"
+             style="width:100%;padding:14px;background:var(--bg-input);
+                    border:1px solid var(--border);border-radius:12px;
+                    color:var(--text);font-size:15px;outline:none;margin-bottom:12px;">
+      <p class="error" id="e2ee-unlock-err" style="margin-bottom:10px;"></p>
+      <button class="dialog-btn dialog-primary" id="e2ee-unlock-btn" style="width:100%;">
+        Разблокировать
+      </button>`;
+    document.getElementById("e2ee-unlock-btn").addEventListener("click", async () => {
+      const pw = document.getElementById("e2ee-unlock-pw").value;
+      const err = document.getElementById("e2ee-unlock-err");
+      err.textContent = "";
+      try {
+        await unlockE2eeWithPassword(pw);
+        closeE2eeSetup();
+        await showAlertDialog("Готово", "Ключ разблокирован.");
+      } catch (e) {
+        err.textContent = "Неверный пароль или повреждённый ключ";
+      }
+    });
+    return;
+  }
+
+  title.textContent = "Включить шифрование";
+  body.innerHTML = `
+    <div class="dialog-text">
+      Cell сгенерирует пару ключей на твоём устройстве. Приватный ключ
+      будет зашифрован твоим паролем и сохранён на сервере в зашифрованном виде.
+      <br><br>
+      <b>Важно:</b> мы не сможем восстановить его, если ты забудешь пароль.
+      Дополнительно будут сгенерированы <b>12 слов восстановления</b> — их надо сохранить.
+    </div>
+    <input type="password" id="e2ee-init-pw" placeholder="Пароль"
+           style="width:100%;padding:14px;background:var(--bg-input);
+                  border:1px solid var(--border);border-radius:12px;
+                  color:var(--text);font-size:15px;outline:none;margin-bottom:12px;">
+    <p class="error" id="e2ee-init-err" style="margin-bottom:10px;"></p>
+    <button class="dialog-btn dialog-primary" id="e2ee-init-btn" style="width:100%;">
+      Сгенерировать ключи
+    </button>`;
+
+  document.getElementById("e2ee-init-btn").addEventListener("click", async () => {
+    const pw = document.getElementById("e2ee-init-pw").value;
+    const err = document.getElementById("e2ee-init-err");
+    err.textContent = "";
+    if (!pw || pw.length < 8) { err.textContent = "Пароль слишком короткий (мин. 8)"; return; }
+
+    const btn = document.getElementById("e2ee-init-btn");
+    btn.disabled = true;
+    btn.textContent = "Генерирую...";
+
+    try {
+      const { pubJwk, privJwk } = await Crypto.generateIdentityKeyPair();
+      const { kek, saltB64 } = await Crypto.deriveKEK(pw);
+      const wrapped = await Crypto.wrapPrivateKey(privJwk, kek);
+
+      const recoveryWords = Crypto.generateRecoveryCode();
+      const recoveryKek = await Crypto.deriveRecoveryKEK(recoveryWords);
+      const recoveryWrapped = await Crypto.wrapPrivateKey(privJwk, recoveryKek);
+
+      const { error: secErr } = await supabase.from("user_e2ee_secrets").insert({
+        user_id: currentUser.id,
+        encrypted_private_key: wrapped.ct,
+        private_key_salt: saltB64,
+        private_key_iv: wrapped.iv,
+        recovery_blob: recoveryWrapped.ct,
+        recovery_salt: "recovery-v1",
+        recovery_iv: recoveryWrapped.iv,
+      });
+      if (secErr) throw secErr;
+
+      const { error: profErr } = await supabase.from("profiles").update({
+        public_key: JSON.stringify(pubJwk),
+        public_key_updated_at: new Date().toISOString(),
+        e2ee_enabled: true,
+        e2ee_enabled_at: new Date().toISOString(),
+      }).eq("id", currentUser.id);
+      if (profErr) throw profErr;
+
+      myIdentityPrivateJwk = privJwk;
+      myIdentityPublicJwk = pubJwk;
+      cryptoUnlocked = true;
+      myProfile.e2ee_enabled = true;
+      myProfile.public_key = JSON.stringify(pubJwk);
+
+      showRecoveryWords(recoveryWords);
+    } catch (e) {
+      console.error(e);
+      btn.disabled = false;
+      btn.textContent = "Сгенерировать ключи";
+      err.textContent = e.message || "Ошибка";
+    }
+  });
+}
+
+function showRecoveryWords(words) {
+  document.getElementById("e2ee-setup-overlay").classList.add("hidden");
+  const overlay = document.getElementById("e2ee-recovery-overlay");
+  const wordsEl = document.getElementById("e2ee-recovery-words");
+  const confirmCb = document.getElementById("e2ee-recovery-confirm");
+  const continueBtn = document.getElementById("e2ee-recovery-continue");
+  const backBtn = document.getElementById("e2ee-recovery-back");
+
+  wordsEl.textContent = words.join(" ");
+  confirmCb.checked = false;
+  continueBtn.disabled = true;
+
+  confirmCb.onchange = () => { continueBtn.disabled = !confirmCb.checked; };
+  backBtn.onclick = async () => {
+    overlay.classList.add("hidden");
+    await disableE2ee();
+  };
+  continueBtn.onclick = async () => {
+    overlay.classList.add("hidden");
+    await refreshE2eeStatus();
+    await showAlertDialog("Готово", "Шифрование включено.");
+  };
+
+  overlay.classList.remove("hidden");
+}
+
+async function disableE2ee() {
+  const ok = await showConfirmDialog(
+    "Отключить шифрование",
+    "Все НОВЫЕ сообщения будут храниться в открытом виде. Уже зашифрованные останутся зашифрованными. Продолжить?",
+    "Отключить"
+  );
+  if (!ok) return;
+
+  await supabase.from("profiles").update({ e2ee_enabled: false }).eq("id", currentUser.id);
+  if (myProfile) myProfile.e2ee_enabled = false;
+  cryptoUnlocked = false;
+  myIdentityPrivateJwk = null;
+  sharedKeyCache.clear();
+  await refreshE2eeStatus();
+  closeE2eeSetup();
+}
+
+function closeE2eeSetup() {
+  document.getElementById("e2ee-setup-overlay").classList.add("hidden");
+}
+
+async function getSharedKeyFor(userId) {
+  if (sharedKeyCache.has(userId)) return sharedKeyCache.get(userId);
+  if (!cryptoUnlocked || !myIdentityPrivateJwk) return null;
+
+  const { data: other } = await supabase.from("profiles")
+    .select("public_key").eq("id", userId).single();
+  if (!other || !other.public_key) return null;
+
+  try {
+    const theirPubJwk = JSON.parse(other.public_key);
+    const key = await Crypto.deriveSharedKey(myIdentityPrivateJwk, theirPubJwk);
+    sharedKeyCache.set(userId, key);
+    return key;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function openSafetyNumberDialog(otherUser) {
+  if (!cryptoUnlocked) {
+    await showAlertDialog("Заблокировано", "Разблокируй шифрование в настройках.");
+    return;
+  }
+  const { data: other } = await supabase.from("profiles")
+    .select("public_key, display_name, username").eq("id", otherUser.id).single();
+  if (!other || !other.public_key) {
+    await showAlertDialog("Нет ключа", "У собеседника не включено шифрование.");
+    return;
+  }
+  let theirPub;
+  try { theirPub = JSON.parse(other.public_key); } catch (e) { return; }
+
+  const num = await Crypto.computeSafetyNumber(myIdentityPublicJwk, theirPub);
+  const groups = num.match(/.{1,5}/g).join(" ");
+  await showAlertDialog(
+    "Safety number",
+    `Сверь этот код с @${other.username} лично или вслух. Если совпадает — вас не подслушивают.\n\n${groups}`
+  );
+}
+
+function setupE2eeUI() {
+  const manageBtn = document.getElementById("e2ee-manage-btn");
+  if (manageBtn) manageBtn.addEventListener("click", openE2eeSetup);
+  const closeBtn = document.getElementById("e2ee-setup-close");
+  if (closeBtn) closeBtn.addEventListener("click", closeE2eeSetup);
+}
 
 // ======================= 3. АКЦЕНТ / АВАТАРЫ =======================
 function applyAccent(accent) { document.documentElement.setAttribute("data-accent", accent || "orange"); }
@@ -751,6 +1059,7 @@ function showAuth() {
   clearTimeout(inactivityTimer);
   inactivityTimer = null;
   pendingMfaUser = null;
+  lockE2ee();
   currentUser = null; myProfile = null;
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
   myBlockedIds = new Set(); blockedMeIds = new Set();
@@ -776,6 +1085,7 @@ function showAuth() {
 async function initApp() {
   setupSidebarMenu();
   setupMfaUI();
+  setupE2eeUI();
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
   setupAttachments(); setupMediaViewer(); setupEmojiPicker(); setupAboutDialog();
   setupWheel(); setupCommandPalette(); setupMiniProfile(); setupDateFloat();
@@ -8393,9 +8703,11 @@ function setupSettings() {
     });
   }
 
-  btn.addEventListener("click", () => {
+  btn.addEventListener("click", async () => {
     updateSettingsUI();
     updateAccentButtons();
+    await refreshMfaStatus();
+    await refreshE2eeStatus();
     overlay.classList.remove("hidden");
   });
   if (closeBtn) closeBtn.addEventListener("click", () => overlay.classList.add("hidden"));
