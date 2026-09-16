@@ -573,6 +573,54 @@ let myIdentityPublicJwk = null;
 let sharedKeyCache = new Map();
 let cryptoUnlocked = false;
 
+// Ключи хранилища для запоминания разблокировки между перезагрузками.
+// sessionStorage — F5 и переходы между чатами не сбрасывают, закрытие вкладки — сбрасывает.
+// localStorage — «Доверять устройству»: не спрашивать пароль, пока не выйдешь из аккаунта.
+const E2EE_SESSION_KEY = "cell_e2ee_session";
+const E2EE_TRUST_KEY = "cell_e2ee_trusted";
+
+function clearE2eeStoredKeys() {
+  try { sessionStorage.removeItem(E2EE_SESSION_KEY); } catch (e) {}
+  try { localStorage.removeItem(E2EE_TRUST_KEY); } catch (e) {}
+}
+
+function saveE2eeUnlock(privJwk, pubJwk, userId, trustDevice) {
+  const payload = JSON.stringify({ privJwk, pubJwk: pubJwk || null, userId });
+  try {
+    if (trustDevice) {
+      localStorage.setItem(E2EE_TRUST_KEY, payload);
+      sessionStorage.removeItem(E2EE_SESSION_KEY);
+    } else {
+      sessionStorage.setItem(E2EE_SESSION_KEY, payload);
+    }
+  } catch (e) { /* silent */ }
+}
+
+// Пробуем автоматически разблокировать E2EE из сохранённого состояния.
+// Возвращает true, если удалось.
+function tryRestoreE2eeSession() {
+  if (!currentUser) return false;
+  // Приоритет: доверенное устройство (localStorage), иначе сессия (sessionStorage)
+  const stores = [
+    { store: localStorage, key: E2EE_TRUST_KEY },
+    { store: sessionStorage, key: E2EE_SESSION_KEY },
+  ];
+  for (const { store, key } of stores) {
+    try {
+      const raw = store.getItem(key);
+      if (!raw) continue;
+      const data = JSON.parse(raw);
+      if (!data || data.userId !== currentUser.id || !data.privJwk) continue;
+      myIdentityPrivateJwk = data.privJwk;
+      if (data.pubJwk) myIdentityPublicJwk = data.pubJwk;
+      cryptoUnlocked = true;
+      sharedKeyCache.clear();
+      return true;
+    } catch (e) { /* silent */ }
+  }
+  return false;
+}
+
 // ======================= 2. СОСТОЯНИЕ =======================
 let currentUser = null, myProfile = null;
 let currentChatId = null, currentOtherUser = null, pendingOtherUser = null;
@@ -694,7 +742,7 @@ async function refreshE2eeStatus() {
     }
 
     if (!prof || !prof.e2ee_enabled) {
-      row.innerHTML = `🔓 <b>Выключено</b>. Сообщения хранятся в открытом виде.`;
+      row.innerHTML = `🔓 E2EE выключена. Сообщения хранятся на сервере в открытом виде.`;
     } else if (!sec) {
       row.innerHTML = `⚠️ <b>Что-то не так</b>: флаг стоит, но ключи не найдены.`;
     } else if (cryptoUnlocked) {
@@ -710,13 +758,24 @@ async function refreshE2eeStatus() {
 async function updateE2eeComposerHint() {
   const hint = document.getElementById("e2ee-composer-hint");
   const txt = document.getElementById("e2ee-composer-hint-text");
+  const banner = document.getElementById("e2ee-unlock-banner");
   if (!hint || !txt) return;
 
-  if (!currentOtherUser || !cryptoUnlocked || !myProfile || !myProfile.e2ee_enabled) {
+  // Не DM (канал, пусто) — прячем всё
+  if (!currentOtherUser) {
     hint.classList.add("hidden");
+    if (banner) banner.classList.add("hidden");
     return;
   }
-  // Проверяем наличие публичного ключа собеседника в кэше, иначе — тянем из БД
+
+  // У собеседника нет E2EE / мы её не включали — прячем всё
+  if (!myProfile || !myProfile.e2ee_enabled) {
+    hint.classList.add("hidden");
+    if (banner) banner.classList.add("hidden");
+    return;
+  }
+
+  // Тянем публичный ключ собеседника (в кэш, если ещё нет)
   let other = profileCache.get(currentOtherUser.id);
   let otherPubKey = other && other.public_key;
   if (!otherPubKey) {
@@ -731,13 +790,22 @@ async function updateE2eeComposerHint() {
   }
   if (!otherPubKey) {
     hint.classList.add("hidden");
+    if (banner) banner.classList.add("hidden");
     return;
   }
-  hint.classList.remove("hidden");
-  txt.textContent = "Зашифровано end-to-end";
+
+  // У собеседника ключ есть. Показываем либо «всё ок», либо баннер разблокировки
+  if (cryptoUnlocked) {
+    hint.classList.remove("hidden");
+    txt.textContent = "Зашифровано end-to-end";
+    if (banner) banner.classList.add("hidden");
+  } else {
+    hint.classList.add("hidden");
+    if (banner) banner.classList.remove("hidden");
+  }
 }
 
-async function unlockE2eeWithPassword(password) {
+async function unlockE2eeWithPassword(password, opts = {}) {
   if (!myE2eeSecret) {
     const { data } = await supabase.from("user_e2ee_secrets")
       .select("*").eq("user_id", currentUser.id).maybeSingle();
@@ -763,8 +831,23 @@ async function unlockE2eeWithPassword(password) {
 
   cryptoUnlocked = true;
   sharedKeyCache.clear();
+
+  // Сохраняем разблокированный ключ — чтобы не вводить пароль снова
+  saveE2eeUnlock(myIdentityPrivateJwk, myIdentityPublicJwk, currentUser.id, !!opts.trustDevice);
+
   await refreshE2eeStatus();
   updateE2eeComposerHint();
+  // Перерисовываем текущий чат, если он открыт, — чтобы уже видимые
+  // зашифрованные сообщения и превью расшифровались без перезагрузки.
+  if (currentChatId) {
+    decryptedCache.clear();
+    try {
+      await loadMessages(currentChatId, openSeq);
+      await loadReactionsForVisibleMessages();
+    } catch (e) { /* silent */ }
+  }
+  // Обновляем превью в списке чатов
+  try { await loadRecentChats(); } catch (e) { /* silent */ }
 }
 
 function lockE2ee() {
@@ -794,6 +877,9 @@ async function openE2eeSetup() {
       <button class="dialog-btn dialog-primary" id="e2ee-show-safety" style="width:100%;">
         🔑 Показать safety number
       </button>
+      <button class="dialog-btn" id="e2ee-lock-now" style="width:100%;margin-top:8px;">
+        🔒 Заблокировать сейчас
+      </button>
       <button class="dialog-btn" id="e2ee-disable" style="width:100%;margin-top:8px;
               background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger);">
         Отключить шифрование
@@ -801,6 +887,27 @@ async function openE2eeSetup() {
     document.getElementById("e2ee-show-safety").addEventListener("click", () => {
       if (currentOtherUser) openSafetyNumberDialog(currentOtherUser);
       else showAlertDialog("Нет чата", "Открой чат с собеседником и нажми ещё раз.");
+    });
+    document.getElementById("e2ee-lock-now").addEventListener("click", async () => {
+      const ok = await showConfirmDialog(
+        "Заблокировать сейчас",
+        "Приватный ключ будет забыт. Для чтения зашифрованных сообщений потребуется снова ввести пароль.",
+        "Заблокировать"
+      );
+      if (!ok) return;
+      lockE2ee();
+      clearE2eeStoredKeys();
+      decryptedCache.clear();
+      closeE2eeSetup();
+      await refreshE2eeStatus();
+      if (currentChatId) {
+        try {
+          await loadMessages(currentChatId, openSeq);
+          await loadReactionsForVisibleMessages();
+        } catch (e) { /* silent */ }
+      }
+      try { await loadRecentChats(); } catch (e) { /* silent */ }
+      updateE2eeComposerHint();
     });
     document.getElementById("e2ee-disable").addEventListener("click", disableE2ee);
     return;
@@ -816,17 +923,22 @@ async function openE2eeSetup() {
       <input type="password" id="e2ee-unlock-pw" placeholder="Пароль"
              style="width:100%;padding:14px;background:var(--bg-input);
                     border:1px solid var(--border);border-radius:12px;
-                    color:var(--text);font-size:15px;outline:none;margin-bottom:12px;">
+                    color:var(--text);font-size:15px;outline:none;margin-bottom:10px;">
+      <label class="toggle-row" style="padding:6px 0 12px;">
+        <input type="checkbox" id="e2ee-unlock-trust">
+        <span>Доверять этому устройству — не спрашивать пароль при следующем входе</span>
+      </label>
       <p class="error" id="e2ee-unlock-err" style="margin-bottom:10px;"></p>
       <button class="dialog-btn dialog-primary" id="e2ee-unlock-btn" style="width:100%;">
         Разблокировать
       </button>`;
     document.getElementById("e2ee-unlock-btn").addEventListener("click", async () => {
       const pw = document.getElementById("e2ee-unlock-pw").value;
+      const trustCb = document.getElementById("e2ee-unlock-trust");
       const err = document.getElementById("e2ee-unlock-err");
       err.textContent = "";
       try {
-        await unlockE2eeWithPassword(pw);
+        await unlockE2eeWithPassword(pw, { trustDevice: !!(trustCb && trustCb.checked) });
         closeE2eeSetup();
         await showAlertDialog("Готово", "Ключ разблокирован.");
       } catch (e) {
@@ -1000,6 +1112,10 @@ function setupE2eeUI() {
   if (manageBtn) manageBtn.addEventListener("click", openE2eeSetup);
   const closeBtn = document.getElementById("e2ee-setup-close");
   if (closeBtn) closeBtn.addEventListener("click", closeE2eeSetup);
+
+  // Кнопка «Разблокировать» в баннере над сообщениями
+  const unlockBtn = document.getElementById("e2ee-unlock-banner-btn");
+  if (unlockBtn) unlockBtn.addEventListener("click", openE2eeSetup);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1246,6 +1362,7 @@ function showAuth() {
   inactivityTimer = null;
   pendingMfaUser = null;
   lockE2ee();
+  clearE2eeStoredKeys();
   decryptedCache.clear();
   currentUser = null; myProfile = null;
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
@@ -1292,6 +1409,9 @@ async function initApp() {
   subscribeToBlocks(); subscribeToGlobalChanges(); subscribeToProfiles();
   subscribeToMemberships(); subscribeToReads(); subscribeToGlobalMessages();
   await Promise.all([loadMyProfile(), loadBlocks(), loadChatReads()]);
+  // Пробуем автоматически разблокировать E2EE, если ключ был сохранён
+  // в этой сессии или на доверенном устройстве.
+  tryRestoreE2eeSession();
   await loadRecentChats();
 
   // Отметить все входящие как доставленные
@@ -2088,7 +2208,7 @@ async function loadRecentChats() {
   const channelIds = new Set(channelCache.keys());
 
   const [msgsRes, othersRes, readsRes, hidesRes] = await Promise.all([
-    supabase.from("messages").select("id, chat_id, sender_id, content, created_at, message_type, tokens_amount, delivered_at, read_at")
+    supabase.from("messages").select("id, chat_id, sender_id, content, created_at, message_type, tokens_amount, delivered_at, read_at, encrypted, file_iv, file_key_enc")
       .in("chat_id", chatIds).order("created_at", { ascending: false }).limit(1000),
     supabase.from("chat_members").select("chat_id, user_id").in("chat_id", chatIds).neq("user_id", currentUser.id),
     supabase.from("chat_reads").select("chat_id, last_read_at").eq("user_id", currentUser.id),

@@ -3772,3 +3772,30 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   text-align: right;
   margin: -6px 2px 10px 0;
 }
+
+.e2ee-unlock-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.18), rgba(var(--accent-rgb), 0.08));
+  border-bottom: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+.e2ee-unlock-banner span { flex: 1; }
+.e2ee-unlock-banner button {
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.e2ee-unlock-banner button:hover { background: rgba(var(--accent-rgb), 0.15); }
