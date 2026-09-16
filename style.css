@@ -348,6 +348,9 @@ input:focus {
   border-radius: 12px;
   padding: 4px 6px;
   transition: background 0.12s;
+  /* Занимаем всё доступное место, но не больше — иначе кнопки справа уезжают за край */
+  flex: 1;
+  min-width: 0;
 }
 .me-info:hover { background: var(--bg-hover); }
 
@@ -370,8 +373,29 @@ input:focus {
 
 .avatar-large { width: 96px; height: 96px; font-size: 36px; }
 
-.me-name { font-size: 15px; font-weight: 600; color: var(--text); }
-.me-username { font-size: 12px; color: var(--text-dim); }
+.me-text {
+  /* Это обёртка имени+@username. Без min-width: 0 во flex-контейнере она не даёт себя сжимать. */
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.me-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  /* Длинное имя обрезается многоточием, а не выдавливает кнопки */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+.me-username {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .icon-btn {
   background: transparent;
