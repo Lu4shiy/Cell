@@ -3628,6 +3628,17 @@ function hideMiniProfile() {
 }
 
 function onMsgClick(e) {
+  // Клик по фото вложения → открыть media-viewer
+  const img = e.target.closest(".msg-attachment-image");
+  if (img) {
+    e.stopPropagation();
+    const url = img.dataset.mediaUrl || img.src;
+    const msgId = img.closest("[data-id]")?.dataset.id || null;
+    const media = collectChatMedia();
+    const idx = media.findIndex((x) => x.msgId === msgId);
+    openMediaViewer(url, "image", media, idx >= 0 ? idx : 0);
+    return;
+  }
   const giftEl = e.target.closest(".msg-system.gift-msg");
   if (giftEl) {
     const msgId = giftEl.dataset.id;
