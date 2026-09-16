@@ -1172,6 +1172,15 @@ input:focus {
   border-radius: 2px;
 }
 
+/* Все эмодзи в пикере теперь рисуются как <img> из Twemoji */
+.emoji-img-inline {
+  width: 24px;
+  height: 24px;
+  display: block;
+  pointer-events: none;
+  object-fit: contain;
+}
+
 .emoji-flag {
   width: 1.3em;
   height: auto;
@@ -1569,6 +1578,42 @@ input:focus {
   border-radius: 10px;
   font-size: 13px;
   font-weight: 700;
+}
+
+/* Поле описания в своём профиле */
+.profile-bio-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+  min-height: 70px;
+  max-height: 160px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.profile-bio-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.10);
+}
+
+/* Описание в чужом профиле — под именем и статусом */
+.profile-hero-bio {
+  margin-top: 10px;
+  padding: 8px 14px;
+  max-width: 90%;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-sub);
+  text-align: center;
+  background: var(--bg-input);
+  border-radius: 12px;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 /* Профиль собеседника */

@@ -360,6 +360,13 @@ let currentGiftDetailUgId = null;      // ug.id подарка, открытог
 // ======================= 3. АКЦЕНТ / АВАТАРЫ =======================
 function applyAccent(accent) { document.documentElement.setAttribute("data-accent", accent || "orange"); }
 function hashCode(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
+// Первый НЕпробельный символ строки в верхнем регистре. Если строка пустая — "?".
+function firstChar(str) {
+  if (!str) return "?";
+  const t = String(str).replace(/\s+/g, "");
+  if (!t) return "?";
+  return t[0].toUpperCase();
+}
 function paintAvatar(el, user) {
   if (!el) return;
   const av = user && user.avatar_url;
@@ -368,13 +375,13 @@ function paintAvatar(el, user) {
     const idx = parseInt(av.split(":")[1], 10) || 0;
     const [c1, c2] = BASE_AVATARS[idx % BASE_AVATARS.length];
     el.style.background = `linear-gradient(135deg, ${c1}, ${c2})`;
-    el.textContent = ((user.display_name || "?")[0] || "?").toUpperCase(); return;
+    el.textContent = firstChar(user.display_name); return;
   }
   const seed = user && user.id ? user.id : (user && user.username) || "anon";
   const idx = hashCode(seed) % BASE_AVATARS.length;
   const [c1, c2] = BASE_AVATARS[idx];
   el.style.background = `linear-gradient(135deg, ${c1}, ${c2})`;
-  el.textContent = ((user && user.display_name || "?")[0] || "?").toUpperCase();
+  el.textContent = firstChar(user && user.display_name);
 }
 
 function resetAppState() {
@@ -609,7 +616,7 @@ async function pollMyMessageStatuses() {
 
 async function loadMyProfile() {
   const { data, error } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, accent_color, gender, last_seen, birthday, created_at, imagi_tokens, verified")
+    .select("id, username, display_name, avatar_url, accent_color, gender, last_seen, birthday, created_at, imagi_tokens, verified, bio")
     .eq("id", currentUser.id).single();
   if (error) { console.error(error); return; }
   myProfile = data; profileCache.set(currentUser.id, data);
@@ -636,7 +643,7 @@ function renderChatSubtitle() {
 async function getProfile(id) {
   if (profileCache.has(id)) return profileCache.get(id);
   const { data } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, accent_color, last_seen, gender, created_at, birthday, verified")
+    .select("id, username, display_name, avatar_url, accent_color, last_seen, gender, created_at, birthday, verified, bio")
     .eq("id", id).single();
   if (data) profileCache.set(id, data);
   return data;
@@ -793,7 +800,10 @@ function setupProfilePanel() {
     markProfileDirty();
   });
   document.getElementById("profile-displayname").addEventListener("input", (e) => {
-    draftProfile.display_name = e.target.value.trim(); markProfileDirty();
+    draftProfile.display_name = e.target.value.trim();
+    markProfileDirty();
+    // Обновляем букву на превьюшках, чтобы она соответствовала первой букве имени
+    renderAvatarGrid();
   });
   document.getElementById("gender-toggle").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-gender]"); if (!btn) return;
@@ -802,6 +812,9 @@ function setupProfilePanel() {
   });
   document.getElementById("profile-birthday").addEventListener("input", (e) => {
     draftProfile.birthday = e.target.value.trim() || null; markProfileDirty();
+  });
+  document.getElementById("profile-bio").addEventListener("input", (e) => {
+    draftProfile.bio = e.target.value; markProfileDirty();
   });
 
   setupBirthdayCalendar();
@@ -835,6 +848,7 @@ async function applyProfileChanges() {
   if (draftProfile.display_name) payload.display_name = draftProfile.display_name;
   if (draftProfile.gender !== undefined) payload.gender = draftProfile.gender;
   if (draftProfile.birthday !== undefined) payload.birthday = draftProfile.birthday;
+  if (draftProfile.bio !== undefined) payload.bio = (draftProfile.bio || "").trim() || null;
   if (Object.keys(payload).length) {
     const { error } = await supabase.from("profiles").update(payload).eq("id", currentUser.id);
     if (error) { await showAlertDialog("Ошибка", error.message); return; }
@@ -855,6 +869,7 @@ async function openProfilePanel() {
   renderAvatarGrid();
   document.getElementById("profile-displayname").value = myProfile.display_name || "";
   document.getElementById("profile-birthday").value = myProfile.birthday || "";
+  document.getElementById("profile-bio").value = myProfile.bio || "";
   updateGenderButtons();
   const ui = document.getElementById("profile-username");
   ui.value = myProfile.username; validatedUsername = myProfile.username;
@@ -865,22 +880,31 @@ async function openProfilePanel() {
 
 function renderAvatarGrid() {
   const grid = document.getElementById("avatar-grid"); grid.innerHTML = "";
+  // Букву берём из того, что сейчас в инпуте имени (или из myProfile, если инпут пустой)
+  const liveName = (draftProfile.display_name !== undefined && draftProfile.display_name !== "")
+    ? draftProfile.display_name
+    : (myProfile.display_name || "");
+  const letter = firstChar(liveName);
+
   BASE_AVATARS.forEach((pair, idx) => {
     const el = document.createElement("div");
     el.className = "avatar-option"; el.dataset.idx = idx;
     el.style.background = `linear-gradient(135deg, ${pair[0]}, ${pair[1]})`;
-    el.textContent = ((myProfile.display_name || "?")[0] || "?").toUpperCase();
+    el.textContent = letter;
     if (myProfile.avatar_url === "color:" + idx) el.classList.add("selected");
     el.addEventListener("click", async () => {
       const url = "color:" + idx;
       myProfile.avatar_url = url;
-      paintAvatar(document.getElementById("profile-avatar-preview"), myProfile);
-      paintAvatar(document.getElementById("me-avatar"), myProfile);
+      paintAvatar(document.getElementById("profile-avatar-preview"), { display_name: liveName, avatar_url: url });
+      paintAvatar(document.getElementById("me-avatar"), { display_name: liveName, avatar_url: url });
       renderAvatarGrid();
       await saveProfileField({ avatar_url: url });
     });
     grid.appendChild(el);
   });
+
+  // Обновляем большую превьюшку
+  paintAvatar(document.getElementById("profile-avatar-preview"), { display_name: liveName, avatar_url: myProfile.avatar_url });
 }
 
 function updateAccentButtons() {
@@ -986,7 +1010,7 @@ async function openUserProfileDialog(userOverride) {
   const backBtn = document.getElementById("user-profile-back");
   if (backBtn) backBtn.classList.toggle("hidden", !profileFromGiftContext);
   const { data: freshProfile } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, created_at, last_seen, gender, birthday, verified")
+    .select("id, username, display_name, avatar_url, created_at, last_seen, gender, birthday, verified, bio")
     .eq("id", user.id).single();
   const p = freshProfile || user;
   profileCache.set(user.id, { ...profileCache.get(user.id), ...p });
@@ -996,6 +1020,18 @@ async function openUserProfileDialog(userOverride) {
   statusEl.textContent = formatLastSeen(p);
   statusEl.classList.toggle("online", isUserOnline(p));
   document.getElementById("user-profile-username").textContent = "@" + (p.username || "");
+
+  // Описание: показываем только если непустое
+  const bioEl = document.getElementById("user-profile-bio");
+  const bioText = (p.bio || "").trim();
+  if (bioText) {
+    bioEl.textContent = bioText;
+    bioEl.classList.remove("hidden");
+  } else {
+    bioEl.textContent = "";
+    bioEl.classList.add("hidden");
+  }
+
   const bdStr = formatBirthday(p.birthday);
   const todayMD = (new Date().getMonth() + 1) * 100 + new Date().getDate();
   const bdMD = parseBirthdayMD(p.birthday);
@@ -1438,7 +1474,7 @@ function renderChannelItemHtml(it) {
       <div class="avatar"></div>
       <div class="user-item-body">
         <div class="user-item-row1">
-          <div class="user-item-name">${escapeHtml(ch.name)}<span class="channel-mark">📢</span></div>
+          <div class="user-item-name">${escapeHtml(ch.name)}${verifiedBadge(ch)}<span class="channel-mark">📢</span></div>
           <div class="user-item-time">${time}</div>
         </div>
         <div class="user-item-row2">
@@ -1485,7 +1521,7 @@ async function refreshChannelRights(channelId) {
     const el = document.querySelector(`.user-item[data-chat-id="${channelId}"][data-chat-type="channel"]`);
     if (el) {
       const nameEl = el.querySelector(".user-item-name");
-      if (nameEl) nameEl.innerHTML = escapeHtml(ch.name) + '<span class="channel-mark">📢</span>';
+      if (nameEl) nameEl.innerHTML = escapeHtml(ch.name) + verifiedBadge(ch) + '<span class="channel-mark">📢</span>';
       paintAvatar(el.querySelector(".avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
     }
   }
@@ -1496,7 +1532,7 @@ async function refreshChannelRights(channelId) {
   if (ch) {
     Object.assign(currentChannelObj, ch);
     paintAvatar(document.getElementById("chat-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
-    document.getElementById("chat-title").textContent = ch.name;
+    document.getElementById("chat-title").innerHTML = escapeHtml(ch.name) + verifiedBadge(ch);
   }
 
   // Пересчёт прав
@@ -1520,7 +1556,7 @@ async function refreshChannelRights(channelId) {
   // Обновляем открытый профиль канала
   if (channelProfileChannelId === channelId && ch) {
     paintAvatar(document.getElementById("channel-profile-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
-    document.getElementById("channel-profile-name").textContent = ch.name;
+    document.getElementById("channel-profile-name").innerHTML = escapeHtml(ch.name) + verifiedBadge(ch);
     document.getElementById("channel-profile-username").textContent = "@" + (ch.username || "");
     const menuBtn = document.getElementById("channel-profile-menu-btn");
     menuBtn.classList.toggle("hidden", ch.owner_id !== currentUser.id);
@@ -1619,7 +1655,7 @@ async function openChannel(chatId) {
   document.getElementById("channel-action-bar").classList.add("hidden");
 
   paintAvatar(document.getElementById("chat-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
-  document.getElementById("chat-title").textContent = ch.name;
+  document.getElementById("chat-title").innerHTML = escapeHtml(ch.name) + verifiedBadge(ch);
   document.getElementById("chat-placeholder").classList.add("hidden");
   document.getElementById("chat-content").classList.remove("hidden");
   document.getElementById("chat-menu").classList.add("hidden");
@@ -1936,7 +1972,7 @@ function renderSearchChannelHtml(ch) {
     <div class="user-item" data-chat-type="channel-search" data-channel-id="${ch.id}">
       <div class="avatar"></div>
       <div class="user-item-body">
-        <div class="user-item-row1"><div class="user-item-name">${escapeHtml(ch.name)}<span class="channel-mark">📢</span></div></div>
+        <div class="user-item-row1"><div class="user-item-name">${escapeHtml(ch.name)}${verifiedBadge(ch)}<span class="channel-mark">📢</span></div></div>
         <div class="user-item-row2"><div class="user-item-preview">@${escapeHtml(ch.username)}</div></div>
       </div>
     </div>`;
@@ -3382,10 +3418,20 @@ function isFlagEmoji(emoji) {
   return false;
 }
 
-// Подмена эмодзи на собственные URL (лесбийский флаг вместо транс-флага)
+// Подмены URL для эмодзи, которых нет (или нестабильно отдаются) на Twemoji-CDN.
+// Лесбийский флаг, а также tag-sequence флаги (Англия/Шотландия/Уэльс).
 const FLAG_URL_OVERRIDES = {
   "\u{1F3F3}\uFE0F\u200D\u26A7\uFE0F":
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Lesbian_pride_flag_2018.svg/64px-Lesbian_pride_flag_2018.svg.png"
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Lesbian_pride_flag_2018.svg/64px-Lesbian_pride_flag_2018.svg.png",
+  // Англия 🏴󠁧󠁢󠁥󠁮󠁧󠁿
+  "\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}":
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/Flag_of_England.svg/64px-Flag_of_England.svg.png",
+  // Шотландия 🏴󠁧󠁢󠁳󠁣󠁴󠁿
+  "\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}":
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Flag_of_Scotland.svg/64px-Flag_of_Scotland.svg.png",
+  // Уэльс 🏴󠁧󠁢󠁷󠁬󠁳󠁿
+  "\u{1F3F4}\u{E0067}\u{E0062}\u{E0077}\u{E006C}\u{E0073}\u{E007F}":
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Flag_of_Wales.svg/64px-Flag_of_Wales.svg.png"
 };
 
 function twemojiUrl(emoji) {
@@ -3548,9 +3594,9 @@ function renderEmojiGrid() {
     return;
   }
   grid.innerHTML = list.map((em) => {
-    const inner = isFlagEmoji(em)
-      ? `<img class="emoji-flag-inline" src="${twemojiUrl(em)}" alt="${escapeHtml(em)}" draggable="false">`
-      : em;
+    // Все эмодзи рисуем через Twemoji — так они одинаково выглядят на всех системах
+    // (Windows/Linux не имеют глифов для многих новых эмодзи — рисовались «пустые квадраты»).
+    const inner = `<img class="emoji-img-inline" src="${twemojiUrl(em)}" alt="${escapeHtml(em)}" draggable="false">`;
     return `<button type="button" class="emoji-item" data-emoji="${escapeHtml(em)}">${inner}</button>`;
   }).join("");
   grid.querySelectorAll(".emoji-item").forEach((b) => {
@@ -6435,7 +6481,10 @@ function setupChannelCreate() {
     const value = e.target.value;
     channelUsernameCheckTimeout = setTimeout(() => checkChannelUsernameLive(value), 350);
   });
-  document.getElementById("channel-name-input").addEventListener("input", updateChannelCreateButton);
+  document.getElementById("channel-name-input").addEventListener("input", () => {
+    updateChannelCreateButton();
+    renderChannelAvatarGrid();
+  });
 
   // Кнопка подписки — надёжный вариант через явный select → delete/insert
   const subBtn = document.getElementById("channel-subscribe-btn");
@@ -6520,7 +6569,6 @@ function openChannelCreateDialog() {
   const hint = document.getElementById("channel-username-hint");
   hint.className = "username-hint"; hint.textContent = "";
   renderChannelAvatarGrid();
-  paintAvatar(document.getElementById("channel-avatar-preview"), { display_name: "К", avatar_url: channelCreateAvatarUrl });
   updateChannelCreateButton();
   document.getElementById("channel-create-overlay").classList.remove("hidden");
   setTimeout(() => document.getElementById("channel-name-input").focus(), 60);
@@ -6532,19 +6580,27 @@ function closeChannelCreateDialog() {
 
 function renderChannelAvatarGrid() {
   const grid = document.getElementById("channel-avatar-grid"); grid.innerHTML = "";
+  const nameInput = document.getElementById("channel-name-input");
+  const rawName = nameInput ? nameInput.value : "";
+  // Если название пустое — оставляем "К" (как было), иначе первую непробельную букву
+  const letter = (rawName && rawName.replace(/\s+/g, "")) ? firstChar(rawName) : "К";
+
   BASE_AVATARS.forEach((pair, idx) => {
     const el = document.createElement("div");
     el.className = "avatar-option"; el.dataset.idx = idx;
     el.style.background = `linear-gradient(135deg, ${pair[0]}, ${pair[1]})`;
-    el.textContent = "К";
+    el.textContent = letter;
     if (channelCreateAvatarUrl === "color:" + idx) el.classList.add("selected");
     el.addEventListener("click", () => {
       channelCreateAvatarUrl = "color:" + idx;
-      paintAvatar(document.getElementById("channel-avatar-preview"), { display_name: "К", avatar_url: channelCreateAvatarUrl });
+      paintAvatar(document.getElementById("channel-avatar-preview"), { display_name: letter, avatar_url: channelCreateAvatarUrl });
       renderChannelAvatarGrid();
     });
     grid.appendChild(el);
   });
+
+  // Обновляем большую превьюшку
+  paintAvatar(document.getElementById("channel-avatar-preview"), { display_name: letter, avatar_url: channelCreateAvatarUrl });
 }
 
 async function handleChannelAvatarUpload(e) {
@@ -6709,7 +6765,7 @@ async function openChannelProfileDialog() {
   const ch = currentChannelObj;
 
   paintAvatar(document.getElementById("channel-profile-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
-  document.getElementById("channel-profile-name").textContent = ch.name;
+  document.getElementById("channel-profile-name").innerHTML = escapeHtml(ch.name) + verifiedBadge(ch);
   document.getElementById("channel-profile-username").textContent = "@" + (ch.username || "");
 
   const { data: cntData } = await supabase.rpc("channel_subscribers_count", { p_chat_id: ch.id });
@@ -6837,7 +6893,10 @@ function setupChannelEdit() {
   document.getElementById("channel-edit-save").addEventListener("click", saveChannelEdit);
   document.getElementById("channel-edit-avatar-upload").addEventListener("change", handleChannelEditAvatarUpload);
 
-  document.getElementById("channel-edit-name-input").addEventListener("input", updateChannelEditSaveButton);
+  document.getElementById("channel-edit-name-input").addEventListener("input", () => {
+    updateChannelEditSaveButton();
+    renderChannelEditAvatarGrid();
+  });
 
   document.getElementById("channel-edit-username-input").addEventListener("input", (e) => {
     clearTimeout(channelEditUsernameTimeout);
@@ -6893,6 +6952,7 @@ function openChannelEditDialog() {
 
   document.getElementById("channel-edit-name-input").value = ch.name || "";
   document.getElementById("channel-edit-username-input").value = ch.username || "";
+  // eslint-disable-next-line no-unused-vars
   const hint = document.getElementById("channel-edit-username-hint");
   hint.className = "username-hint";
   hint.textContent = "";
@@ -6928,23 +6988,26 @@ function renderChannelEditAvatarGrid() {
   const grid = document.getElementById("channel-edit-avatar-grid");
   grid.innerHTML = "";
 
-  // Кнопка "Свой цвет" из BASE_AVATARS
+  const nameInput = document.getElementById("channel-edit-name-input");
+  const rawName = nameInput ? nameInput.value : "";
+  const letter = (rawName && rawName.replace(/\s+/g, "")) ? firstChar(rawName) : "К";
+
   BASE_AVATARS.forEach((pair, idx) => {
     const el = document.createElement("div");
     el.className = "avatar-option";
     el.dataset.idx = idx;
     el.style.background = `linear-gradient(135deg, ${pair[0]}, ${pair[1]})`;
-    el.textContent = (currentChannelObj && currentChannelObj.name ? currentChannelObj.name[0] : "К").toUpperCase();
+    el.textContent = letter;
     if (channelEditAvatarUrl === "color:" + idx) el.classList.add("selected");
     el.addEventListener("click", () => {
       channelEditAvatarUrl = "color:" + idx;
-      paintAvatar(document.getElementById("channel-edit-avatar-preview"), { display_name: "К", avatar_url: channelEditAvatarUrl });
+      paintAvatar(document.getElementById("channel-edit-avatar-preview"), { display_name: letter, avatar_url: channelEditAvatarUrl });
       renderChannelEditAvatarGrid();
     });
     grid.appendChild(el);
   });
 
-  paintAvatar(document.getElementById("channel-edit-avatar-preview"), { display_name: "К", avatar_url: channelEditAvatarUrl });
+  paintAvatar(document.getElementById("channel-edit-avatar-preview"), { display_name: letter, avatar_url: channelEditAvatarUrl });
 }
 
 async function handleChannelEditAvatarUpload(e) {
@@ -7093,21 +7156,21 @@ async function saveChannelEdit() {
     // Обновляем UI чата, если он открыт
     if (currentChannelObj && currentChannelObj.id === ch.id) {
       paintAvatar(document.getElementById("chat-avatar"), { id: ch.id, display_name: name, avatar_url: payload.avatar_url });
-      document.getElementById("chat-title").textContent = name;
+      document.getElementById("chat-title").innerHTML = escapeHtml(name) + verifiedBadge(ch);
     }
 
     // Обновляем карточку в списке чатов
     const itemEl = document.querySelector(`.user-item[data-chat-id="${ch.id}"][data-chat-type="channel"]`);
     if (itemEl) {
       const nameEl = itemEl.querySelector(".user-item-name");
-      if (nameEl) nameEl.innerHTML = escapeHtml(name) + '<span class="channel-mark">📢</span>';
+      if (nameEl) nameEl.innerHTML = escapeHtml(name) + verifiedBadge(ch) + '<span class="channel-mark">📢</span>';
       paintAvatar(itemEl.querySelector(".avatar"), { id: ch.id, display_name: name, avatar_url: payload.avatar_url });
     }
 
     // Обновляем профиль канала, если открыт
     if (channelProfileChannelId === ch.id) {
       paintAvatar(document.getElementById("channel-profile-avatar"), { id: ch.id, display_name: name, avatar_url: payload.avatar_url });
-      document.getElementById("channel-profile-name").textContent = name;
+      document.getElementById("channel-profile-name").innerHTML = escapeHtml(name) + verifiedBadge(ch);
       document.getElementById("channel-profile-username").textContent = "@" + username;
     }
 
