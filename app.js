@@ -2522,15 +2522,21 @@ async function addOrUpdateChatInList(chatId, otherUserId) {
       .select("custom_name").eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle();
     const customName = myMembership ? myMembership.custom_name : null;
 
+    // Если realtime уже успел получить первое сообщение (subscribeToGlobalMessages
+    // кладёт сюда превью и unread), НЕ затираем его, а используем.
+    const existingPreview = chatLastMsg.get(chatId);
+    const fallbackPreview = { text: "", time: Date.now(), senderId: null, unread: 0 };
+    if (!existingPreview) chatLastMsg.set(chatId, fallbackPreview);
+    const previewData = existingPreview || fallbackPreview;
+
     const item = {
       chat_id: chatId,
       user_id: otherUserId,
       lastMsg: null,
-      lastTime: Date.now(),
-      unread: 0,
+      lastTime: previewData.time,
+      unread: previewData.unread,
       customName,
     };
-    chatLastMsg.set(chatId, { text: "", time: Date.now(), senderId: null, unread: 0 });
 
     const listEl = document.getElementById("users-list");
     const empty = listEl.querySelector(".empty");
@@ -2542,6 +2548,11 @@ async function addOrUpdateChatInList(chatId, otherUserId) {
     paintAvatar(itemEl.querySelector(".avatar"), profile);
     bindChatItemEvents(itemEl, profile);
     listEl.insertBefore(itemEl, listEl.firstChild);
+
+    // Сразу подтягиваем превью/бейдж из chatLastMsg — там уже может лежать
+    // первое входящее сообщение с unread.
+    if (existingPreview) updateChatItemPreview(chatId);
+
     refreshWheelLayout();
   } finally {
     pendingChatAdds.delete(chatId);
@@ -4098,11 +4109,21 @@ function onMsgClick(e) {
 }
 
 function jumpToMessage(id) {
-  const target = document.querySelector(`[data-id="${id}"]`);
+  const box = document.getElementById("messages");
+  if (!box) return;
+  const target = box.querySelector(`[data-id="${id}"]`);
   if (!target) return;
   // Замораживаем авто-переключение активного закрепа, чтобы не «прыгал»
   pinBarFrozenUntil = Date.now() + 900;
-  target.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  // Считаем позицию вручную — scrollIntoView умеет тянуть родительские скроллы
+  // (body/html), из-за чего экран уезжает «в другую сторону».
+  const boxRect = box.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const delta = targetRect.top - boxRect.top;
+  const newTop = box.scrollTop + delta - box.clientHeight / 2 + targetRect.height / 2;
+  box.scrollTo({ top: Math.max(0, newTop), behavior: "smooth" });
+
   const prev = target.style.background;
   target.style.transition = "background 0.4s";
   target.style.background = "rgba(255,140,66,0.3)";
@@ -4925,7 +4946,9 @@ function subscribeToChat(chatId) {
       async (payload) => {
         const m = payload.new;
         if (!m || m.chat_id !== currentChatId) return;
-        if (m.sender_id === currentUser.id && m.message_type !== "tokens" && m.message_type !== "gift") return;
+        // Дедуп по DOM: если сообщение уже добавлено (sendMessage/uploadAndSendAttachment),
+        // пропускаем. Иначе добавляем — это касается своих пересылок, tokens и gift,
+        // которые локально не рендерятся.
         if (document.querySelector(`[data-id="${m.id}"]`)) return;
         // Скроллим вниз только если пользователь уже был у низа —
         // иначе он читает историю наверху, и не надо его дёргать.
@@ -5508,6 +5531,9 @@ function openMsgContextMenu(e, msgId) {
       editBtn.classList.remove("hidden");
     }
   }
+
+  // Обновляем подпись кнопки «Закрепить/Открепить» под текущее состояние
+  if (pinBtn && !pinBtn.classList.contains("hidden")) updatePinMenuLabel(msgId);
 
   const menu = document.getElementById("msg-context-menu");
   menu.classList.remove("hidden");
@@ -8592,7 +8618,13 @@ function openPinnedListDialog() {
           <span class="pinned-list-item-time">${time}</span>
         </div>
         <div class="pinned-list-item-text">${escapeHtml(preview.slice(0, 120))}</div>
-        <div class="pinned-list-item-scope">${scopeLabel}</div>
+        <div class="pinned-list-item-scope" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <span>${scopeLabel}</span>
+          <button type="button" class="pinned-unpin-btn" data-unpin-idx="${idx}"
+                  style="background:transparent;border:none;color:var(--danger);font-size:12px;font-family:inherit;cursor:pointer;padding:2px 6px;border-radius:6px;">
+            Открепить
+          </button>
+        </div>
       </div>`;
   }).join("");
 
@@ -8602,6 +8634,23 @@ function openPinnedListDialog() {
       const pin = currentPinnedList[idx];
       document.getElementById("pinned-list-overlay").classList.add("hidden");
       if (pin) jumpToMessage(pin.message_id);
+    });
+  });
+
+  listEl.querySelectorAll("[data-unpin-idx]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.unpinIdx, 10);
+      const pin = currentPinnedList[idx];
+      if (!pin) return;
+      const label = pin.scope === "shared" ? "у обоих" : "у себя";
+      const ok = await showConfirmDialog("Открепить", `Открепить сообщение ${label}?`, "Открепить");
+      if (!ok) return;
+      const { error } = await supabase.from("pinned_messages").delete().eq("id", pin.id);
+      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      await loadPinned(currentChatId);
+      if (currentPinnedList.length) openPinnedListDialog();
+      else document.getElementById("pinned-list-overlay").classList.add("hidden");
     });
   });
 
