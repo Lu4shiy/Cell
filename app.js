@@ -3819,18 +3819,31 @@ async function createMessageElement(msg) {
   return el;
 }
 
+// Бронь ID на время рендера — защищает от race condition между
+// appendMessage (наш путь) и realtime-подпиской (внешний путь).
+const pendingMsgRenders = new Set();
+
 async function appendMessage(msg) {
   // Race-guard: не добавляем сообщения из чужого чата
   if (msg.chat_id && currentChatId && msg.chat_id !== currentChatId) return;
-  const box = document.getElementById("messages");
   if (document.querySelector(`[data-id="${msg.id}"]`)) return;
-  const empty = box.querySelector(".empty");
-  if (empty) empty.remove();
-  const el = await createMessageElement(msg);
-  if (!el) return;
-  box.appendChild(el);
-  renderReactionsUI(msg.id);
-  refreshMessageGroups();
+  if (pendingMsgRenders.has(msg.id)) return;
+  // Синхронная бронь ДО первого await — второй вызов отсеется здесь
+  pendingMsgRenders.add(msg.id);
+  try {
+    const box = document.getElementById("messages");
+    const empty = box.querySelector(".empty");
+    if (empty) empty.remove();
+    const el = await createMessageElement(msg);
+    if (!el) return;
+    // Финальная проверка: пока мы ждали, кто-то мог уже вставить
+    if (document.querySelector(`[data-id="${msg.id}"]`)) return;
+    box.appendChild(el);
+    renderReactionsUI(msg.id);
+    refreshMessageGroups();
+  } finally {
+    pendingMsgRenders.delete(msg.id);
+  }
 }
 
 function updateMessageStatusInUI(msg) {
@@ -5323,10 +5336,10 @@ function subscribeToChat(chatId) {
       async (payload) => {
         const m = payload.new;
         if (!m || m.chat_id !== currentChatId) return;
-        // Дедуп по DOM: если сообщение уже добавлено (sendMessage/uploadAndSendAttachment),
-        // пропускаем. Иначе добавляем — это касается своих пересылок, tokens и gift,
-        // которые локально не рендерятся.
+        // Дедуп по DOM и по «брони»: если сообщение уже добавлено или прямо
+        // сейчас рендерится — пропускаем.
         if (document.querySelector(`[data-id="${m.id}"]`)) return;
+        if (pendingMsgRenders.has(m.id)) return;
         // Скроллим вниз только если пользователь уже был у низа —
         // иначе он читает историю наверху, и не надо его дёргать.
         const box = document.getElementById("messages");

@@ -1488,8 +1488,10 @@ input:focus {
 .dialog-btn.dialog-cancel { color: var(--text-dim); border-color: transparent; }
 .dialog-btn.dialog-cancel:hover { background: var(--bg-hover); color: var(--text-sub); border-color: transparent; }
 
+/* Диалоги подтверждения / ввода — самые верхние из всех оверлеев,
+   чтобы ВСЕГДА перекрывать окна настроек, 2FA, E2EE и т.п. */
 #dialog-overlay,
-#input-overlay { z-index: 5000; }
+#input-overlay { z-index: 999999; }
 
 /* ====================================================== */
 /* ПКМ-меню на чате                                        */
