@@ -5608,8 +5608,8 @@ const PATTERN_MASK_CACHE = new Map();
 // где иконка маленькая в центре большого тайла.
 // Настройки паттернов: TILE — размер плитки (иконка + зазор), ICON — размер самой иконки.
 // Меняй эти два числа, чтобы управлять размером и промежутком.
-const PATTERN_SVG_TILE = 100;   // «внутренний» размер плитки в SVG (не трогай без нужды)
-const PATTERN_SVG_ICON = 25;    // размер иконки внутри плитки. 60 → зазор 40% от плитки.
+const PATTERN_SVG_TILE = 125;   // плитка выросла, чтобы зазор остался тем же
+const PATTERN_SVG_ICON = 50;    // иконка в 2 раза больше прежней
 
 async function buildPatternMaskUrl(iconUrl) {
   if (!iconUrl) return null;
