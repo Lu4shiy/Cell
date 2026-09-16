@@ -3369,13 +3369,17 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   margin: -8px 0 14px;
 }
 .gift-recipient-caption a,
-.gift-card-recipient a {
+.gift-card-recipient a,
+.gift-info-row .gir-value a.gift-recipient-link {
   color: var(--accent);
   text-decoration: none;
   font-weight: 600;
 }
 .gift-recipient-caption a:hover,
-.gift-card-recipient a:hover { text-decoration: underline; }
+.gift-card-recipient a:hover,
+.gift-info-row .gir-value a.gift-recipient-link:hover {
+  text-decoration: underline;
+}
 .gift-card-recipient {
   font-size: 12px;
   color: var(--text-dim);
