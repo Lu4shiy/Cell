@@ -470,6 +470,15 @@ function setInputFromMarkdown(md) {
   el.innerHTML = applyFormatting(escapeHtml(md || "")).replace(/\n/g, "<br>");
 }
 
+// Рендерит превью чата: экранирует HTML, но заменяет 🧩 на иконку Nectar.
+// Используется вместо escapeHtml(preview.slice(0, 60)) в списке чатов.
+function renderPreviewHtml(text) {
+  const s = String(text || "").slice(0, 60);
+  const escaped = escapeHtml(s);
+  return escaped.replace(/🧩/g,
+    `<img class="nectar-icon" src="${NECTAR_ICON_URL}" alt="Nectar" draggable="false">`);
+}
+
 function stripMarkdown(text) {
   if (!text) return "";
   return String(text)
@@ -1690,7 +1699,7 @@ function renderChatItem(it, user) {
           <div class="user-item-time">${time}</div>
         </div>
         <div class="user-item-row2">
-          <div class="user-item-preview ${it.unread > 0 ? "unread" : ""}">${escapeHtml(preview.slice(0, 60))}</div>
+          <div class="user-item-preview ${it.unread > 0 ? "unread" : ""}">${renderPreviewHtml(preview)}</div>
           ${unreadHtml}
         </div>
       </div>
@@ -1760,7 +1769,7 @@ function renderDmItemHtml(it, profileMap) {
           <div class="user-item-time">${time}</div>
         </div>
         <div class="user-item-row2">
-          <div class="user-item-preview ${it.unread > 0 ? "unread" : ""}">${escapeHtml(preview.slice(0, 60))}</div>
+          <div class="user-item-preview ${it.unread > 0 ? "unread" : ""}">${renderPreviewHtml(preview)}</div>
           ${unreadHtml}
         </div>
       </div>
@@ -1790,7 +1799,7 @@ function renderChannelItemHtml(it) {
           <div class="user-item-time">${time}</div>
         </div>
         <div class="user-item-row2">
-          <div class="user-item-preview ${it.unread > 0 ? "unread" : ""}">${escapeHtml(preview.slice(0, 60))}</div>
+          <div class="user-item-preview ${it.unread > 0 ? "unread" : ""}">${renderPreviewHtml(preview)}</div>
           ${unreadHtml}
         </div>
       </div>
@@ -2026,7 +2035,7 @@ function updateChatItemPreview(chatId) {
   if (!isChannel && preview && !isSpecialPreview && data.senderId === currentUser.id) {
     preview = "Вы: " + preview;
   }
-  if (previewEl) { previewEl.textContent = preview.slice(0, 60); previewEl.classList.toggle("unread", data.unread > 0); }
+  if (previewEl) { previewEl.innerHTML = renderPreviewHtml(preview); previewEl.classList.toggle("unread", data.unread > 0); }
   if (timeEl) timeEl.textContent = data.time ? formatChatTime(data.time) : "";
   const row2 = el.querySelector(".user-item-row2");
   if (row2) {
