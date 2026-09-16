@@ -2486,19 +2486,23 @@ function setupSidebarMenu() {
   const drawer = document.getElementById("sidebar-menu-drawer");
   if (!btn || !sidebar || !drawer) return;
 
-  btn.addEventListener("click", (e) => {
+  // ✅ onclick (а не addEventListener) — при повторном вызове
+  // setupSidebarMenu старый обработчик заменяется, а не наслаивается.
+  btn.onclick = (e) => {
     e.stopPropagation();
     sidebar.classList.toggle("menu-open");
-  });
+  };
 
-  // Клик по любому пункту drawer'а — закрываем меню.
-  // Обработчики самих кнопок (create-channel, settings, about, logout)
-  // уже висят отдельно и сработают без изменений.
-  drawer.querySelectorAll("button").forEach((b) => {
-    b.addEventListener("click", () => {
-      sidebar.classList.remove("menu-open");
+  // Закрытие при клике по любому пункту drawer'а — через флаг на самом элементе,
+  // чтобы повторный setup не навесил второй такой же обработчик.
+  if (!drawer.__closeBound) {
+    drawer.__closeBound = true;
+    drawer.addEventListener("click", (e) => {
+      if (e.target.closest("button")) {
+        sidebar.classList.remove("menu-open");
+      }
     });
-  });
+  }
 }
 
 // ======================= 11. ПОИСК =======================
