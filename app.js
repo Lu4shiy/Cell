@@ -587,6 +587,9 @@ let chatLastMsg = new Map();
 let chatIdByUser = new Map();
 const pendingChatAdds = new Set();
 let replyToMsg = null, editingMsgId = null;
+// Кэш «chatId → userId собеседника» для DM. Нужен, чтобы расшифровывать
+// превью последних сообщений в списке чатов (не только в открытом чате).
+let chatOtherUserCache = new Map();
 
 // Черновики сообщений по chat_id. Позволяют не терять набранный текст
 // при переключении между чатами и при возврате в чат.
@@ -704,7 +707,7 @@ async function refreshE2eeStatus() {
   }
 }
 
-function updateE2eeComposerHint() {
+async function updateE2eeComposerHint() {
   const hint = document.getElementById("e2ee-composer-hint");
   const txt = document.getElementById("e2ee-composer-hint-text");
   if (!hint || !txt) return;
@@ -713,8 +716,20 @@ function updateE2eeComposerHint() {
     hint.classList.add("hidden");
     return;
   }
-  const other = profileCache.get(currentOtherUser.id);
-  if (!other || !other.public_key) {
+  // Проверяем наличие публичного ключа собеседника в кэше, иначе — тянем из БД
+  let other = profileCache.get(currentOtherUser.id);
+  let otherPubKey = other && other.public_key;
+  if (!otherPubKey) {
+    try {
+      const { data } = await supabase.from("profiles")
+        .select("public_key").eq("id", currentOtherUser.id).single();
+      if (data && data.public_key) {
+        otherPubKey = data.public_key;
+        profileCache.set(currentOtherUser.id, { ...(profileCache.get(currentOtherUser.id) || {}), ...data });
+      }
+    } catch (e) { /* silent */ }
+  }
+  if (!otherPubKey) {
     hint.classList.add("hidden");
     return;
   }
@@ -1031,7 +1046,7 @@ async function encryptOutgoingText(chatId, text) {
 }
 
 // Расшифровывает сообщение. Возвращает plaintext (или исходный content, если не расшифровать).
-async function getPlaintext(msg) {
+async function getPlaintext(msg, otherIdOverride) {
   if (!msg) return "";
   if (!msg.encrypted) return msg.content || "";
   if (!msg.content) return "";
@@ -1047,9 +1062,10 @@ async function getPlaintext(msg) {
     return "🔒 Зашифровано — разблокируйте в настройках";
   }
   // В DM собеседник — sender. Если это моё сообщение — собеседник всё равно противоположная сторона.
-  const otherId = msg.sender_id === currentUser.id
+  // otherIdOverride передаётся, когда сообщение рендерится вне открытого чата (например, в превью списка).
+  const otherId = otherIdOverride || (msg.sender_id === currentUser.id
     ? (currentOtherUser && currentOtherUser.id)
-    : msg.sender_id;
+    : msg.sender_id);
 
   if (!otherId) return "🔒 Не удалось расшифровать";
 
@@ -1071,6 +1087,29 @@ function getPlaintextSync(msg) {
   if (!msg.encrypted) return msg.content || "";
   if (decryptedCache.has(msg.id)) return decryptedCache.get(msg.id);
   return "🔒 Зашифровано";
+}
+
+// Асинхронно расшифровывает превью последнего сообщения в списке чатов
+// (заменяет «🔒 Зашифровано» на реальный текст).
+async function decryptChatPreview(msg, otherId, chatId) {
+  if (!msg || !msg.encrypted) return;
+  if (!cryptoUnlocked) return;
+  try {
+    const plain = await getPlaintext(msg, otherId);
+    if (!plain || plain.startsWith("🔒")) return;
+    updateChatPreviewText(chatId, msg, plain);
+  } catch (e) { /* silent */ }
+}
+
+function updateChatPreviewText(chatId, msg, plain) {
+  const data = chatLastMsg.get(chatId);
+  if (!data) return;
+  // Убеждаемся, что это всё ещё то же сообщение (не пришло новое поверх).
+  if (data.senderId !== msg.sender_id) return;
+  if (data.time !== new Date(msg.created_at).getTime()) return;
+  data.text = stripMarkdown(plain);
+  chatLastMsg.set(chatId, data);
+  updateChatItemPreview(chatId);
 }
 
 // ======================= 3. АКЦЕНТ / АВАТАРЫ =======================
@@ -1167,6 +1206,7 @@ function resetAppState() {
   // Кэши
   msgCache.clear(); reactionsCache.clear(); profileCache.clear();
   chatLastMsg.clear(); chatIdByUser.clear(); chatReads.clear();
+  chatOtherUserCache.clear();
   channelCache.clear();
   myBlockedIds = new Set(); blockedMeIds = new Set();
   hiddenMsgIds = new Set();
@@ -1211,7 +1251,7 @@ function showAuth() {
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
   myBlockedIds = new Set(); blockedMeIds = new Set();
   hiddenMsgIds = new Set(); msgCache.clear(); reactionsCache.clear();
-  chatReads.clear(); chatLastMsg.clear(); chatIdByUser.clear();
+  chatReads.clear(); chatLastMsg.clear(); chatIdByUser.clear(); chatOtherUserCache.clear();
   selectedMsgIds.clear(); forwardSelectedChats.clear(); profileCache.clear();
   cachedProfilesForBirthday = []; replyToMsg = null; editingMsgId = null;
   selectionMode = false; validatedUsername = null;
@@ -1964,6 +2004,13 @@ function subscribeToGlobalMessages() {
         time, senderId: m.sender_id,
         unread: isMine ? (prev.unread || 0) : (prev.unread || 0) + 1,
       });
+      // Если сообщение зашифровано — попробуем расшифровать превью асинхронно
+      if (m.encrypted && m.message_type !== "attachment") {
+        const otherId = isMine
+          ? (chatOtherUserCache.get(m.chat_id) || (currentOtherUser && currentOtherUser.id))
+          : m.sender_id;
+        if (otherId) decryptChatPreview(m, otherId, m.chat_id);
+      }
       if (!document.getElementById("search-input").value.trim()) {
         updateChatItemPreview(m.chat_id);
         resortChatsList();
@@ -2117,6 +2164,7 @@ async function loadRecentChats() {
   chatIdByUser.clear();
   dmItems.forEach((it) => {
     chatIdByUser.set(it.user_id, it.chat_id);
+    chatOtherUserCache.set(it.chat_id, it.user_id);
     let previewRaw = "";
     if (it.lastMsg) {
       if (it.lastMsg.message_type === "tokens") previewRaw = `🧩 +${it.lastMsg.tokens_amount}`;
@@ -2127,6 +2175,10 @@ async function loadRecentChats() {
     }
     const preview = previewRaw;
     chatLastMsg.set(it.chat_id, { text: preview, time: it.lastTime, senderId: it.lastMsg ? it.lastMsg.sender_id : null, unread: it.unread });
+    // Асинхронно расшифровываем превью, если оно encrypted
+    if (it.lastMsg && it.lastMsg.encrypted && it.lastMsg.message_type !== "attachment") {
+      decryptChatPreview(it.lastMsg, it.user_id, it.chat_id);
+    }
   });
   channelItems.forEach((it) => {
     const preview = it.lastMsg
@@ -2560,6 +2612,7 @@ async function addOrUpdateChatInList(chatId, otherUserId) {
 
     profileCache.set(profile.id, profile);
     chatIdByUser.set(otherUserId, chatId);
+    chatOtherUserCache.set(chatId, otherUserId);
 
     const { data: myMembership } = await supabase.from("chat_members")
       .select("custom_name").eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle();
@@ -3054,7 +3107,6 @@ async function openChatWith(otherUser) {
   document.getElementById("message-input").setAttribute("contenteditable", "true");
   document.getElementById("message-input").setAttribute("data-placeholder", "Написать сообщение...");
   resetChatMenuToDm();
-  updateE2eeComposerHint();
   document.getElementById("composer").classList.remove("hidden");
   document.getElementById("channel-action-bar").classList.add("hidden");
   const _searchInput = document.getElementById("search-input");
@@ -3109,6 +3161,7 @@ async function openChatWith(otherUser) {
     msgCache.clear(); reactionsCache.clear();
     if (currentChannel) { supabase.removeChannel(currentChannel); currentChannel = null; }
     if (reactionsChannel) { supabase.removeChannel(reactionsChannel); reactionsChannel = null; }
+    updateE2eeComposerHint();
     return;
   }
   currentChatId = chatId;
@@ -3121,6 +3174,7 @@ async function openChatWith(otherUser) {
   await markChatRead(chatId);
   setWheelSelected(chatId);
   buildChatTimeline();
+  updateE2eeComposerHint();
 }
 
 async function createChatWith(otherUserId) {
@@ -3142,6 +3196,7 @@ async function createChatWith(otherUserId) {
     return null;
   }
   chatIdByUser.set(otherUserId, newChat.id);
+  chatOtherUserCache.set(newChat.id, otherUserId);
   await addOrUpdateChatInList(newChat.id, otherUserId);
   return newChat.id;
 }
