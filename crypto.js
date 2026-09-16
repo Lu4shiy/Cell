@@ -176,6 +176,46 @@ export async function deriveRecoveryKEK(words) {
   );
 }
 
+// ---------- Ключ файла (AES-GCM 256) ----------
+// Каждый файл шифруется своим случайным ключом. Ключ шифруется общим
+// ключом чата (ECDH) и кладётся в messages.file_key_enc.
+export async function generateFileKey() {
+  return await crypto.subtle.generateKey(
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"]
+  );
+}
+
+export async function exportFileKey(key) {
+  const raw = await crypto.subtle.exportKey("raw", key);
+  return abToB64(raw);
+}
+
+export async function importFileKey(b64) {
+  const raw = b64ToAb(b64);
+  return await crypto.subtle.importKey(
+    "raw", raw, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+  );
+}
+
+// ---------- Шифрование/расшифровка файлов ----------
+// На входе и выходе ArrayBuffer (не base64 — экономим память на больших файлах).
+export async function encryptFileData(fileKey, arrayBuffer) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv }, fileKey, arrayBuffer
+  );
+  return { ivB64: abToB64(iv), ctBuffer: ct };
+}
+
+export async function decryptFileData(fileKey, ivB64, ctBuffer) {
+  const iv = new Uint8Array(b64ToAb(ivB64));
+  return await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv }, fileKey, ctBuffer
+  );
+}
+
 // ---------- Safety number ----------
 export async function computeSafetyNumber(myPubJwk, theirPubJwk) {
   const a = JSON.stringify({ x: myPubJwk.x, y: myPubJwk.y });

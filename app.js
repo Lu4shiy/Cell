@@ -841,6 +841,7 @@ async function unlockE2eeWithPassword(password, opts = {}) {
   // зашифрованные сообщения и превью расшифровались без перезагрузки.
   if (currentChatId) {
     decryptedCache.clear();
+    revokeDecryptedFiles();
     try {
       await loadMessages(currentChatId, openSeq);
       await loadReactionsForVisibleMessages();
@@ -854,6 +855,7 @@ function lockE2ee() {
   myIdentityPrivateJwk = null;
   cryptoUnlocked = false;
   sharedKeyCache.clear();
+  revokeDecryptedFiles();
 }
 
 async function openE2eeSetup() {
@@ -1126,6 +1128,17 @@ function setupE2eeUI() {
 // Инвалидируется при выходе (lockE2ee) и при смене чата (closeCurrentChat).
 const decryptedCache = new Map();
 
+// Кэш расшифрованных файлов (Фаза 3). Ключ — msgId, значение — { url } — blob URL.
+// Blob URL надо освобождать через URL.revokeObjectURL, чтобы не текла память.
+const decryptedFileCache = new Map();
+
+function revokeDecryptedFiles() {
+  decryptedFileCache.forEach((entry) => {
+    try { URL.revokeObjectURL(entry.url); } catch (e) { /* silent */ }
+  });
+  decryptedFileCache.clear();
+}
+
 // Шифрует исходящий текст. Возвращает {content, encrypted}.
 // Если E2EE недоступен (мы не разблокированы / у собеседника нет ключа) — отдаёт как есть.
 async function encryptOutgoingText(chatId, text) {
@@ -1164,11 +1177,10 @@ async function encryptOutgoingText(chatId, text) {
 // Расшифровывает сообщение. Возвращает plaintext (или исходный content, если не расшифровать).
 async function getPlaintext(msg, otherIdOverride) {
   if (!msg) return "";
+  // Для вложений поле content — это подпись. Она НЕ шифруется (шифруется сам файл).
+  if (msg.message_type === "attachment") return msg.content || "";
   if (!msg.encrypted) return msg.content || "";
   if (!msg.content) return "";
-  if (String(msg.content).startsWith("tmp_") || msg.message_type === "attachment") {
-    // у attachment зашифрован не content, а сам файл (Фаза 3)
-  }
 
   // Кэш
   if (decryptedCache.has(msg.id)) return decryptedCache.get(msg.id);
@@ -1194,6 +1206,101 @@ async function getPlaintext(msg, otherIdOverride) {
   } catch (e) {
     return "🔒 Не удалось расшифровать";
   }
+}
+
+// ======================================================
+// ФАЗА 3 — E2EE для вложений
+// ======================================================
+
+// Шифрует бинарник файла. Возвращает:
+//   { encryptedBuffer, ivB64, fileKeyEnc, encrypted: true } при успехе
+//   { encryptedBuffer: originalBuffer, encrypted: false } если E2EE недоступен
+async function encryptOutgoingFile(chatId, arrayBuffer) {
+  const plain = { encryptedBuffer: arrayBuffer, encrypted: false };
+  if (!cryptoUnlocked || !myIdentityPrivateJwk) return plain;
+  if (channelCache.has(chatId)) return plain;
+  if (!currentOtherUser || !currentOtherUser.id) return plain;
+
+  // Есть ли у собеседника публичный ключ?
+  const other = profileCache.get(currentOtherUser.id);
+  let otherPubStr = other && other.public_key;
+  if (!otherPubStr) {
+    const { data } = await supabase.from("profiles")
+      .select("public_key").eq("id", currentOtherUser.id).single();
+    otherPubStr = data && data.public_key;
+    if (other && otherPubStr) other.public_key = otherPubStr;
+  }
+  if (!otherPubStr) return plain;
+
+  try {
+    const sharedKey = await getSharedKeyFor(currentOtherUser.id);
+    if (!sharedKey) return plain;
+
+    // 1. Случайный ключ файла
+    const fileKey = await Crypto.generateFileKey();
+    // 2. Шифруем данные файла этим ключом
+    const { ivB64, ctBuffer } = await Crypto.encryptFileData(fileKey, arrayBuffer);
+    // 3. Экспортируем ключ файла в base64
+    const fileKeyB64 = await Crypto.exportFileKey(fileKey);
+    // 4. Шифруем ключ файла общим ключом чата
+    const fileKeyEnc = await Crypto.encryptMessage(sharedKey, fileKeyB64);
+
+    return { encryptedBuffer: ctBuffer, ivB64, fileKeyEnc, encrypted: true };
+  } catch (e) {
+    console.warn("encryptOutgoingFile failed:", e);
+    return plain;
+  }
+}
+
+// Расшифровывает скачанный blob. Возвращает ArrayBuffer или null.
+async function decryptIncomingFile(msg, ctBuffer) {
+  if (!msg.file_key_enc || !msg.file_iv) return ctBuffer;
+  if (!cryptoUnlocked || !myIdentityPrivateJwk) return null;
+
+  const otherId = msg.sender_id === currentUser.id
+    ? (chatOtherUserCache.get(msg.chat_id) || (currentOtherUser && currentOtherUser.id))
+    : msg.sender_id;
+  if (!otherId) return null;
+
+  try {
+    const sharedKey = await getSharedKeyFor(otherId);
+    if (!sharedKey) return null;
+    const fileKeyB64 = await Crypto.decryptMessage(sharedKey, msg.file_key_enc);
+    const fileKey = await Crypto.importFileKey(fileKeyB64);
+    return await Crypto.decryptFileData(fileKey, msg.file_iv, ctBuffer);
+  } catch (e) {
+    console.warn("decryptIncomingFile failed:", e);
+    return null;
+  }
+}
+
+// Возвращает blob URL расшифрованного файла (кэшируется).
+// null — если файл зашифрован, но мы не можем расшифровать (крипта заблокирована / нет ключа).
+async function getDecryptedFileUrl(msg) {
+  if (decryptedFileCache.has(msg.id)) return decryptedFileCache.get(msg.id).url;
+  if (!cryptoUnlocked || !myIdentityPrivateJwk) return null;
+
+  const signedUrl = await getSignedUrl(msg.image_url);
+  if (!signedUrl) return null;
+
+  let ctBuffer;
+  try {
+    const res = await fetch(signedUrl);
+    if (!res.ok) return null;
+    ctBuffer = await res.arrayBuffer();
+  } catch (e) {
+    console.warn("download encrypted file failed:", e);
+    return null;
+  }
+
+  const plainBuffer = await decryptIncomingFile(msg, ctBuffer);
+  if (!plainBuffer) return null;
+
+  const mime = msg.file_mime || "application/octet-stream";
+  const blob = new Blob([plainBuffer], { type: mime });
+  const url = URL.createObjectURL(blob);
+  decryptedFileCache.set(msg.id, { url });
+  return url;
 }
 
 // Синхронная обёртка для мест, где уже есть расшифрованный текст или нужен фолбэк.
@@ -1364,6 +1471,7 @@ function showAuth() {
   lockE2ee();
   clearE2eeStoredKeys();
   decryptedCache.clear();
+  revokeDecryptedFiles();
   currentUser = null; myProfile = null;
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
   myBlockedIds = new Set(); blockedMeIds = new Set();
@@ -2587,6 +2695,7 @@ async function openChannel(chatId) {
   // Сохраняем черновик предыдущего чата, если это был DM
   if (currentChatId) saveDraftFor(currentChatId);
   decryptedCache.clear();
+  revokeDecryptedFiles();
   // СРАЗУ скрываем composer синхронно, до любых await — иначе мелькнёт
   document.getElementById("composer").classList.add("hidden");
   document.getElementById("channel-action-bar").classList.add("hidden");
@@ -3216,6 +3325,7 @@ async function openChatWith(otherUser) {
   // Сохраняем черновик предыдущего чата ДО любых манипуляций с инпутом
   if (currentChatId) saveDraftFor(currentChatId);
   decryptedCache.clear();
+  revokeDecryptedFiles();
   // СРАЗУ сбрасываем текущий чат, чтобы избежать случайной отправки в старый
   currentChatId = null;
   currentOtherUser = otherUser; pendingOtherUser = null;
@@ -4886,7 +4996,22 @@ async function buildAttachmentHtml(msg) {
     return `<div class="msg-attachment-uploading">⏳ Загрузка…</div>`;
   }
 
-  const displayUrl = await getSignedUrl(url);
+  const isEncryptedFile = !!(msg.file_key_enc && msg.file_iv);
+  let displayUrl = null;
+  let decryptFailed = false;
+
+  if (isEncryptedFile) {
+    displayUrl = await getDecryptedFileUrl(msg);
+    if (!displayUrl) decryptFailed = true;
+  } else {
+    displayUrl = await getSignedUrl(url);
+  }
+
+  if (decryptFailed) {
+    return `<div class="msg-attachment-uploading" style="max-width:260px;display:block;text-align:center;line-height:1.4;">
+      🔒 Файл зашифрован.<br>Разблокируйте в настройках, чтобы просмотреть.
+    </div>`;
+  }
 
   if (kind === "image") {
     return `<img src="${escapeHtml(displayUrl)}" class="msg-attachment-image" alt="" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="image">`;
@@ -4956,7 +5081,7 @@ async function uploadAndSendAttachment(file, chatId, caption, asFile) {
   const tempId = "tmp_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
   const tempMsg = {
     id: tempId, chat_id: chatId, sender_id: currentUser.id,
-    content: "", created_at: new Date().toISOString(),
+    content: caption, created_at: new Date().toISOString(),
     message_type: "attachment",
     image_url: null,
     file_name: file.name,
@@ -4969,12 +5094,28 @@ async function uploadAndSendAttachment(file, chatId, caption, asFile) {
   await appendMessage(tempMsg);
   scrollToBottom();
 
+  // Читаем файл в ArrayBuffer (нужен и для шифрования, и для загрузки как есть)
+  let originalBuffer;
+  try {
+    originalBuffer = await file.arrayBuffer();
+  } catch (ex) {
+    const t = document.querySelector(`[data-id="${tempId}"]`);
+    if (t) t.remove();
+    msgCache.delete(tempId);
+    await showAlertDialog("Ошибка чтения файла", ex.message || String(ex));
+    return;
+  }
+
+  // Шифруем (если E2EE доступно)
+  const enc = await encryptOutgoingFile(chatId, originalBuffer);
+  const uploadBuffer = enc.encryptedBuffer;
+
   let upErr = null;
   try {
-    const res = await supabase.storage.from("attachments").upload(path, file, {
+    const res = await supabase.storage.from("attachments").upload(path, uploadBuffer, {
       cacheControl: "3600",
       upsert: false,
-      contentType: file.type || "application/octet-stream",
+      contentType: enc.encrypted ? "application/octet-stream" : (file.type || "application/octet-stream"),
     });
     upErr = res.error;
   } catch (ex) {
@@ -5005,6 +5146,11 @@ async function uploadAndSendAttachment(file, chatId, caption, asFile) {
     file_mime: file.type,
     file_kind: kind,
   };
+  if (enc.encrypted) {
+    payload.encrypted = true;
+    payload.file_iv = enc.ivB64;
+    payload.file_key_enc = enc.fileKeyEnc;
+  }
   if (replyToMsg) payload.reply_to_id = replyToMsg.id;
   cancelReply();
 
@@ -5556,6 +5702,7 @@ function closeCurrentChat() {
   openSeq++;
   if (currentChatId) saveDraftFor(currentChatId);
   decryptedCache.clear();
+  revokeDecryptedFiles();
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
   currentChannelObj = null; currentChannelIsAdmin = false;
   currentChannelIsSubscribed = false;
