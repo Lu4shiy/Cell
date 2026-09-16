@@ -1492,9 +1492,10 @@ function getPlaintextSync(msg) {
 
 // Асинхронно расшифровывает превью последнего сообщения в списке чатов
 // (заменяет «🔒 Зашифровано» на реальный текст).
-async function decryptChatPreview(msg, otherId, chatId) {
+async function decryptChatPreview(msg, otherId, chatId, _attempt) {
   if (!msg || !msg.encrypted) return;
   if (!cryptoUnlocked) return;
+  const attempt = _attempt || 0;
   try {
     // 1) Сначала пробуем канальный ключ. Это покрывает случай, когда
     // сообщение из канала приходит раньше, чем channelCache заполнится
@@ -1513,9 +1514,20 @@ async function decryptChatPreview(msg, otherId, chatId) {
 
     // 2) DM-путь
     const plain = await getPlaintext(msg, otherId);
-    if (!plain || plain.startsWith("🔒")) return;
-    if (plain === msg.content) return;
-    updateChatPreviewText(chatId, msg, plain);
+    if (plain && !plain.startsWith("🔒") && plain !== msg.content) {
+      updateChatPreviewText(chatId, msg, plain);
+      return;
+    }
+
+    // 3) Retry: если не удалось расшифровать и попытки ещё есть — повторим.
+    // Это нужно, когда ключ канала ещё не раздан (realtime пришёл раньше
+    // раздачи ключей подписчикам). Обычно достаточно 1–2 повторов.
+    if (attempt < 2) {
+      setTimeout(
+        () => decryptChatPreview(msg, otherId, chatId, attempt + 1),
+        1500
+      );
+    }
   } catch (e) {
     console.warn("decryptChatPreview:", e);
   }
@@ -4245,10 +4257,15 @@ function refreshWheelLayout() {
     wheelSelectedChatId = items[activeIdx].dataset.chatId;
   }
 
-  // Индикаторы прокрутки: показываем, если есть что-то скрытое сверху/снизу
-  const atTop = listEl.scrollTop <= 4;
-  const atBottom = listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - 4;
-  updateWheelArrows(!atTop, !atBottom);
+  // Индикаторы прокрутки: смотрим по фактической видимости крайних чатов,
+  // а не по scrollTop/scrollHeight — потому что снизу мы добавляем
+  // padding, и последний чат может «висеть» высоко от дна скролла.
+  const listRect = listEl.getBoundingClientRect();
+  const firstRect = items[0].getBoundingClientRect();
+  const lastRect = items[items.length - 1].getBoundingClientRect();
+  const firstVisible = firstRect.top >= listRect.top - 2;
+  const lastVisible = lastRect.bottom <= listRect.bottom + 2;
+  updateWheelArrows(!firstVisible, !lastVisible);
 }
 
 function idToHue(id) {
