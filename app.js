@@ -360,12 +360,30 @@ let currentGiftDetailUgId = null;      // ug.id подарка, открытог
 // ======================= 3. АКЦЕНТ / АВАТАРЫ =======================
 function applyAccent(accent) { document.documentElement.setAttribute("data-accent", accent || "orange"); }
 function hashCode(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
-// Первый НЕпробельный символ строки в верхнем регистре. Если строка пустая — "?".
+// Первый НЕпробельный символ строки. Возвращает целую графему (эмодзи, букву или составной эмодзи).
+// Если строка пустая — "?".
+// ВАЖНО: нельзя использовать str[0] — эмодзи занимают 2 кодовые единицы UTF-16,
+// и [0] вернёт половину суррогатной пары → на экране «�&».
+const graphemeSegmenter = (typeof Intl !== "undefined" && Intl.Segmenter)
+  ? new Intl.Segmenter("ru", { granularity: "grapheme" })
+  : null;
+
 function firstChar(str) {
   if (!str) return "?";
-  const t = String(str).replace(/\s+/g, "");
-  if (!t) return "?";
-  return t[0].toUpperCase();
+  const trimmed = String(str).replace(/^\s+/, "");
+  if (!trimmed) return "?";
+  let first;
+  if (graphemeSegmenter) {
+    const it = graphemeSegmenter.segment(trimmed)[Symbol.iterator]();
+    const firstSeg = it.next();
+    first = firstSeg.done ? "?" : firstSeg.value.segment;
+  } else {
+    // Fallback для старых браузеров без Intl.Segmenter
+    const arr = [...trimmed];
+    first = arr[0] || "?";
+  }
+  // .toUpperCase() на эмодзи ничего не сломает — это no-op для символов без регистра
+  return first.toUpperCase();
 }
 function paintAvatar(el, user) {
   if (!el) return;
@@ -1005,6 +1023,8 @@ async function openUserProfileDialog(userOverride) {
   const user = userOverride || currentOtherUser || pendingOtherUser;
   if (!user) return;
   const overlay = document.getElementById("user-profile-overlay");
+  // Запоминаем, чей профиль открыт — чтобы realtime мог перерисовать
+  if (overlay) overlay.dataset.userId = user.id;
 
   // Стрелка «назад» видна только если мы пришли из окна подарка
   const backBtn = document.getElementById("user-profile-back");
@@ -1237,6 +1257,13 @@ function subscribeToProfiles() {
       const i = cachedProfilesForBirthday.findIndex((x) => x.id === p.id);
       if (i !== -1) cachedProfilesForBirthday[i] = { ...cachedProfilesForBirthday[i], ...p };
       renderBirthdayBanner();
+
+      // Если этот профиль сейчас открыт у нас — перерисуем его без перезагрузки,
+      // чтобы сразу увидеть свежий bio/имя/аватар.
+      const overlay = document.getElementById("user-profile-overlay");
+      if (overlay && !overlay.classList.contains("hidden") && overlay.dataset.userId === p.id) {
+        openUserProfileDialog(p);
+      }
     }).subscribe();
 }
 
@@ -3418,20 +3445,11 @@ function isFlagEmoji(emoji) {
   return false;
 }
 
-// Подмены URL для эмодзи, которых нет (или нестабильно отдаются) на Twemoji-CDN.
-// Лесбийский флаг, а также tag-sequence флаги (Англия/Шотландия/Уэльс).
+// Единственная ручная подмена — лесбийский флаг вместо транс-флага
+// (в Twemoji этот кодпоинт рисуется как транс-флаг, а нужен лесбийский).
 const FLAG_URL_OVERRIDES = {
   "\u{1F3F3}\uFE0F\u200D\u26A7\uFE0F":
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Lesbian_pride_flag_2018.svg/64px-Lesbian_pride_flag_2018.svg.png",
-  // Англия 🏴󠁧󠁢󠁥󠁮󠁧󠁿
-  "\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}":
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/Flag_of_England.svg/64px-Flag_of_England.svg.png",
-  // Шотландия 🏴󠁧󠁢󠁳󠁣󠁴󠁿
-  "\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}":
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Flag_of_Scotland.svg/64px-Flag_of_Scotland.svg.png",
-  // Уэльс 🏴󠁧󠁢󠁷󠁬󠁳󠁿
-  "\u{1F3F4}\u{E0067}\u{E0062}\u{E0077}\u{E006C}\u{E0073}\u{E007F}":
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Flag_of_Wales.svg/64px-Flag_of_Wales.svg.png"
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Lesbian_pride_flag_2018.svg/64px-Lesbian_pride_flag_2018.svg.png"
 };
 
 function twemojiUrl(emoji) {
@@ -3440,7 +3458,9 @@ function twemojiUrl(emoji) {
     .map((c) => c.codePointAt(0).toString(16))
     .filter((cp) => cp !== "fe0f")
     .join("-");
-  return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codepoints}.svg`;
+  // Twemoji 15.0.3 (jdecked/twemoji) — там есть все свежие эмодзи, включая tag-флаги
+  // Англии/Шотландии/Уэльса. Старая twitter/twemoji@14 их частично не содержит.
+  return `https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.0.3/assets/svg/${codepoints}.svg`;
 }
 
 // Заменяет флаги-эмодзи в готовом HTML на <img>
@@ -3596,7 +3616,7 @@ function renderEmojiGrid() {
   grid.innerHTML = list.map((em) => {
     // Все эмодзи рисуем через Twemoji — так они одинаково выглядят на всех системах
     // (Windows/Linux не имеют глифов для многих новых эмодзи — рисовались «пустые квадраты»).
-    const inner = `<img class="emoji-img-inline" src="${twemojiUrl(em)}" alt="${escapeHtml(em)}" draggable="false">`;
+    const inner = `<img class="emoji-img-inline" src="${twemojiUrl(em)}" alt="${escapeHtml(em)}" data-emoji="${escapeHtml(em)}" draggable="false">`;
     return `<button type="button" class="emoji-item" data-emoji="${escapeHtml(em)}">${inner}</button>`;
   }).join("");
   grid.querySelectorAll(".emoji-item").forEach((b) => {
@@ -3614,6 +3634,20 @@ function insertEmoji(emoji) {
   saveEmojiSelection();
   // Пикер не закрываем — можно накликать несколько, как в Телеграме
 }
+
+// Если Twemoji-картинка не загрузилась (совсем новый эмодзи, CDN не отдал) —
+// подменяем её на текстовый эмодзи, чтобы вместо «битой иконки» был хоть какой-то символ.
+document.addEventListener("error", (e) => {
+  const img = e.target;
+  if (!img || img.tagName !== "IMG") return;
+  if (!img.classList.contains("emoji-img-inline")) return;
+  const emoji = img.dataset.emoji || img.alt || "";
+  if (!emoji) return;
+  const span = document.createElement("span");
+  span.className = "emoji-fallback-inline";
+  span.textContent = emoji;
+  img.replaceWith(span);
+}, true);
 
 // ---- Вложения ----
 const ATTACH_MAX_SIZE = 50 * 1024 * 1024; // 50 МБ

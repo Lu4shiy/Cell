@@ -1181,6 +1181,14 @@ input:focus {
   object-fit: contain;
 }
 
+/* Fallback: если картинка не загрузилась, показываем сам эмодзи как текст */
+.emoji-fallback-inline {
+  font-size: 22px;
+  line-height: 1;
+  display: block;
+  pointer-events: none;
+}
+
 .emoji-flag {
   width: 1.3em;
   height: auto;
@@ -1634,6 +1642,12 @@ input:focus {
   color: var(--text);
   margin-bottom: 4px;
   text-align: center;
+  /* Переносим длинные имена — иначе они растягивают карточку и обрезают кнопки */
+  max-width: 100%;
+  padding: 0 12px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
 }
 .profile-hero-status { font-size: 13px; color: var(--text-dim); }
 .profile-hero-status.online { color: var(--accent); font-weight: 600; }
