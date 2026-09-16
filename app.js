@@ -59,7 +59,13 @@ const ICONS = {
 
 function verifiedBadge(profile) {
   if (!profile || !profile.verified) return "";
-  return `<span class="verified-badge" role="img" aria-label="Официальный аккаунт"><span class="verified-tooltip">Официальный аккаунт</span></span>`;
+  return `<span class="verified-badge" role="img" aria-label="Официальный аккаунт">
+    <svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block;">
+      <circle cx="12" cy="12" r="10" fill="#1DA1F2"/>
+      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="white"/>
+    </svg>
+    <span class="verified-tooltip">Официальный аккаунт</span>
+  </span>`;
 }
 
 // ======================================================
@@ -268,6 +274,10 @@ let channelAdminsChannel = null;
 let usernameCheckTimeout = null, validatedUsername = null, reactionsRefreshTimer = null;
 let giftCatalogCache = [];
 let lastSeenInterval = null, otherUserInterval = null, statusPollInterval = null, deliveredInterval = null;
+// Throttle для last_seen — не чаще одного раза в 25 секунд.
+// Порог «в сети» у собеседника — 45 сек (см. isUserOnline), так что 25 сек безопасно.
+const LAST_SEEN_THROTTLE_MS = 25000;
+let lastSeenThrottleAt = 0;
 // Поиск внутри чата/канала
 let chatSearchOpen = false;
 let chatSearchMatches = [];
@@ -396,6 +406,7 @@ function showAuth() {
     profilesChannel = membershipChannel = readsChannel = null;
   [lastSeenInterval, otherUserInterval, statusPollInterval, deliveredInterval].forEach((i) => i && clearInterval(i));
   lastSeenInterval = otherUserInterval = statusPollInterval = deliveredInterval = null;
+  lastSeenThrottleAt = 0;
   applyAccent("orange");
   document.getElementById("auth-screen").classList.remove("hidden");
   document.getElementById("app-screen").classList.add("hidden");
@@ -426,13 +437,15 @@ async function initApp() {
     try { await supabase.rpc("mark_all_delivered"); } catch (e) {}
   }, 30000);
 
-  // Обновлять мой last_seen
+  // Обновлять мой last_seen — с throttle, чтобы не дёргать сервер на каждый чих мыши.
+  // Первый вызов — сразу (статус в другом окне появится мгновенно),
+  // дальше — не чаще одного раза в LAST_SEEN_THROTTLE_MS (25 сек).
   await updateMyLastSeen();
-  // Пингуем всегда, вне зависимости от видимости — иначе статус в другом окне не обновляется
-  lastSeenInterval = setInterval(updateMyLastSeen, 8000);
-  document.addEventListener("mousemove", updateMyLastSeen, { passive: true });
-  document.addEventListener("keydown", updateMyLastSeen);
-  document.addEventListener("click", updateMyLastSeen);
+  lastSeenThrottleAt = Date.now();
+  lastSeenInterval = setInterval(throttledLastSeen, LAST_SEEN_THROTTLE_MS);
+  document.addEventListener("mousemove", throttledLastSeen, { passive: true });
+  document.addEventListener("keydown", throttledLastSeen);
+  document.addEventListener("click", throttledLastSeen);
 
   // Обновлять статус собеседника
   otherUserInterval = setInterval(async () => {
@@ -5410,6 +5423,17 @@ async function updateMyLastSeen() {
       await supabase.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", currentUser.id);
     } catch (e2) { /* silent */ }
   }
+}
+
+// Throttled-обёртка над updateMyLastSeen: не чаще одного раза в LAST_SEEN_THROTTLE_MS.
+// Вызывается на mousemove / keydown / click / по интервалу — но реально бьёт по серверу
+// не чаще указанного интервала. Это убирает сотни лишних запросов при движении мыши.
+function throttledLastSeen() {
+  if (!currentUser) return;
+  const now = Date.now();
+  if (now - lastSeenThrottleAt < LAST_SEEN_THROTTLE_MS) return;
+  lastSeenThrottleAt = now;
+  updateMyLastSeen();
 }
 
 // ======================================================
