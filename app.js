@@ -5731,7 +5731,7 @@ function cancelReply() {
   if (!editingMsgId) document.getElementById("reply-bar").classList.add("hidden");
 }
 
-function startEdit(msgId) {
+async function startEdit(msgId) {
   const msg = msgCache.get(msgId);
   if (!msg || msg.sender_id !== currentUser.id) return;
   if (msg.forwarded_from_name || msg.message_type === "tokens" || msg.message_type === "gift") return;
@@ -8435,7 +8435,7 @@ async function loadPinned(chatId) {
   rerenderPinMarks();
 }
 
-function renderPinBar() {
+async function renderPinBar() {
   const bar = document.getElementById("pin-bar");
   const titleEl = document.getElementById("pin-bar-title");
   const textEl = document.getElementById("pin-bar-text");
@@ -9092,5 +9092,7 @@ function setupAttachPreviewDialog() {
 // включая scrollMode и SCROLL_MODE_KEY, уже были объявлены)
 // ======================================================
 
-const { data: { session } } = await supabase.auth.getSession();
-if (session) showApp(session.user);
+(async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) showApp(session.user);
+})();
