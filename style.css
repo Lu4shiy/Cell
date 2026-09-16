@@ -467,6 +467,23 @@ input:focus {
   overflow: hidden;
 }
 
+/* Индикаторы «выше/ниже есть ещё» в колёсном режиме.
+   Не кликабельные, просто визуальная подсказка. */
+.wheel-arrow {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-dim);
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: 5;
+  user-select: none;
+}
+.wheel-arrow-top { top: 2px; }
+.wheel-arrow-bottom { bottom: 2px; }
+
 .users-list {
   flex: 1;
   min-height: 0;
@@ -3339,6 +3356,21 @@ button:not(:disabled):active { transform: scale(0.97); }
 
 html[data-scroll-mode="classic"] .wheel-wrap {
   overflow: hidden;
+}
+
+/* Колёсный (современный) режим: активный чат — верхний в списке, чуть крупнее.
+   Затемнения у остальных нет — только плавное масштабирование активного. */
+html[data-scroll-mode="wheel"] .wheel-wrap .user-item {
+  transform-origin: left center;
+  transition: transform 0.22s ease, background 0.2s ease,
+              border-radius 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 12px;
+}
+html[data-scroll-mode="wheel"] .wheel-wrap .user-item.wheel-active {
+  transform: scale(1.04);
+  background: var(--bg-active);
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 html[data-scroll-mode="classic"] .wheel-wrap .users-list {
   position: relative;

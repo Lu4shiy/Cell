@@ -2599,17 +2599,24 @@ async function loadRecentChats() {
     }
   });
   channelItems.forEach((it) => {
-    const preview = it.lastMsg
-      ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
-        : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
-        : it.lastMsg.message_type === "attachment" ? (it.lastMsg.file_kind === "image" ? "📷 Фото" : it.lastMsg.file_kind === "video" ? "🎥 Видео" : "📎 Файл")
-        : stripMarkdown(it.lastMsg.content || ""))
-      : "";
+    let preview = "";
+    if (it.lastMsg) {
+      const m = it.lastMsg;
+      if (m.message_type === "tokens") preview = `🧩 +${m.tokens_amount}`;
+      else if (m.message_type === "gift") preview = "🎁 Подарок";
+      else if (m.message_type === "attachment") preview = m.file_kind === "image" ? "📷 Фото" : m.file_kind === "video" ? "🎥 Видео" : "📎 Файл";
+      else if (m.encrypted) preview = "🔒 Зашифровано";
+      else preview = stripMarkdown(m.content || "");
+    }
     chatLastMsg.set(it.chat_id, {
       text: preview, time: it.lastTime, senderId: null,
       msgId: it.lastMsg ? it.lastMsg.id : null,
       unread: it.unread,
     });
+    // Расшифровываем превью канала (если E2EE разблокировано)
+    if (it.lastMsg && it.lastMsg.encrypted && it.lastMsg.message_type !== "attachment") {
+      decryptChatPreview(it.lastMsg, null, it.chat_id);
+    }
   });
 
   const unified = [...dmItems, ...channelItems].sort((a, b) => b.lastTime - a.lastTime);
@@ -4116,72 +4123,109 @@ let wheelScrollLock = false;
 
 function setupWheel() {
   const wrap = document.getElementById("wheel-wrap");
+  const listEl = document.getElementById("users-list");
   if (!wrap) return;
 
-  // Скролл списка — нативный (колёсико, тачпад, тачскрин).
-  // Раньше здесь висел обработчик колеса с e.preventDefault() — он блокировал
-  // скролл в обоих режимах. Убрали его: пусть список скроллится сам.
-  // Навигация по чатам осталась через Alt+↑/↓ и клик.
-
+  // Навигация по чатам с клавиатуры (Alt+↑/↓)
   document.addEventListener("keydown", (e) => {
     if (!document.getElementById("chat-placeholder")?.classList.contains("hidden")) return;
     if (e.target.matches("input, textarea, [contenteditable]")) return;
     if (e.key === "ArrowUp" && e.altKey) { e.preventDefault(); wheelMove(-1); }
     else if (e.key === "ArrowDown" && e.altKey) { e.preventDefault(); wheelMove(1); }
   });
+
+  // Скролл — нативный. При скролле в колёсном режиме пересчитываем,
+  // какой чат сейчас «активный» (верхний в видимой области).
+  if (listEl && !listEl.__wheelScrollBound) {
+    listEl.__wheelScrollBound = true;
+    let rafId = null;
+    listEl.addEventListener("scroll", () => {
+      if (scrollMode !== "wheel") return;
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        refreshWheelLayout();
+      });
+    }, { passive: true });
+  }
+}
+
+// Возвращает индекс элемента, чей верх ближе всего к верху видимой области.
+function getTopVisibleIndex(items, listEl) {
+  if (!items.length) return -1;
+  const listTop = listEl.getBoundingClientRect().top;
+  let best = 0;
+  let bestDiff = Infinity;
+  items.forEach((el, i) => {
+    const r = el.getBoundingClientRect();
+    const diff = Math.abs(r.top - listTop);
+    if (diff < bestDiff) { bestDiff = diff; best = i; }
+  });
+  return best;
 }
 
 function wheelMove(dir) {
   const listEl = document.getElementById("users-list");
+  if (!listEl) return;
   const items = [...listEl.querySelectorAll(".user-item")];
   if (!items.length) return;
-  let idx = items.findIndex((el) => el.dataset.chatId === wheelSelectedChatId);
-  if (idx === -1) idx = 0;
-  idx = Math.max(0, Math.min(items.length - 1, idx + dir));
-  wheelSelectedChatId = items[idx].dataset.chatId;
-  wheelIndex = idx;
-  refreshWheelLayout();
+  const cur = getTopVisibleIndex(items, listEl);
+  const next = Math.max(0, Math.min(items.length - 1, cur + dir));
+  const target = items[next];
+  if (target) listEl.scrollTo({ top: target.offsetTop, behavior: "smooth" });
 }
 
 function setWheelSelected(chatId) {
   if (!chatId) return;
   wheelSelectedChatId = chatId;
-  refreshWheelLayout();
+  // Не скроллим — просто перерисовываем активный класс по текущей позиции.
+  if (scrollMode === "wheel") refreshWheelLayout();
+}
+
+function updateWheelArrows(showTop, showBottom) {
+  const top = document.querySelector(".wheel-arrow-top");
+  const bottom = document.querySelector(".wheel-arrow-bottom");
+  const inWheel = scrollMode === "wheel";
+  if (top) top.classList.toggle("hidden", !(inWheel && showTop));
+  if (bottom) bottom.classList.toggle("hidden", !(inWheel && showBottom));
 }
 
 function refreshWheelLayout() {
   const listEl = document.getElementById("users-list");
   if (!listEl) return;
   const items = [...listEl.querySelectorAll(".user-item")];
-  if (!items.length) return;
 
-  let idx = items.findIndex((el) => el.dataset.chatId === wheelSelectedChatId);
-  if (idx === -1) {
-    idx = 0;
-    wheelSelectedChatId = items[0].dataset.chatId;
+  if (scrollMode !== "wheel") {
+    // Классический режим: сбрасываем все inline-стили и активные классы
+    items.forEach((el) => {
+      el.classList.remove("wheel-active");
+      el.style.removeProperty("--ty");
+      el.style.removeProperty("--sc");
+      el.style.removeProperty("--chat-hue");
+      el.style.removeProperty("opacity");
+      el.style.removeProperty("z-index");
+    });
+    updateWheelArrows(false, false);
+    return;
   }
-  wheelIndex = idx;
 
-  const SLOT = 82;
-  items.forEach((el, i) => {
-    const offset = i - idx;
-    const abs = Math.abs(offset);
-    let scale = 1, opacity = 1, ty = 0;
-    if (abs === 0)      { scale = 1.00; opacity = 1.00; }
-    else if (abs === 1) { scale = 0.86; opacity = 0.58; }
-    else if (abs === 2) { scale = 0.72; opacity = 0.30; }
-    else if (abs === 3) { scale = 0.60; opacity = 0.12; }
-    else                { scale = 0.55; opacity = 0.00; }
-    ty = offset * SLOT;
-    el.style.setProperty("--ty", ty + "px");
-    el.style.setProperty("--sc", String(scale));
-    el.style.opacity = String(opacity);
-    el.style.zIndex = String(100 - abs);
-    el.classList.toggle("wheel-active", abs === 0 && scrollMode === "wheel");
+  if (!items.length) {
+    updateWheelArrows(false, false);
+    return;
+  }
 
-    const hue = idToHue(el.dataset.chatId || "x");
-    el.style.setProperty("--chat-hue", String(hue));
-  });
+  // Активный — верхний в видимой области.
+  const activeIdx = getTopVisibleIndex(items, listEl);
+  items.forEach((el, i) => el.classList.toggle("wheel-active", i === activeIdx));
+  if (activeIdx >= 0) {
+    wheelIndex = activeIdx;
+    wheelSelectedChatId = items[activeIdx].dataset.chatId;
+  }
+
+  // Индикаторы прокрутки
+  const atTop = listEl.scrollTop <= 4;
+  const atBottom = listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - 4;
+  updateWheelArrows(!atTop, !atBottom);
 }
 
 function idToHue(id) {
@@ -9552,16 +9596,23 @@ function applyScrollMode() {
   const list = document.getElementById("users-list");
   if (!list) return;
 
+  // Сбрасываем inline-стили от прежнего колёсного режима
+  list.querySelectorAll(".user-item").forEach((el) => {
+    el.classList.remove("wheel-active");
+    el.style.removeProperty("--ty");
+    el.style.removeProperty("--sc");
+    el.style.removeProperty("--chat-hue");
+    el.style.removeProperty("opacity");
+    el.style.removeProperty("z-index");
+  });
+  list.style.paddingTop = "";
+  list.style.paddingBottom = "";
+
   if (scrollMode === "classic") {
-    // Убираем отступы, добавленные колесом
-    list.style.paddingTop = "";
-    list.style.paddingBottom = "";
-    // Прокручиваем наверх
     list.scrollTop = 0;
+    updateWheelArrows(false, false);
   } else {
-    // Колёсный режим — пересчитаем отступы (setPadding вызовется из setupWheel)
-    if (typeof refreshWheelLayout === "function") refreshWheelLayout();
-    if (typeof updateWheelFromScroll === "function") updateWheelFromScroll();
+    refreshWheelLayout();
   }
 }
 
