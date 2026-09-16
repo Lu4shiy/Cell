@@ -174,14 +174,231 @@ registerForm.addEventListener("submit", async (e) => {
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const errEl = document.getElementById("login-error"); errEl.textContent = "";
+
+  if (isLoginLocked()) {
+    errEl.textContent = "Слишком много попыток. Подожди 5 минут.";
+    return;
+  }
+
   const email = document.getElementById("login-email").value.trim();
   const password = document.getElementById("login-password").value;
+
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) { errEl.textContent = error.message; return; }
+  if (error) {
+    registerLoginAttempt();
+    errEl.textContent = error.message;
+    return;
+  }
+
+  clearLoginAttempts();
+
+  // Проверяем, включена ли у пользователя 2FA
+  try {
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal && aal.nextLevel === "aal2" && aal.currentLevel === "aal1") {
+      // Пароль верный, но нужно пройти 2FA
+      pendingMfaUser = data.user;
+      document.getElementById("login-password").value = "";
+      document.getElementById("mfa-challenge-code").value = "";
+      document.getElementById("mfa-challenge-error").textContent = "";
+      document.getElementById("mfa-challenge-overlay").classList.remove("hidden");
+      setTimeout(() => document.getElementById("mfa-challenge-code").focus(), 80);
+      return;
+    }
+  } catch (e) { /* если MFA не настроена — идём дальше */ }
+
   showApp(data.user);
 });
 
 document.getElementById("logout-btn").addEventListener("click", async () => { await supabase.auth.signOut(); showAuth(); });
+
+// ═══════════════════════════════════════════════════════
+// 2FA (TOTP через Supabase MFA)
+// ═══════════════════════════════════════════════════════
+
+function setupMfaUI() {
+  const codeInput = document.getElementById("mfa-challenge-code");
+  const submitBtn = document.getElementById("mfa-challenge-submit");
+  const cancelBtn = document.getElementById("mfa-challenge-cancel");
+  if (!codeInput || !submitBtn || !cancelBtn) return;
+
+  // Только цифры, максимум 6
+  codeInput.addEventListener("input", () => {
+    codeInput.value = codeInput.value.replace(/\D/g, "").slice(0, 6);
+  });
+
+  async function submitChallenge() {
+    const code = codeInput.value.trim();
+    const errEl = document.getElementById("mfa-challenge-error");
+    errEl.textContent = "";
+    if (code.length !== 6) {
+      errEl.textContent = "Введи 6 цифр";
+      return;
+    }
+
+    try {
+      const { data: factors, error: listErr } = await supabase.auth.mfa.listFactors();
+      if (listErr) { errEl.textContent = listErr.message; return; }
+      const totp = factors && factors.totp && factors.totp.find(f => f.status === "verified");
+      if (!totp) { errEl.textContent = "Нет активного TOTP-фактора"; return; }
+
+      const { data: chal, error: chalErr } = await supabase.auth.mfa.challenge({ factorId: totp.id });
+      if (chalErr) { errEl.textContent = chalErr.message; return; }
+
+      const { error: verifyErr } = await supabase.auth.mfa.verify({
+        factorId: totp.id,
+        challengeId: chal.id,
+        code,
+      });
+      if (verifyErr) {
+        errEl.textContent = verifyErr.message || "Неверный код";
+        codeInput.value = "";
+        return;
+      }
+
+      document.getElementById("mfa-challenge-overlay").classList.add("hidden");
+      const { data: { user } } = await supabase.auth.getUser();
+      showApp(user);
+    } catch (e) {
+      errEl.textContent = e.message || "Ошибка проверки кода";
+    }
+  }
+
+  submitBtn.addEventListener("click", submitChallenge);
+  codeInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); submitChallenge(); }
+  });
+  cancelBtn.addEventListener("click", async () => {
+    try { await supabase.auth.signOut(); } catch (e) {}
+    document.getElementById("mfa-challenge-overlay").classList.add("hidden");
+    pendingMfaUser = null;
+  });
+}
+
+async function refreshMfaStatus() {
+  const row = document.getElementById("mfa-status-row");
+  if (!row) return;
+  try {
+    const { data } = await supabase.auth.mfa.listFactors();
+    const totp = data && data.totp && data.totp.find(f => f.status === "verified");
+    if (totp) {
+      const dt = totp.created_at ? new Date(totp.created_at).toLocaleDateString("ru-RU") : "—";
+      row.innerHTML = `✅ <b>Включена</b> (с ${dt})`;
+    } else {
+      row.innerHTML = `❌ <b>Отключена</b>. Включи — это сильно повышает защиту.`;
+    }
+  } catch (e) {
+    row.textContent = "Не удалось проверить статус 2FA";
+  }
+}
+
+async function openMfaSetup() {
+  const overlay = document.getElementById("mfa-setup-overlay");
+  const body = document.getElementById("mfa-setup-body");
+  overlay.classList.remove("hidden");
+  body.innerHTML = '<div class="empty">Загрузка...</div>';
+
+  try {
+    const { data } = await supabase.auth.mfa.listFactors();
+    const totp = data && data.totp && data.totp.find(f => f.status === "verified");
+
+    if (totp) {
+      // Уже включена — показываем кнопку отключения
+      body.innerHTML = `
+        <div class="dialog-text">
+          Двухфакторная аутентификация <b>включена</b>.
+          При входе потребуется 6-значный код из приложения.
+        </div>
+        <button class="dialog-btn" id="mfa-disable-btn"
+                style="width:100%;background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger);">
+          Отключить 2FA
+        </button>`;
+      document.getElementById("mfa-disable-btn").addEventListener("click", async () => {
+        const ok = await showConfirmDialog(
+          "Отключить 2FA",
+          "Это сильно снизит безопасность аккаунта. Продолжить?",
+          "Отключить"
+        );
+        if (!ok) return;
+        const { error } = await supabase.auth.mfa.unenroll({ factorId: totp.id });
+        if (error) { await showAlertDialog("Ошибка", error.message); return; }
+        await refreshMfaStatus();
+        closeMfaSetup();
+      });
+      return;
+    }
+
+    // Ещё не включена — генерируем QR
+    const friendlyName = "Cell " + (myProfile && myProfile.username ? "@" + myProfile.username : "");
+    const { data: enrollData, error } = await supabase.auth.mfa.enroll({
+      factorType: "totp",
+      friendlyName,
+    });
+    if (error) {
+      body.innerHTML = `<div class="dialog-text" style="color:var(--danger);">Ошибка: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+
+    const qrSvg = enrollData.totp.qr_code; // это уже <svg>...</svg>
+    const secret = enrollData.totp.secret;
+    const factorId = enrollData.id;
+
+    body.innerHTML = `
+      <div class="dialog-text">
+        1. Открой <b>Google Authenticator</b>, <b>Authy</b> или <b>1Password</b>.<br>
+        2. Отсканируй QR-код.<br>
+        3. Введи 6-значный код из приложения ниже.
+      </div>
+      <div style="background:#fff;padding:12px;border-radius:12px;width:fit-content;margin:0 auto 12px;">
+        ${qrSvg}
+      </div>
+      <div class="dialog-text" style="text-align:center;font-size:12px;">
+        Если QR не сканируется, введи код вручную:<br>
+        <code style="font-size:13px;user-select:all;word-break:break-all;">${escapeHtml(secret)}</code>
+      </div>
+      <input type="text" id="mfa-setup-code" inputmode="numeric" maxlength="6"
+             placeholder="000000" autocomplete="one-time-code"
+             style="width:100%;padding:14px;background:var(--bg-input);
+                    border:1px solid var(--border);border-radius:12px;
+                    color:var(--text);font-size:22px;letter-spacing:8px;
+                    text-align:center;outline:none;margin:10px 0;">
+      <p class="error" id="mfa-setup-error" style="margin-bottom:10px;"></p>
+      <button class="dialog-btn dialog-primary" id="mfa-setup-verify" style="width:100%;">
+        Активировать 2FA
+      </button>`;
+
+    const setupCode = document.getElementById("mfa-setup-code");
+    setupCode.addEventListener("input", () => {
+      setupCode.value = setupCode.value.replace(/\D/g, "").slice(0, 6);
+    });
+    setTimeout(() => setupCode.focus(), 80);
+
+    document.getElementById("mfa-setup-verify").addEventListener("click", async () => {
+      const code = setupCode.value.trim();
+      const err = document.getElementById("mfa-setup-error");
+      err.textContent = "";
+      if (code.length !== 6) { err.textContent = "Введи 6 цифр"; return; }
+
+      const { data: chal, error: chalErr } = await supabase.auth.mfa.challenge({ factorId });
+      if (chalErr) { err.textContent = chalErr.message; return; }
+
+      const { error: verErr } = await supabase.auth.mfa.verify({
+        factorId, challengeId: chal.id, code,
+      });
+      if (verErr) { err.textContent = verErr.message || "Неверный код"; return; }
+
+      await refreshMfaStatus();
+      closeMfaSetup();
+      await showAlertDialog("Готово", "Двухфакторная аутентификация включена!");
+    });
+  } catch (e) {
+    body.innerHTML = `<div class="dialog-text" style="color:var(--danger);">Ошибка: ${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+function closeMfaSetup() {
+  document.getElementById("mfa-setup-overlay").classList.add("hidden");
+}
 
 // ============ Форматирование текста ============
 
@@ -281,6 +498,55 @@ function applyFormatting(escaped) {
     return `${pre}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
   });
   return html;
+}
+
+// ======================================================
+// БЕЗОПАСНОСТЬ: глобальные переменные
+// ======================================================
+let pendingMfaUser = null;
+let inactivityTimer = null;
+const INACTIVITY_MS = 60 * 60 * 1000; // авто-выход через 1 час неактивности
+
+// ---- Защита от брутфорса на клиенте ----
+const LOGIN_ATTEMPTS_KEY = "cell_login_attempts";
+const LOGIN_LOCK_KEY = "cell_login_lock";
+
+function registerLoginAttempt() {
+  try {
+    const now = Date.now();
+    let data = JSON.parse(sessionStorage.getItem(LOGIN_ATTEMPTS_KEY) || "[]");
+    data = data.filter(t => now - t < 15 * 60 * 1000);
+    data.push(now);
+    sessionStorage.setItem(LOGIN_ATTEMPTS_KEY, JSON.stringify(data));
+    if (data.length >= 8) {
+      sessionStorage.setItem(LOGIN_LOCK_KEY, String(now + 5 * 60 * 1000));
+    }
+  } catch (e) {}
+}
+
+function isLoginLocked() {
+  try {
+    const until = parseInt(sessionStorage.getItem(LOGIN_LOCK_KEY) || "0", 10);
+    return until > Date.now();
+  } catch (e) { return false; }
+}
+
+function clearLoginAttempts() {
+  try {
+    sessionStorage.removeItem(LOGIN_ATTEMPTS_KEY);
+    sessionStorage.removeItem(LOGIN_LOCK_KEY);
+  } catch (e) {}
+}
+
+// ---- Авто-выход по неактивности ----
+function resetInactivityTimer() {
+  if (!currentUser) return;
+  clearTimeout(inactivityTimer);
+  inactivityTimer = setTimeout(async () => {
+    try { await supabase.auth.signOut(); } catch (e) {}
+    showAuth();
+    alert("Сессия истекла из-за неактивности. Войди заново.");
+  }, INACTIVITY_MS);
 }
 
 // ======================= 2. СОСТОЯНИЕ =======================
@@ -450,6 +716,7 @@ function showApp(user) {
   // Чистим ВСЁ от предыдущего аккаунта, если был
   resetAppState();
   currentUser = user;
+  resetInactivityTimer();
   document.getElementById("auth-screen").classList.add("hidden");
   document.getElementById("app-screen").classList.remove("hidden");
   initApp().catch((err) => {
@@ -465,6 +732,9 @@ function showApp(user) {
 
 function showAuth() {
   resetAppState();
+  clearTimeout(inactivityTimer);
+  inactivityTimer = null;
+  pendingMfaUser = null;
   currentUser = null; myProfile = null;
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
   myBlockedIds = new Set(); blockedMeIds = new Set();
@@ -489,6 +759,7 @@ function showAuth() {
 // ======================= 5. ИНИЦИАЛИЗАЦИЯ =======================
 async function initApp() {
   setupSidebarMenu();
+  setupMfaUI();
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
   setupAttachments(); setupMediaViewer(); setupEmojiPicker(); setupAboutDialog();
   setupWheel(); setupCommandPalette(); setupMiniProfile(); setupDateFloat();
@@ -5613,6 +5884,7 @@ async function updateMyLastSeen() {
 // не чаще указанного интервала. Это убирает сотни лишних запросов при движении мыши.
 function throttledLastSeen() {
   if (!currentUser) return;
+  resetInactivityTimer();
   const now = Date.now();
   if (now - lastSeenThrottleAt < LAST_SEEN_THROTTLE_MS) return;
   lastSeenThrottleAt = now;
@@ -8028,6 +8300,13 @@ function setupSettings() {
   const closeBtn = document.getElementById("settings-close");
   const toggle = document.getElementById("settings-scroll-mode");
   if (!btn || !overlay) return;
+
+  // Секция 2FA
+  const mfaManageBtn = document.getElementById("mfa-manage-btn");
+  if (mfaManageBtn) mfaManageBtn.addEventListener("click", openMfaSetup);
+
+  const mfaSetupClose = document.getElementById("mfa-setup-close");
+  if (mfaSetupClose) mfaSetupClose.addEventListener("click", closeMfaSetup);
 
   // Акцент-грид живёт в настройках
   const grid = document.getElementById("accent-grid");
