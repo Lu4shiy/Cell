@@ -822,6 +822,8 @@ function setupProfilePanel() {
     markProfileDirty();
     // Обновляем букву на превьюшках, чтобы она соответствовала первой букве имени
     renderAvatarGrid();
+    // Обновляем счётчик символов
+    updateProfileNameCounter();
   });
   document.getElementById("gender-toggle").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-gender]"); if (!btn) return;
@@ -841,6 +843,15 @@ function setupProfilePanel() {
 }
 
 function markProfileDirty() { const btn = document.getElementById("profile-apply"); if (btn) btn.disabled = false; }
+
+function updateProfileNameCounter() {
+  const inp = document.getElementById("profile-displayname");
+  const counter = document.getElementById("profile-displayname-counter");
+  if (!inp || !counter) return;
+  const len = inp.value.length;
+  counter.textContent = `${len} / 25`;
+  counter.classList.toggle("near-limit", len >= 20);
+}
 
 async function applyProfileChanges() {
   const unameInput = document.getElementById("profile-username");
@@ -891,6 +902,8 @@ async function openProfilePanel() {
   updateGenderButtons();
   const ui = document.getElementById("profile-username");
   ui.value = myProfile.username; validatedUsername = myProfile.username;
+  // Обновляем счётчик после подстановки имени
+  updateProfileNameCounter();
   const hint = document.getElementById("username-hint"); hint.className = "username-hint"; hint.textContent = "";
   draftProfile = {}; document.getElementById("profile-apply").disabled = true;
   await refreshMyGiftsCount();
@@ -3445,23 +3458,35 @@ function isFlagEmoji(emoji) {
   return false;
 }
 
-// Единственная ручная подмена — лесбийский флаг вместо транс-флага
-// (в Twemoji этот кодпоинт рисуется как транс-флаг, а нужен лесбийский).
-const FLAG_URL_OVERRIDES = {
-  "\u{1F3F3}\uFE0F\u200D\u26A7\uFE0F":
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Lesbian_pride_flag_2018.svg/64px-Lesbian_pride_flag_2018.svg.png"
-};
+// Спец-случай: 🏳️‍⚧️ (транс-флаг) в Twemoji есть, но нам нужен лесбийский флаг.
+// Сравниваем по нормализованному списку кодпоинтов (без FE0F) — так сработает
+// независимо от того, записан ли эмодзи с хвостовым FE0F или без.
+const LESBIAN_FLAG_URL =
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Lesbian_pride_flag_2018.svg/64px-Lesbian_pride_flag_2018.svg.png";
 
 function twemojiUrl(emoji) {
-  if (FLAG_URL_OVERRIDES[emoji]) return FLAG_URL_OVERRIDES[emoji];
   const codepoints = [...emoji]
     .map((c) => c.codePointAt(0).toString(16))
     .filter((cp) => cp !== "fe0f")
     .join("-");
+  if (codepoints === "1f3f3-200d-26a7") return LESBIAN_FLAG_URL;
   // Twemoji 15.0.3 (jdecked/twemoji) — там есть все свежие эмодзи, включая tag-флаги
   // Англии/Шотландии/Уэльса. Старая twitter/twemoji@14 их частично не содержит.
   return `https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.0.3/assets/svg/${codepoints}.svg`;
 }
+
+// Глобальный fallback для эмодзи, которых нет в Twemoji (например 🇨🇶 — Сарк).
+// Просто показывает сам эмодзи как текст, чтобы вместо «битой картинки» был символ.
+window.__emojiFallback = function (img) {
+  if (!img || img.dataset.fallbackDone === "1") return;
+  img.dataset.fallbackDone = "1";
+  const emoji = img.dataset.emoji || img.alt || "";
+  if (!emoji) return;
+  const span = document.createElement("span");
+  span.className = "emoji-fallback-inline";
+  span.textContent = emoji;
+  img.replaceWith(span);
+};
 
 // Заменяет флаги-эмодзи в готовом HTML на <img>
 function replaceFlagsInHtml(html) {
@@ -3479,7 +3504,7 @@ const EMOJI_SETS = {
   activities: "⚽ 🏀 🏈 ⚾ 🥎 🎾 🏐 🏉 🥏 🎱 🪀 🏓 🏸 🏒 🏑 🥍 🏏 🥅 ⛳ 🪁 🏹 🎣 🤿 🥊 🥋 🎽 🛹 🛼 🛷 ⛸️ 🥌 🎿 ⛷️ 🏂 🪂 🏋️ 🤼 🤸 ⛹️ 🤺 🤾 🏌️ 🏇 🧘 🏄 🏊 🤽 🚣 🧗 🚵 🚴 🏆 🥇 🥈 🥉 🏅 🎖️ 🏵️ 🎗️ 🎫 🎟️ 🎪 🤹 🎭 🩰 🎨 🎬 🎤 🎧 🎼 🎹 🥁 🎷 🎺 🎸 🪕 🎻 🎲 ♟️ 🎯 🎳 🎮 🎰 🧩".split(" "),
   objects: "⌚ 📱 📲 💻 ⌨️ 🖥️ 🖨️ 🖱️ 🖲️ 🕹️ 🗜️ 💽 💾 💿 📀 📼 📷 📸 📹 🎥 📽️ 🎞️ 📞 ☎️ 📟 📠 📺 📻 🎙️ 🎚️ 🎛️ 🧭 ⏱️ ⏲️ ⏰ 🕰️ ⌛ ⏳ 📡 🔋 🔌 💡 🔦 🕯️ 🪔 🧯 🛢️ 💸 💵 💴 💶 💷 💰 💳 💎 ⚖️ 🧰 🔧 🔨 ⚒️ 🛠️ ⛏️ 🔩 ⚙️ 🧱 ⛓️ 🧲 🔫 💣 🧨 🪓 🔪 🗡️ ⚔️ 🛡️ 🚬 ⚰️ 🪦 ⚱️ 🏺 🔮 📿 🧿 💈 ⚗️ 🔭 🔬 🕳️ 🩹 🩺 💊 💉 🩸 🧬 🦠 🧫 🧪 🌡️ 🧹 🪠 🧺 🧻 🚽 🚰 🚿 🛁 🛀 🧼 🪥 🪒 🧽 🪣 🧴 🛎️ 🔑 🗝️ 🚪 🪑 🛋️ 🛏️ 🛌 🧸 🪆 🖼️ 🪞 🪟 🛍️ 🛒 🎁 🎈 🎏 🎀 🪄 🪅 🎊 🎉 🎎 🏮 🎐 🧧 ✉️ 📩 📨 📧 💌 📥 📤 📦 🏷️ 📪 📫 📬 📭 📮 📯 📜 📃 📄 📑 🧾 📊 📈 📉 🗒️ 🗓️ 📆 📅 🗑️ 📇 🗃️ 🗳️ 🗄️ 📋 📁 📂 🗂️ 🗞️ 📰 📓 📔 📒 📕 📗 📘 📙 📚 📖 🔖 🧷 🔗 📎 🖇️ 📐 📏 🧮 📌 📍 ✂️ 🖊️ 🖋️ ✒️ 🖌️ 🖍️ 📝 ✏️ 🔍 🔎 🔏 🔐 🔒 🔓".split(" "),
   symbols: "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 ☮️ ✝️ ☪️ 🕉️ ☸️ ✡️ 🔯 🕎 ☯️ ☦️ 🛐 ⛎ ♈ ♉ ♊ ♋ ♌ ♍ ♎ ♏ ♐ ♑ ♒ ♓ 🆔 ⚛️ 🉑 ☢️ ☣️ 📴 📳 🈶 🈚 🈸 🈺 🈷️ ✴️ 🆚 💮 🉐 ㊙️ ㊗️ 🈴 🈵 🈹 🈲 🅰️ 🅱️ 🆎 🆑 🅾️ 🆘 ❌ ⭕ 🛑 ⛔ 📛 🚫 💯 💢 ♨️ 🚷 🚯 🚳 🚱 🔞 📵 🚭 ❗ ❕ ❓ ❔ ‼️ ⁉️ 🔅 🔆 〽️ ⚠️ 🚸 🔱 ⚜️ 🔰 ♻️ ✅ 🈯 💹 ❇️ ✳️ ❎ 🌐 💠 Ⓜ️ 🌀 💤 🏧 🚾 ♿ 🅿️ 🈳 🈂️ 🛂 🛃 🛄 🛅 🚹 🚺 🚼 🚻 🚮 🎦 📶 🈁 🔣 ℹ️ 🔤 🔡 🔠 🆖 🆗 🆙 🆒 🆕 🆓 0️⃣ 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ 6️⃣ 7️⃣ 8️⃣ 9️⃣ 🔟 🔢 #️⃣ *️⃣ ⏏️ ▶️ ⏸️ ⏯️ ⏹️ ⏺️ ⏭️ ⏮️ ⏩ ⏪ ⏫ ⏬ ◀️ 🔼 🔽 ➡️ ⬅️ ⬆️ ⬇️ ↗️ ↘️ ↙️ ↖️ ↕️ ↔️ ↪️ ↩️ ⤴️ ⤵️ 🔀 🔁 🔂 🔄 🔃 🎵 🎶 ➕ ➖ ➗ ✖️ ♾️ 💲 💱 ™️ ©️ ®️ 〰️ ➰ ➿ 🔚 🔙 🔛 🔝 🔜 ✔️ ☑️ 🔘 🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🟤 🔺 🔻 🔸 🔹 🔶 🔷 🔳 🔲 ▪️ ▫️ ◾ ◽ ◼️ ◻️ 🟥 🟧 🟨 🟩 🟦 🟪 ⬛ ⬜ 🟫 🔈 🔇 🔉 🔊 🔔 🔕 📣 📢 👁️‍🗨️ 💬 💭 🗯️ ♠️ ♣️ ♥️ ♦️ 🃏 🎴 🀄 🕐 🕑 🕒 🕓 🕔 🕕 🕖 🕗 🕘 🕙 🕚 🕛".split(" "),
-  flags: "🏳️ 🏴 🏴‍☠️ 🏁 🚩 🏳️‍🌈 🏳️‍⚧️ 🇺🇳 🇦🇫 🇦🇽 🇦🇱 🇩🇿 🇦🇸 🇦🇩 🇦🇴 🇦🇮 🇦🇶 🇦🇬 🇦🇷 🇦🇲 🇦🇼 🇦🇺 🇦🇹 🇦🇿 🇧🇸 🇧🇭 🇧🇩 🇧🇧 🇧🇾 🇧🇪 🇧🇿 🇧🇯 🇧🇲 🇧🇹 🇧🇴 🇧🇦 🇧🇼 🇧🇷 🇻🇬 🇧🇳 🇧🇬 🇧🇫 🇧🇮 🇰🇭 🇨🇲 🇨🇦 🇮🇨 🇨🇻 🇧🇶 🇰🇾 🇨🇫 🇹🇩 🇮🇴 🇨🇱 🇨🇳 🇨🇽 🇨🇨 🇨🇴 🇰🇲 🇨🇬 🇨🇩 🇨🇰 🇨🇷 🇨🇮 🇭🇷 🇨🇺 🇨🇼 🇨🇾 🇨🇿 🇩🇰 🇩🇯 🇩🇲 🇩🇴 🇪🇨 🇪🇬 🇸🇻 🇬🇶 🇪🇷 🇪🇪 🇸🇿 🇪🇹 🇪🇺 🇫🇰 🇫🇴 🇫🇯 🇫🇮 🇫🇷 🇬🇫 🇵🇫 🇹🇫 🇬🇦 🇬🇲 🇬🇪 🇩🇪 🇬🇭 🇬🇮 🇬🇷 🇬🇱 🇬🇩 🇬🇵 🇬🇺 🇬🇹 🇬🇬 🇬🇳 🇬🇼 🇬🇾 🇭🇹 🇭🇳 🇭🇰 🇭🇺 🇮🇸 🇮🇳 🇮🇩 🇮🇷 🇮🇶 🇮🇪 🇮🇲 🇮🇱 🇮🇹 🇯🇲 🇯🇵 🎌 🇯🇪 🇯🇴 🇰🇿 🇰🇪 🇰🇮 🇽🇰 🇰🇼 🇰🇬 🇱🇦 🇱🇻 🇱🇧 🇱🇸 🇱🇷 🇱🇾 🇱🇮 🇱🇹 🇱🇺 🇲🇴 🇲🇬 🇲🇼 🇲🇾 🇲🇻 🇲🇱 🇲🇹 🇲🇭 🇲🇶 🇲🇷 🇲🇺 🇾🇹 🇲🇽 🇫🇲 🇲🇩 🇲🇨 🇲🇳 🇲🇪 🇲🇸 🇲🇦 🇲🇿 🇲🇲 🇳🇦 🇳🇷 🇳🇵 🇳🇱 🇳🇨 🇳🇿 🇳🇮 🇳🇪 🇳🇬 🇳🇺 🇳🇫 🇰🇵 🇲🇰 🇲🇵 🇳🇴 🇴🇲 🇵🇰 🇵🇼 🇵🇸 🇵🇦 🇵🇬 🇵🇾 🇵🇪 🇵🇭 🇵🇳 🇵🇱 🇵🇹 🇵🇷 🇶🇦 🇷🇪 🇷🇴 🇷🇺 🇷🇼 🇼🇸 🇸🇲 🇸🇹 🇨🇶 🇸🇦 🇸🇳 🇷🇸 🇸🇨 🇸🇱 🇸🇬 🇸🇽 🇸🇰 🇸🇮 🇬🇸 🇸🇧 🇸🇴 🇿🇦 🇰🇷 🇸🇸 🇪🇸 🇱🇰 🇧🇱 🇸🇭 🇰🇳 🇱🇨 🇵🇲 🇻🇨 🇸🇩 🇸🇷 🇸🇪 🇨🇭 🇸🇾 🇹🇼 🇹🇯 🇹🇿 🇹🇭 🇹🇱 🇹🇬 🇹🇰 🇹🇴 🇹🇹 🇹🇳 🇹🇷 🇹🇲 🇹🇨 🇹🇻 🇺🇬 🇺🇦 🇦🇪 🇬🇧 🏴󠁧󠁢󠁥󠁮󠁧󠁿 🏴󠁧󠁢󠁳󠁣󠁴󠁿 🏴󠁧󠁢󠁷󠁬󠁳󠁿 🇺🇸 🇺🇾 🇻🇮 🇺🇿 🇻🇺 🇻🇦 🇻🇪 🇻🇳 🇼🇫 🇪🇭 🇾🇪 🇿🇲 🇿🇼".split(" ")
+  flags: "🏳️ 🏴 🏴‍☠️ 🏁 🚩 🏳️‍🌈 🏳️‍⚧️ 🇺🇳 🇦🇫 🇦🇽 🇦🇱 🇩🇿 🇦🇸 🇦🇩 🇦🇴 🇦🇮 🇦🇶 🇦🇬 🇦🇷 🇦🇲 🇦🇼 🇦🇺 🇦🇹 🇦🇿 🇧🇸 🇧🇭 🇧🇩 🇧🇧 🇧🇾 🇧🇪 🇧🇿 🇧🇯 🇧🇲 🇧🇹 🇧🇴 🇧🇦 🇧🇼 🇧🇷 🇻🇬 🇧🇳 🇧🇬 🇧🇫 🇧🇮 🇰🇭 🇨🇲 🇨🇦 🇮🇨 🇨🇻 🇧🇶 🇰🇾 🇨🇫 🇹🇩 🇮🇴 🇨🇱 🇨🇳 🇨🇽 🇨🇨 🇨🇴 🇰🇲 🇨🇬 🇨🇩 🇨🇰 🇨🇷 🇨🇮 🇭🇷 🇨🇺 🇨🇼 🇨🇾 🇨🇿 🇩🇰 🇩🇯 🇩🇲 🇩🇴 🇪🇨 🇪🇬 🇸🇻 🇬🇶 🇪🇷 🇪🇪 🇸🇿 🇪🇹 🇪🇺 🇫🇰 🇫🇴 🇫🇯 🇫🇮 🇫🇷 🇬🇫 🇵🇫 🇹🇫 🇬🇦 🇬🇲 🇬🇪 🇩🇪 🇬🇭 🇬🇮 🇬🇷 🇬🇱 🇬🇩 🇬🇵 🇬🇺 🇬🇹 🇬🇬 🇬🇳 🇬🇼 🇬🇾 🇭🇹 🇭🇳 🇭🇰 🇭🇺 🇮🇸 🇮🇳 🇮🇩 🇮🇷 🇮🇶 🇮🇪 🇮🇲 🇮🇱 🇮🇹 🇯🇲 🇯🇵 🎌 🇯🇪 🇯🇴 🇰🇿 🇰🇪 🇰🇮 🇽🇰 🇰🇼 🇰🇬 🇱🇦 🇱🇻 🇱🇧 🇱🇸 🇱🇷 🇱🇾 🇱🇮 🇱🇹 🇱🇺 🇲🇴 🇲🇬 🇲🇼 🇲🇾 🇲🇻 🇲🇱 🇲🇹 🇲🇭 🇲🇶 🇲🇷 🇲🇺 🇾🇹 🇲🇽 🇫🇲 🇲🇩 🇲🇨 🇲🇳 🇲🇪 🇲🇸 🇲🇦 🇲🇿 🇲🇲 🇳🇦 🇳🇷 🇳🇵 🇳🇱 🇳🇨 🇳🇿 🇳🇮 🇳🇪 🇳🇬 🇳🇺 🇳🇫 🇰🇵 🇲🇰 🇲🇵 🇳🇴 🇴🇲 🇵🇰 🇵🇼 🇵🇸 🇵🇦 🇵🇬 🇵🇾 🇵🇪 🇵🇭 🇵🇳 🇵🇱 🇵🇹 🇵🇷 🇶🇦 🇷🇪 🇷🇴 🇷🇺 🇷🇼 🇼🇸 🇸🇲 🇸🇹 🇸🇦 🇸🇳 🇷🇸 🇸🇨 🇸🇱 🇸🇬 🇸🇽 🇸🇰 🇸🇮 🇬🇸 🇸🇧 🇸🇴 🇿🇦 🇰🇷 🇸🇸 🇪🇸 🇱🇰 🇧🇱 🇸🇭 🇰🇳 🇱🇨 🇵🇲 🇻🇨 🇸🇩 🇸🇷 🇸🇪 🇨🇭 🇸🇾 🇹🇼 🇹🇯 🇹🇿 🇹🇭 🇹🇱 🇹🇬 🇹🇰 🇹🇴 🇹🇹 🇹🇳 🇹🇷 🇹🇲 🇹🇨 🇹🇻 🇺🇬 🇺🇦 🇦🇪 🇬🇧 🏴󠁧󠁢󠁥󠁮󠁧󠁿 🏴󠁧󠁢󠁳󠁣󠁴󠁿 🏴󠁧󠁢󠁷󠁬󠁳󠁿 🇺🇸 🇺🇾 🇻🇮 🇺🇿 🇻🇺 🇻🇦 🇻🇪 🇻🇳 🇼🇫 🇪🇭 🇾🇪 🇿🇲 🇿🇼".split(" ")
 };
 
 let emojiPickerOpen = false;
@@ -3616,7 +3641,8 @@ function renderEmojiGrid() {
   grid.innerHTML = list.map((em) => {
     // Все эмодзи рисуем через Twemoji — так они одинаково выглядят на всех системах
     // (Windows/Linux не имеют глифов для многих новых эмодзи — рисовались «пустые квадраты»).
-    const inner = `<img class="emoji-img-inline" src="${twemojiUrl(em)}" alt="${escapeHtml(em)}" data-emoji="${escapeHtml(em)}" draggable="false">`;
+    // onerror вызывает глобальный fallback, если картинки нет в Twemoji (напр. 🇨🇶 — Сарк).
+    const inner = `<img class="emoji-img-inline" src="${twemojiUrl(em)}" alt="${escapeHtml(em)}" data-emoji="${escapeHtml(em)}" draggable="false" onerror="window.__emojiFallback && window.__emojiFallback(this)">`;
     return `<button type="button" class="emoji-item" data-emoji="${escapeHtml(em)}">${inner}</button>`;
   }).join("");
   grid.querySelectorAll(".emoji-item").forEach((b) => {
@@ -3635,19 +3661,8 @@ function insertEmoji(emoji) {
   // Пикер не закрываем — можно накликать несколько, как в Телеграме
 }
 
-// Если Twemoji-картинка не загрузилась (совсем новый эмодзи, CDN не отдал) —
-// подменяем её на текстовый эмодзи, чтобы вместо «битой иконки» был хоть какой-то символ.
-document.addEventListener("error", (e) => {
-  const img = e.target;
-  if (!img || img.tagName !== "IMG") return;
-  if (!img.classList.contains("emoji-img-inline")) return;
-  const emoji = img.dataset.emoji || img.alt || "";
-  if (!emoji) return;
-  const span = document.createElement("span");
-  span.className = "emoji-fallback-inline";
-  span.textContent = emoji;
-  img.replaceWith(span);
-}, true);
+// (глобальный обработчик убран — используем inline onerror="window.__emojiFallback(this)"
+// в renderEmojiGrid, он срабатывает всегда, в отличие от addEventListener("error") в capture-фазе.)
 
 // ---- Вложения ----
 const ATTACH_MAX_SIZE = 50 * 1024 * 1024; // 50 МБ

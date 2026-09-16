@@ -459,7 +459,9 @@ input:focus {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
+.user-item-body { min-width: 0; }
 
 .user-item-time { font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
 
@@ -1454,7 +1456,7 @@ input:focus {
 /* Профиль                                                 */
 /* ====================================================== */
 
-.dialog-profile { max-width: 460px; position: relative; }
+.dialog-profile { max-width: 460px; position: relative; overflow-x: hidden; }
 .profile-section { margin-bottom: 22px; }
 
 .profile-label {
@@ -1642,12 +1644,17 @@ input:focus {
   color: var(--text);
   margin-bottom: 4px;
   text-align: center;
-  /* Переносим длинные имена — иначе они растягивают карточку и обрезают кнопки */
+  /* Длинное имя переносится и не растягивает диалог */
   max-width: 100%;
   padding: 0 12px;
-  word-break: break-word;
+  word-break: break-all;
   overflow-wrap: anywhere;
   line-height: 1.25;
+}
+.profile-hero {
+  /* Не даём содержимому вылезти за пределы диалога и съесть кнопки */
+  overflow: hidden;
+  min-width: 0;
 }
 .profile-hero-status { font-size: 13px; color: var(--text-dim); }
 .profile-hero-status.online { color: var(--accent); font-weight: 600; }
@@ -3607,4 +3614,17 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   border-radius: 50%;
   user-select: none;
   pointer-events: none;
+}
+
+/* Счётчик символов под полем имени */
+.profile-name-counter {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: right;
+  margin-top: 4px;
+  transition: color 0.15s;
+}
+.profile-name-counter.near-limit {
+  color: var(--accent);
+  font-weight: 600;
 }
