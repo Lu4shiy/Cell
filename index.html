@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cell</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ibb.co https://cdn.jsdelivr.net https://upload.wikimedia.org https://wsrv.nl https://*.supabase.co; media-src 'self' blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://wsrv.nl; font-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <link rel="stylesheet" href="style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpolygon points='50,5 93,27 93,73 50,95 7,73 7,27' fill='%23f5a623'/%3E%3Ccircle cx='50' cy='50' r='13' fill='%2315110d'/%3E%3C/svg%3E">
 </head>
@@ -36,7 +39,7 @@
         <input type="text" id="reg-username" placeholder="Юзернейм (например, ivan)" required>
         <input type="text" id="reg-displayname" placeholder="Имя (например, Иван)" required>
         <input type="email" id="reg-email" placeholder="Email" required>
-        <input type="password" id="reg-password" placeholder="Пароль (мин. 6 символов)" required minlength="6">
+        <input type="password" id="reg-password" placeholder="Пароль (мин. 10, A-Z, a-z, 0-9)" required minlength="10">
         <button type="submit" class="btn-primary">Создать аккаунт</button>
         <p class="error" id="register-error"></p>
       </form>

@@ -161,7 +161,14 @@ registerForm.addEventListener("submit", async (e) => {
   if (!/^[a-zA-Z0-9_-]{3,32}$/.test(username)) { errEl.textContent = "Юзернейм: 3-32 символа, a-z, 0-9, _ и -"; return; }
   if (!displayName) { errEl.textContent = "Введите имя"; return; }
   if (!email) { errEl.textContent = "Введите email"; return; }
-  if (!password || password.length < 6) { errEl.textContent = "Пароль минимум 6 символов"; return; }
+  if (!password || password.length < 10) {
+    errEl.textContent = "Пароль минимум 10 символов";
+    return;
+  }
+  if (!/[A-ZА-Я]/.test(password) || !/[a-zа-я]/.test(password) || !/\d/.test(password)) {
+    errEl.textContent = "Пароль должен содержать заглавную, строчную букву и цифру";
+    return;
+  }
   errEl.style.color = "var(--accent)"; errEl.textContent = "Регистрирую...";
   try {
     const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { username, display_name: displayName } } });
@@ -1271,18 +1278,11 @@ function resizeImage(file, maxSize) {
 
 // Возвращает true, если username зарезервирован и НЕ доступен текущему пользователю
 async function isUsernameReservedForOther(username) {
-  const clean = String(username || "").trim().toLowerCase();
+  const clean = String(username || "").trim();
   if (!clean) return false;
-  // Зарезервированных юзернеймов мало (несколько штук) — берём все и сравниваем в JS.
-  // ilike() не годится: «_» — это wildcard в SQL и даёт ложные срабатывания.
-  const { data, error } = await supabase.from("reserved_usernames")
-    .select("username, reserved_for");
-  if (error || !data) return false;
-  const row = data.find((r) => String(r.username || "").toLowerCase() === clean);
-  if (!row) return false;
-  if (!row.reserved_for) return true;                      // зарезервировано для всех
-  if (row.reserved_for === currentUser.id) return false;   // открыто тебе
-  return true;                                             // занято кем-то другим
+  const { data, error } = await supabase.rpc("is_username_reserved", { p_username: clean });
+  if (error) return false;
+  return !!data;
 }
 
 async function checkUsernameLive(value) {
@@ -2988,7 +2988,7 @@ async function buildMsgHtml(msg) {
     </div>`;
   }
   if (msg.message_type === "attachment") {
-    html += `<div class="msg-attachment">${buildAttachmentHtml(msg)}</div>`;
+    html += `<div class="msg-attachment">${await buildAttachmentHtml(msg)}</div>`;
     if (msg.content) {
       html += `<div class="msg-text" style="margin-top:6px;">${replaceFlagsInHtml(applyFormatting(escapeHtml(msg.content || "")))}</div>`;
     }
@@ -4135,7 +4135,39 @@ function formatFileSize(bytes) {
   return (bytes / 1024 / 1024 / 1024).toFixed(2) + " ГБ";
 }
 
-function buildAttachmentHtml(msg) {
+// Кэш signed URL: path -> { url, expiresAt }
+const signedUrlCache = new Map();
+
+// Извлекает путь файла внутри bucket из публичной URL (старой или новой)
+function extractStoragePath(url) {
+  if (!url) return null;
+  const m = /\/storage\/v1\/object\/(?:public|sign)\/attachments\/([^?]+)/.exec(url);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+// Получает signed URL для пути (с кэшем ~55 минут)
+async function getSignedUrl(url) {
+  if (!url) return null;
+  const path = extractStoragePath(url);
+  if (!path) return url; // не наш bucket — отдаём как есть
+
+  const now = Date.now();
+  const cached = signedUrlCache.get(path);
+  if (cached && cached.expiresAt > now + 60 * 1000) return cached.url;
+
+  try {
+    const { data, error } = await supabase.storage
+      .from("attachments")
+      .createSignedUrl(path, 3600); // 1 час
+    if (error || !data || !data.signedUrl) return url;
+    signedUrlCache.set(path, { url: data.signedUrl, expiresAt: now + 55 * 60 * 1000 });
+    return data.signedUrl;
+  } catch (e) {
+    return url;
+  }
+}
+
+async function buildAttachmentHtml(msg) {
   const url = msg.image_url || "";
   const name = msg.file_name || "файл";
   const size = msg.file_size || 0;
@@ -4143,13 +4175,16 @@ function buildAttachmentHtml(msg) {
   if (!url) {
     return `<div class="msg-attachment-uploading">⏳ Загрузка…</div>`;
   }
+
+  const displayUrl = await getSignedUrl(url);
+
   if (kind === "image") {
-    return `<img src="${escapeHtml(url)}" class="msg-attachment-image" alt="" data-media-url="${escapeHtml(url)}" data-media-kind="image">`;
+    return `<img src="${escapeHtml(displayUrl)}" class="msg-attachment-image" alt="" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="image">`;
   }
   if (kind === "video") {
-    return `<video src="${escapeHtml(url)}" class="msg-attachment-video" controls preload="metadata" data-media-url="${escapeHtml(url)}" data-media-kind="video"></video>`;
+    return `<video src="${escapeHtml(displayUrl)}" class="msg-attachment-video" controls preload="metadata" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="video"></video>`;
   }
-  return `<a class="msg-attachment-file" href="${escapeHtml(url)}" target="_blank" rel="noopener" download="${escapeHtml(name)}">
+  return `<a class="msg-attachment-file" href="${escapeHtml(displayUrl)}" target="_blank" rel="noopener" download="${escapeHtml(name)}">
     <span class="maf-icon">📎</span>
     <span style="flex:1;min-width:0;">
       <span class="maf-name">${escapeHtml(name)}</span>
@@ -4245,8 +4280,9 @@ async function uploadAndSendAttachment(file, chatId, caption, asFile) {
     return;
   }
 
-  const pub = supabase.storage.from("attachments").getPublicUrl(path);
-  const url = pub && pub.data ? pub.data.publicUrl : null;
+  // Для приватного bucket сохраняем "маршрутный" URL без токена.
+  // Реальный signed URL генерируется при отображении через getSignedUrl().
+  const url = `${SUPABASE_URL}/storage/v1/object/public/attachments/${path}`;
 
   const payload = {
     chat_id: chatId,
