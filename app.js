@@ -683,6 +683,24 @@ async function refreshE2eeStatus() {
   }
 }
 
+function updateE2eeComposerHint() {
+  const hint = document.getElementById("e2ee-composer-hint");
+  const txt = document.getElementById("e2ee-composer-hint-text");
+  if (!hint || !txt) return;
+
+  if (!currentOtherUser || !cryptoUnlocked || !myProfile || !myProfile.e2ee_enabled) {
+    hint.classList.add("hidden");
+    return;
+  }
+  const other = profileCache.get(currentOtherUser.id);
+  if (!other || !other.public_key) {
+    hint.classList.add("hidden");
+    return;
+  }
+  hint.classList.remove("hidden");
+  txt.textContent = "Зашифровано end-to-end";
+}
+
 async function unlockE2eeWithPassword(password) {
   if (!myE2eeSecret) {
     const { data } = await supabase.from("user_e2ee_secrets")
@@ -710,6 +728,7 @@ async function unlockE2eeWithPassword(password) {
   cryptoUnlocked = true;
   sharedKeyCache.clear();
   await refreshE2eeStatus();
+  updateE2eeComposerHint();
 }
 
 function lockE2ee() {
@@ -947,6 +966,92 @@ function setupE2eeUI() {
   if (closeBtn) closeBtn.addEventListener("click", closeE2eeSetup);
 }
 
+// ═══════════════════════════════════════════════════════
+// E2EE: шифрование исходящих и расшифровка входящих
+// ═══════════════════════════════════════════════════════
+
+// Кэш расшифрованных текстов. Ключ — msgId.
+// Инвалидируется при выходе (lockE2ee) и при смене чата (closeCurrentChat).
+const decryptedCache = new Map();
+
+// Шифрует исходящий текст. Возвращает {content, encrypted}.
+// Если E2EE недоступен (мы не разблокированы / у собеседника нет ключа) — отдаёт как есть.
+async function encryptOutgoingText(chatId, text) {
+  // Не шифруем: пусто, служебные типы, каналы
+  if (!text) return { content: text, encrypted: false };
+  if (!cryptoUnlocked || !myIdentityPrivateJwk) return { content: text, encrypted: false };
+
+  // Каналы пока НЕ шифруем (отдельная фаза)
+  if (channelCache.has(chatId)) return { content: text, encrypted: false };
+
+  // Нужен собеседник. В DM — currentOtherUser.
+  if (!currentOtherUser || !currentOtherUser.id) return { content: text, encrypted: false };
+
+  // Если собеседник не публиковал публичный ключ — не шифруем
+  const other = profileCache.get(currentOtherUser.id);
+  let otherPubStr = other && other.public_key;
+  if (!otherPubStr) {
+    const { data } = await supabase.from("profiles")
+      .select("public_key").eq("id", currentOtherUser.id).single();
+    otherPubStr = data && data.public_key;
+    if (other && otherPubStr) other.public_key = otherPubStr;
+  }
+  if (!otherPubStr) return { content: text, encrypted: false };
+
+  try {
+    const sharedKey = await getSharedKeyFor(currentOtherUser.id);
+    if (!sharedKey) return { content: text, encrypted: false };
+    const cipher = await Crypto.encryptMessage(sharedKey, text);
+    return { content: cipher, encrypted: true };
+  } catch (e) {
+    console.warn("encrypt failed, fallback to plaintext:", e);
+    return { content: text, encrypted: false };
+  }
+}
+
+// Расшифровывает сообщение. Возвращает plaintext (или исходный content, если не расшифровать).
+async function getPlaintext(msg) {
+  if (!msg) return "";
+  if (!msg.encrypted) return msg.content || "";
+  if (!msg.content) return "";
+  if (String(msg.content).startsWith("tmp_") || msg.message_type === "attachment") {
+    // у attachment зашифрован не content, а сам файл (Фаза 3)
+  }
+
+  // Кэш
+  if (decryptedCache.has(msg.id)) return decryptedCache.get(msg.id);
+
+  // Нужен ключ
+  if (!cryptoUnlocked || !myIdentityPrivateJwk) {
+    return "🔒 Зашифровано — разблокируйте в настройках";
+  }
+  // В DM собеседник — sender. Если это моё сообщение — собеседник всё равно противоположная сторона.
+  const otherId = msg.sender_id === currentUser.id
+    ? (currentOtherUser && currentOtherUser.id)
+    : msg.sender_id;
+
+  if (!otherId) return "🔒 Не удалось расшифровать";
+
+  try {
+    const sharedKey = await getSharedKeyFor(otherId);
+    if (!sharedKey) return "🔒 Нет ключа для расшифровки";
+    const plain = await Crypto.decryptMessage(sharedKey, msg.content);
+    decryptedCache.set(msg.id, plain);
+    return plain;
+  } catch (e) {
+    return "🔒 Не удалось расшифровать";
+  }
+}
+
+// Синхронная обёртка для мест, где уже есть расшифрованный текст или нужен фолбэк.
+// Если в кэше есть — берём оттуда. Иначе возвращает плейсхолдер.
+function getPlaintextSync(msg) {
+  if (!msg) return "";
+  if (!msg.encrypted) return msg.content || "";
+  if (decryptedCache.has(msg.id)) return decryptedCache.get(msg.id);
+  return "🔒 Зашифровано";
+}
+
 // ======================= 3. АКЦЕНТ / АВАТАРЫ =======================
 function applyAccent(accent) { document.documentElement.setAttribute("data-accent", accent || "orange"); }
 function hashCode(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
@@ -1052,6 +1157,7 @@ function showApp(user) {
         '<br><br>Открой F12 → Console и покажи ошибку.</div>';
     }
   });
+  setTimeout(updateE2eeComposerHint, 500);
 }
 
 function showAuth() {
@@ -1060,6 +1166,7 @@ function showAuth() {
   inactivityTimer = null;
   pendingMfaUser = null;
   lockE2ee();
+  decryptedCache.clear();
   currentUser = null; myProfile = null;
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
   myBlockedIds = new Set(); blockedMeIds = new Set();
@@ -1805,11 +1912,15 @@ function subscribeToGlobalMessages() {
       const time = new Date(m.created_at).getTime();
       const prev = chatLastMsg.get(m.chat_id) || {};
       const isMine = m.sender_id === currentUser.id;
+      let previewText;
+      if (m.message_type === "tokens") previewText = `🧩 +${m.tokens_amount}`;
+      else if (m.message_type === "gift") previewText = "🎁 Подарок";
+      else if (m.message_type === "attachment") previewText = m.file_kind === "image" ? "📷 Фото" : m.file_kind === "video" ? "🎥 Видео" : "📎 Файл";
+      else if (m.encrypted) previewText = "🔒 Зашифровано";
+      else previewText = (m.content || "");
+
       chatLastMsg.set(m.chat_id, {
-        text: m.message_type === "tokens" ? `🧩 +${m.tokens_amount}`
-             : m.message_type === "gift" ? "🎁 Подарок"
-             : m.message_type === "attachment" ? (m.file_kind === "image" ? "📷 Фото" : m.file_kind === "video" ? "🎥 Видео" : "📎 Файл")
-             : (m.content || ""),
+        text: previewText,
         time, senderId: m.sender_id,
         unread: isMine ? (prev.unread || 0) : (prev.unread || 0) + 1,
       });
@@ -1966,12 +2077,15 @@ async function loadRecentChats() {
   chatIdByUser.clear();
   dmItems.forEach((it) => {
     chatIdByUser.set(it.user_id, it.chat_id);
-    const preview = it.lastMsg
-      ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
-        : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
-        : it.lastMsg.message_type === "attachment" ? (it.lastMsg.file_kind === "image" ? "📷 Фото" : it.lastMsg.file_kind === "video" ? "🎥 Видео" : "📎 Файл")
-        : stripMarkdown(it.lastMsg.content || ""))
-      : "";
+    let previewRaw = "";
+    if (it.lastMsg) {
+      if (it.lastMsg.message_type === "tokens") previewRaw = `🧩 +${it.lastMsg.tokens_amount}`;
+      else if (it.lastMsg.message_type === "gift") previewRaw = "🎁 Подарок";
+      else if (it.lastMsg.message_type === "attachment") previewRaw = it.lastMsg.file_kind === "image" ? "📷 Фото" : it.lastMsg.file_kind === "video" ? "🎥 Видео" : "📎 Файл";
+      else if (it.lastMsg.encrypted) previewRaw = "🔒 Зашифровано";
+      else previewRaw = stripMarkdown(it.lastMsg.content || "");
+    }
+    const preview = previewRaw;
     chatLastMsg.set(it.chat_id, { text: preview, time: it.lastTime, senderId: it.lastMsg ? it.lastMsg.sender_id : null, unread: it.unread });
   });
   channelItems.forEach((it) => {
@@ -2258,6 +2372,7 @@ async function updateChannelComposerState() {
 
 async function openChannel(chatId) {
   const mySeq = ++openSeq;
+  decryptedCache.clear();
   // СРАЗУ скрываем composer синхронно, до любых await — иначе мелькнёт
   document.getElementById("composer").classList.add("hidden");
   document.getElementById("channel-action-bar").classList.add("hidden");
@@ -2871,6 +2986,7 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
 // ======================= 13. ОТКРЫТИЕ ЧАТА =======================
 async function openChatWith(otherUser) {
   const mySeq = ++openSeq;
+  decryptedCache.clear();
   // СРАЗУ сбрасываем текущий чат, чтобы избежать случайной отправки в старый
   currentChatId = null;
   currentOtherUser = otherUser; pendingOtherUser = null;
@@ -2882,6 +2998,7 @@ async function openChatWith(otherUser) {
   document.getElementById("message-input").setAttribute("contenteditable", "true");
   document.getElementById("message-input").setAttribute("data-placeholder", "Написать сообщение...");
   resetChatMenuToDm();
+  updateE2eeComposerHint();
   document.getElementById("composer").classList.remove("hidden");
   document.getElementById("channel-action-bar").classList.add("hidden");
   const _searchInput = document.getElementById("search-input");
@@ -3293,9 +3410,10 @@ async function buildMsgHtml(msg) {
     const orig = msgCache.get(msg.reply_to_id);
     const origProfile = await getProfile(orig.sender_id);
     const origName = orig.sender_id === currentUser.id ? "Ты" : (origProfile ? origProfile.display_name : "?");
+    const origPlain = orig.message_type === "attachment" ? "" : await getPlaintext(orig);
     const origPreview = orig.message_type === "attachment"
       ? (orig.file_kind === "image" ? "📷 Фото" : orig.file_kind === "video" ? "🎥 Видео" : "📎 Файл")
-      : (orig.content || "").slice(0, 60);
+      : origPlain.slice(0, 60);
     html += `<div class="msg-reply" data-scroll-to="${msg.reply_to_id}">
       <span class="msg-reply-name">В ответ ${escapeHtml(origName)}</span>
       <span class="msg-reply-text">${escapeHtml(origPreview)}</span>
@@ -3304,10 +3422,12 @@ async function buildMsgHtml(msg) {
   if (msg.message_type === "attachment") {
     html += `<div class="msg-attachment">${await buildAttachmentHtml(msg)}</div>`;
     if (msg.content) {
-      html += `<div class="msg-text" style="margin-top:6px;">${replaceFlagsInHtml(applyFormatting(escapeHtml(msg.content || "")))}</div>`;
+      const plainCap = await getPlaintext(msg);
+      html += `<div class="msg-text" style="margin-top:6px;">${replaceFlagsInHtml(applyFormatting(escapeHtml(plainCap)))}</div>`;
     }
   } else {
-    html += `<div class="msg-text">${replaceFlagsInHtml(applyFormatting(escapeHtml(msg.content || "")))}</div>`;
+    const plain = await getPlaintext(msg);
+    html += `<div class="msg-text">${replaceFlagsInHtml(applyFormatting(escapeHtml(plain)))}</div>`;
   }
   html += `<div class="msg-reactions" data-reactions-for="${msg.id}"></div>`;
 
@@ -4678,8 +4798,14 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
 
   // Режим редактирования
   if (editingMsgId) {
+    // E2EE: шифруем отредактированный текст
+    const { content: editContent, encrypted: editEnc } = await encryptOutgoingText(currentChatId, content);
     const { error } = await supabase.from("messages")
-      .update({ content, edited_at: new Date().toISOString() }).eq("id", editingMsgId);
+      .update({ content: editContent, encrypted: editEnc, edited_at: new Date().toISOString() }).eq("id", editingMsgId);
+    if (!error) {
+      // Обновляем кэш расшифровки
+      decryptedCache.set(editingMsgId, content);
+    }
     if (error) { await showAlertDialog("Ошибка", error.message); return; }
     clearInput();
     cancelEdit();
@@ -4731,7 +4857,15 @@ async function sendMessage(chatId, content) {
   await appendMessage(tempMsg);
   scrollToBottom();
 
-  const payload = { chat_id: chatId, sender_id: currentUser.id, content };
+  // E2EE: шифруем текст (если возможно)
+  const { content: outContent, encrypted: outEncrypted } = await encryptOutgoingText(chatId, content);
+
+  const payload = {
+    chat_id: chatId,
+    sender_id: currentUser.id,
+    content: outContent,
+    encrypted: outEncrypted,
+  };
   if (replyToMsg) payload.reply_to_id = replyToMsg.id;
   cancelReply();
 
@@ -5166,6 +5300,7 @@ async function deleteChatForBoth() {
 
 function closeCurrentChat() {
   openSeq++;
+  decryptedCache.clear();
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
   currentChannelObj = null; currentChannelIsAdmin = false;
   currentChannelIsSubscribed = false;
@@ -5185,10 +5320,10 @@ function closeCurrentChat() {
 // ======================================================
 // 20. ПКМ ПО СООБЩЕНИЮ
 // ======================================================
-function copyMessageText(id) {
+async function copyMessageText(id) {
   const msg = msgCache.get(id);
   if (!msg) return;
-  const text = msg.content || "";
+  const text = await getPlaintext(msg);
   if (navigator.clipboard) {
     navigator.clipboard.writeText(text).catch(() => {});
   } else {
@@ -5213,7 +5348,7 @@ function setupMessageMenu() {
     if (!id) return;
     if (action === "reply") startReply(id);
     else if (action === "pin") await handlePinAction(id);
-    else if (action === "copy") copyMessageText(id);
+    else if (action === "copy") copyMessageText(id).catch(() => {});
     else if (action === "edit") startEdit(id);
     else if (action === "react") openPickerForContext(id);
     else if (action === "fwd") await handleForwardOne(id);
@@ -5584,7 +5719,8 @@ async function startReply(msgId) {
   const profile = await getProfile(msg.sender_id);
   const name = msg.sender_id === currentUser.id ? "Ты" : (profile ? profile.display_name : "?");
   document.getElementById("reply-bar-title").textContent = "Ответ " + name;
-  document.getElementById("reply-bar-text").textContent = (msg.content || "").slice(0, 80);
+  const replyPlain = await getPlaintext(msg);
+  document.getElementById("reply-bar-text").textContent = replyPlain.slice(0, 80);
   document.getElementById("reply-bar-icon").textContent = "↩";
   document.getElementById("reply-bar").classList.remove("hidden");
   document.getElementById("message-input").focus();
@@ -5602,10 +5738,11 @@ function startEdit(msgId) {
   cancelReply();
   editingMsgId = msgId;
   document.getElementById("reply-bar-title").textContent = "Редактирование";
-  document.getElementById("reply-bar-text").textContent = (msg.content || "").slice(0, 80);
+  const editPlain = await getPlaintext(msg);
+  document.getElementById("reply-bar-text").textContent = editPlain.slice(0, 80);
   document.getElementById("reply-bar-icon").textContent = "✎";
   document.getElementById("reply-bar").classList.remove("hidden");
-  setInputFromMarkdown(msg.content || "");
+  setInputFromMarkdown(editPlain);
   document.getElementById("message-input").focus();
 }
 
@@ -5933,8 +6070,37 @@ async function sendForward() {
 
   const payloads = [];
   for (const chatId of forwardSelectedChats) {
+    // Расшифровываем источник ОДИН раз для этого чата
+    const targetOther = channelCache.has(chatId)
+      ? null
+      : (() => {
+          const el = document.querySelector(`.user-item[data-chat-id="${chatId}"]`);
+          const uid = el && el.dataset.userId;
+          return uid ? profileCache.get(uid) : null;
+        })();
+
     for (const m of forwardSourceMsgs) {
-      const payload = { chat_id: chatId, sender_id: currentUser.id, content: m.content || "" };
+      // Источник — plaintext (расшифровываем на лету)
+      const sourcePlain = m.plaintextOverride !== undefined
+        ? m.plaintextOverride
+        : (m.encrypted ? await getPlaintext(m) : (m.content || ""));
+
+      // Цель — шифруем, если это DM и есть ключ
+      let outContent = sourcePlain, outEncrypted = false;
+      if (!channelCache.has(chatId) && targetOther && targetOther.id && cryptoUnlocked) {
+        try {
+          const shared = await getSharedKeyFor(targetOther.id);
+          if (shared) {
+            outContent = await Crypto.encryptMessage(shared, sourcePlain);
+            outEncrypted = true;
+          }
+        } catch (e) {}
+      }
+
+      const payload = {
+        chat_id: chatId, sender_id: currentUser.id,
+        content: outContent, encrypted: outEncrypted,
+      };
       if (!hideSender) {
         const s = senderMap.get(m.sender_id) || { display_name: "?", username: "?" };
         payload.forwarded_from_name = s.display_name;
@@ -8279,7 +8445,8 @@ function renderPinBar() {
   const pin = currentPinnedList[currentPinnedIndex];
   if (!pin) { bar.classList.add("hidden"); return; }
   const msg = pin._msg;
-  const preview = stripMarkdown(msg.content || "") || (msg.message_type === "gift" ? "🎁 Подарок" : msg.message_type === "tokens" ? "🧩 ImagiTokens" : "");
+  const plain = await getPlaintext(msg);
+  const preview = stripMarkdown(plain || "") || (msg.message_type === "gift" ? "🎁 Подарок" : msg.message_type === "tokens" ? "🧩 ImagiTokens" : "");
   textEl.textContent = preview.slice(0, 80) || "(сообщение)";
   const total = currentPinnedList.length;
   titleEl.textContent = total > 1
@@ -8414,7 +8581,7 @@ function openPinnedListDialog() {
   listEl.innerHTML = currentPinnedList.map((pin, idx) => {
     const msg = pin._msg;
     const time = new Date(msg.created_at).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-    const preview = stripMarkdown(msg.content || "") || (msg.message_type === "gift" ? "🎁 Подарок" : msg.message_type === "tokens" ? "🧩 ImagiTokens" : "(без текста)");
+    const preview = stripMarkdown(decryptedCache.get(msg.id) || (msg.encrypted ? "🔒 Зашифровано" : msg.content) || "") || (msg.message_type === "gift" ? "🎁 Подарок" : msg.message_type === "tokens" ? "🧩 ImagiTokens" : "(без текста)");
     const sender = profileCache.get(msg.sender_id);
     const senderName = msg.sender_id === currentUser.id ? "Вы" : (sender ? sender.display_name : "—");
     const scopeLabel = pin.scope === "shared" ? "Общий" : "Личный";

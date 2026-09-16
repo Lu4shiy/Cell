@@ -3744,3 +3744,11 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   width: 22px;
   height: 22px;
 }
+
+.e2ee-composer-hint {
+  padding: 4px 20px 0;
+  font-size: 11px;
+  color: var(--accent);
+  opacity: 0.7;
+  background: var(--bg-side);
+}
