@@ -4055,8 +4055,15 @@ function collectChatMedia() {
   document.querySelectorAll("#messages .msg").forEach((el) => {
     const m = msgCache.get(el.dataset.id);
     if (!m) return;
-    if (m.message_type === "attachment" && m.image_url && (m.file_kind === "image" || m.file_kind === "video")) {
-      result.push({ url: m.image_url, kind: m.file_kind, msgId: m.id });
+    if (m.message_type === "attachment" && (m.file_kind === "image" || m.file_kind === "video")) {
+      // Берём РЕАЛЬНЫЙ URL из DOM (там уже signed URL), а не из msgCache (там сырой URL из БД)
+      const mediaEl = el.querySelector("[data-media-url]");
+      const realUrl = mediaEl
+        ? (mediaEl.dataset.mediaUrl || mediaEl.src || mediaEl.getAttribute("src"))
+        : m.image_url;
+      if (realUrl) {
+        result.push({ url: realUrl, kind: m.file_kind, msgId: m.id });
+      }
     }
   });
   return result;
@@ -4099,11 +4106,17 @@ function renderMediaViewer() {
     v.controls = true;
     v.autoplay = true;
     v.playsInline = true;
+    v.onerror = () => {
+      body.innerHTML = '<div style="color:#fff;font-size:16px;text-align:center;padding:20px;">❌ Не удалось загрузить видео.<br><span style="font-size:13px;opacity:0.7;">Возможно, ссылка протухла. Переоткрой вложение.</span></div>';
+    };
     body.appendChild(v);
   } else {
     const img = document.createElement("img");
     img.src = cur.url;
     img.alt = "";
+    img.onerror = () => {
+      body.innerHTML = '<div style="color:#fff;font-size:16px;text-align:center;padding:20px;">❌ Не удалось загрузить изображение.<br><span style="font-size:13px;opacity:0.7;">Возможно, ссылка протухла. Переоткрой вложение.</span></div>';
+    };
     body.appendChild(img);
   }
 
