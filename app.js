@@ -59,13 +59,62 @@ const ICONS = {
 
 function verifiedBadge(profile) {
   if (!profile || !profile.verified) return "";
-  return `<span class="verified-badge" role="img" aria-label="Официальный аккаунт">
-    <svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block;">
+  return `<span class="verified-badge" data-verified-badge="1">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true">
       <circle cx="12" cy="12" r="10" fill="#1DA1F2"/>
-      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="white"/>
+      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="#ffffff"/>
     </svg>
-    <span class="verified-tooltip">Официальный аккаунт</span>
   </span>`;
+}
+
+// ======================================================
+// Глобальный тултип для галочки verified — рендерится вне
+// .user-item-name (у которого overflow: hidden), поэтому
+// не обрезается и корректно позиционируется у краёв экрана.
+// ======================================================
+let verifiedTooltipEl = null;
+
+function setupVerifiedTooltip() {
+  if (verifiedTooltipEl) return;
+  verifiedTooltipEl = document.createElement("div");
+  verifiedTooltipEl.className = "verified-tooltip-floating hidden";
+  verifiedTooltipEl.textContent = "Официальный аккаунт";
+  document.body.appendChild(verifiedTooltipEl);
+
+  document.addEventListener("mouseover", (e) => {
+    const badge = e.target.closest(".verified-badge");
+    if (!badge) return;
+    showVerifiedTooltip(badge);
+  });
+
+  document.addEventListener("mouseout", (e) => {
+    const badge = e.target.closest(".verified-badge");
+    if (!badge) return;
+    const next = e.relatedTarget;
+    if (next && next.closest && next.closest(".verified-badge")) return;
+    verifiedTooltipEl.classList.add("hidden");
+  });
+
+  // Прячем при скролле — иначе тултип «прилипает» к экрану
+  window.addEventListener("scroll", () => {
+    if (verifiedTooltipEl) verifiedTooltipEl.classList.add("hidden");
+  }, true);
+}
+
+function showVerifiedTooltip(badge) {
+  const tip = verifiedTooltipEl;
+  if (!tip) return;
+  tip.classList.remove("hidden");
+  const rect = badge.getBoundingClientRect();
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  let x = rect.left + rect.width / 2 - tw / 2;
+  let y = rect.top - th - 8;
+  if (x < 8) x = 8;
+  if (x + tw > window.innerWidth - 8) x = window.innerWidth - tw - 8;
+  // Если сверху не влезает — показываем снизу
+  if (y < 8) y = rect.bottom + 8;
+  tip.style.left = x + "px";
+  tip.style.top = y + "px";
 }
 
 // ======================================================
@@ -420,6 +469,7 @@ async function initApp() {
   setupSettings(); applyScrollMode();
   setupChatSearch(); setupScrollBottomButton();
   setupMessagesScrollPagination();
+  setupVerifiedTooltip();
   setupChatPins(); setupInviteUI();
   subscribeToPins();
   subscribeToChannelRequests();
@@ -882,14 +932,15 @@ function resizeImage(file, maxSize) {
 
 // Возвращает true, если username зарезервирован и НЕ доступен текущему пользователю
 async function isUsernameReservedForOther(username) {
-  const clean = String(username || "").trim();
+  const clean = String(username || "").trim().toLowerCase();
   if (!clean) return false;
+  // Зарезервированных юзернеймов мало (несколько штук) — берём все и сравниваем в JS.
+  // ilike() не годится: «_» — это wildcard в SQL и даёт ложные срабатывания.
   const { data, error } = await supabase.from("reserved_usernames")
-    .select("username, reserved_for")
-    .ilike("username", clean)
-    .limit(1);
-  if (error || !data || !data.length) return false;
-  const row = data[0];
+    .select("username, reserved_for");
+  if (error || !data) return false;
+  const row = data.find((r) => String(r.username || "").toLowerCase() === clean);
+  if (!row) return false;
   if (!row.reserved_for) return true;                      // зарезервировано для всех
   if (row.reserved_for === currentUser.id) return false;   // открыто тебе
   return true;                                             // занято кем-то другим
@@ -1641,8 +1692,8 @@ function updateChatItemPreview(chatId) {
 function updateUnreadTitle() {
   let total = 0;
   chatLastMsg.forEach((data) => { if (data && data.unread > 0) total += data.unread; });
-  if (total > 0) document.title = `(${total}) Imaginer`;
-  else document.title = "Imaginer";
+  if (total > 0) document.title = `(${total}) Cell`;
+  else document.title = "Cell";
 }
 
 function resortChatsList() {
@@ -2394,10 +2445,10 @@ async function loadOlderMessages() {
     messagesHasMore = older.length === MESSAGES_PAGE_SIZE;
     messagesOldestTs = older[0].created_at;
 
+    loader.remove();
+    // Фиксируем высоту ПОСЛЕ удаления индикатора, иначе позиция скролла будет сбита
     const prevHeight = box.scrollHeight;
     const prevTop = box.scrollTop;
-
-    loader.remove();
 
     const firstExisting = box.firstChild;
     const visible = older.filter((m) => !hiddenMsgIds.has(m.id));
@@ -3962,8 +4013,14 @@ function subscribeToChat(chatId) {
         if (!m || m.chat_id !== currentChatId) return;
         if (m.sender_id === currentUser.id && m.message_type !== "tokens" && m.message_type !== "gift") return;
         if (document.querySelector(`[data-id="${m.id}"]`)) return;
+        // Скроллим вниз только если пользователь уже был у низа —
+        // иначе он читает историю наверху, и не надо его дёргать.
+        const box = document.getElementById("messages");
+        const wasNearBottom = box
+          ? (box.scrollHeight - box.scrollTop - box.clientHeight < 200)
+          : true;
         await appendMessage(m);
-        scrollToBottom();
+        if (wasNearBottom) scrollToBottom();
         if (currentChannelObj) {
           if (currentChannelIsSubscribed) markChatRead(chatId);
           if (m.sender_id !== currentUser.id) {
@@ -5784,9 +5841,6 @@ async function renderGiftsMain(userId) {
       el.style.backgroundRepeat = "repeat";
     });
   });
-
-  // Сброс прокрутки — список всегда открывается с шапки
-  content.scrollTop = 0;
 
   // Сброс прокрутки — список всегда открывается с шапки
   content.scrollTop = 0;
@@ -7964,6 +8018,17 @@ function setupAttachPreviewDialog() {
       const files = [...e.target.files];
       e.target.value = "";
       if (!files.length) return;
+      // Проверяем лимит и размер КАЖДОГО добавленного файла
+      for (const f of files) {
+        if (f.size > ATTACH_MAX_SIZE) {
+          showAlertDialog("Файл слишком большой", `«${f.name}» больше ${formatFileSize(ATTACH_MAX_SIZE)}.`);
+          return;
+        }
+      }
+      if (attachPendingFiles.length + files.length > ATTACH_MAX_FILES) {
+        showAlertDialog("Лимит", `Максимум ${ATTACH_MAX_FILES} файлов за раз.`);
+        return;
+      }
       attachPendingFiles = attachPendingFiles.concat(files);
       renderAttachPreview();
     });

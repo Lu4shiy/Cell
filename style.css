@@ -3484,14 +3484,18 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   align-items: center;
   justify-content: center;
   cursor: help;
-  position: relative;
   flex-shrink: 0;
 }
-.verified-badge .verified-tooltip {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%) translateY(4px);
+.verified-badge svg {
+  width: 1em;
+  height: 1em;
+  display: block;
+  pointer-events: none;
+}
+
+/* Глобальный тултип для галочки verified (рендерится в body) */
+.verified-tooltip-floating {
+  position: fixed;
   background: var(--bg-card);
   color: var(--text);
   border: 1px solid var(--border);
@@ -3501,25 +3505,10 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   font-weight: 600;
   white-space: nowrap;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s, transform 0.15s;
-  z-index: 100;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
   letter-spacing: 0.2px;
-}
-.verified-badge .verified-tooltip::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 5px solid transparent;
-  border-top-color: var(--border);
-  margin-top: -1px;
-}
-.verified-badge:hover .verified-tooltip {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  animation: fadeIn 0.12s ease-out;
 }
 
 /* Иконка Nectar */
