@@ -1496,9 +1496,24 @@ async function decryptChatPreview(msg, otherId, chatId) {
   if (!msg || !msg.encrypted) return;
   if (!cryptoUnlocked) return;
   try {
+    // 1) Сначала пробуем канальный ключ. Это покрывает случай, когда
+    // сообщение из канала приходит раньше, чем channelCache заполнится
+    // (например, через subscribeToGlobalMessages — канал ещё не открыт).
+    try {
+      const chanKey = await getChannelKeyForMe(chatId);
+      if (chanKey) {
+        const plain = await Crypto.decryptMessage(chanKey, msg.content);
+        if (plain && plain !== msg.content) {
+          decryptedCache.set(msg.id, plain);
+          updateChatPreviewText(chatId, msg, plain);
+          return;
+        }
+      }
+    } catch (e) { /* не канальное — идём дальше */ }
+
+    // 2) DM-путь
     const plain = await getPlaintext(msg, otherId);
     if (!plain || plain.startsWith("🔒")) return;
-    // Если получили тот же шифротекст, значит decryptMessage не сработал
     if (plain === msg.content) return;
     updateChatPreviewText(chatId, msg, plain);
   } catch (e) {
@@ -4196,7 +4211,7 @@ function refreshWheelLayout() {
   const items = [...listEl.querySelectorAll(".user-item")];
 
   if (scrollMode !== "wheel") {
-    // Классический режим: сбрасываем все inline-стили и активные классы
+    // Классический режим: сбрасываем inline-стили и подгонку отступов
     items.forEach((el) => {
       el.classList.remove("wheel-active");
       el.style.removeProperty("--ty");
@@ -4205,14 +4220,22 @@ function refreshWheelLayout() {
       el.style.removeProperty("opacity");
       el.style.removeProperty("z-index");
     });
+    listEl.style.paddingBottom = "";
     updateWheelArrows(false, false);
     return;
   }
 
   if (!items.length) {
+    listEl.style.paddingBottom = "";
     updateWheelArrows(false, false);
     return;
   }
+
+  // Нижний отступ: чтобы последний чат мог встать наверх (снизу будет пустота).
+  // Высота = высота видимой области минус высота одного элемента.
+  const itemH = items[0].offsetHeight || 66;
+  const pad = Math.max(0, listEl.clientHeight - itemH);
+  listEl.style.paddingBottom = pad + "px";
 
   // Активный — верхний в видимой области.
   const activeIdx = getTopVisibleIndex(items, listEl);
@@ -4222,7 +4245,7 @@ function refreshWheelLayout() {
     wheelSelectedChatId = items[activeIdx].dataset.chatId;
   }
 
-  // Индикаторы прокрутки
+  // Индикаторы прокрутки: показываем, если есть что-то скрытое сверху/снизу
   const atTop = listEl.scrollTop <= 4;
   const atBottom = listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - 4;
   updateWheelArrows(!atTop, !atBottom);
@@ -9607,6 +9630,7 @@ function applyScrollMode() {
   });
   list.style.paddingTop = "";
   list.style.paddingBottom = "";
+  list.style.scrollSnapType = "";
 
   if (scrollMode === "classic") {
     list.scrollTop = 0;
