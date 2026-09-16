@@ -55,12 +55,28 @@
           </div>
         </div>
         <div class="sidebar-actions">
-          <button id="create-channel-btn" class="icon-btn" title="Создать канал"><img class="cell-icon" src="https://i.ibb.co/vxd50Lys/icons8-1500.png" alt="+"></button>
-          <button id="settings-btn" class="icon-btn" title="Настройки"><img class="cell-icon" src="https://i.ibb.co/CsBkQMQv/icons8-gear-100.png" alt="⚙"></button>
-          <button id="about-btn" class="icon-btn" title="О приложении"><img class="cell-icon" src="https://i.ibb.co/nqcVPKHp/icons8-info-popup-100.png" alt="ℹ"></button>
-          <button id="logout-btn" class="icon-btn" title="Выйти"><img class="cell-icon" src="https://i.ibb.co/gbTLc2jJ/icons8-change-user-100.png" alt="⎋"></button>
+          <button id="sidebar-menu-btn" class="icon-btn" title="Меню" type="button"><span class="burger-icon"><span></span></span></button>
         </div>
       </header>
+
+      <div id="sidebar-menu-drawer" class="sidebar-menu-drawer">
+        <button id="create-channel-btn" class="drawer-btn" type="button">
+          <img class="cell-icon" src="https://i.ibb.co/vxd50Lys/icons8-1500.png" alt="">
+          <span>Создать канал</span>
+        </button>
+        <button id="settings-btn" class="drawer-btn" type="button">
+          <img class="cell-icon" src="https://i.ibb.co/CsBkQMQv/icons8-gear-100.png" alt="">
+          <span>Настройки</span>
+        </button>
+        <button id="about-btn" class="drawer-btn" type="button">
+          <img class="cell-icon" src="https://i.ibb.co/nqcVPKHp/icons8-info-popup-100.png" alt="">
+          <span>О приложении</span>
+        </button>
+        <button id="logout-btn" class="drawer-btn" type="button">
+          <img class="cell-icon" src="https://i.ibb.co/gbTLc2jJ/icons8-change-user-100.png" alt="">
+          <span>Выйти</span>
+        </button>
+      </div>
 
       <div class="search-wrap">
         <input type="text" id="search-input" placeholder="Поиск по имени или @username">
@@ -727,7 +743,7 @@
 
       <div class="about-section">
         <div class="about-section-title">Версия</div>
-        <div class="about-text">beta0.2.13 · Cell</div>
+        <div class="about-text">beta0.2.14 · Cell</div>
       </div>
 
       <div class="dialog-actions">

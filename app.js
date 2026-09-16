@@ -488,6 +488,7 @@ function showAuth() {
 
 // ======================= 5. ИНИЦИАЛИЗАЦИЯ =======================
 async function initApp() {
+  setupSidebarMenu();
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
   setupAttachments(); setupMediaViewer(); setupEmojiPicker(); setupAboutDialog();
   setupWheel(); setupCommandPalette(); setupMiniProfile(); setupDateFloat();
@@ -1886,6 +1887,28 @@ function removeChatFromList(chatId) {
   const listEl = document.getElementById("users-list");
   if (listEl.querySelectorAll(".user-item").length === 0) listEl.innerHTML = '<div class="empty">У вас пока нет чатов.</div>';
   refreshWheelLayout();
+}
+
+// ============ Меню сайдбара (бургер) ============
+function setupSidebarMenu() {
+  const btn = document.getElementById("sidebar-menu-btn");
+  const sidebar = document.querySelector(".sidebar");
+  const drawer = document.getElementById("sidebar-menu-drawer");
+  if (!btn || !sidebar || !drawer) return;
+
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    sidebar.classList.toggle("menu-open");
+  });
+
+  // Клик по любому пункту drawer'а — закрываем меню.
+  // Обработчики самих кнопок (create-channel, settings, about, logout)
+  // уже висят отдельно и сработают без изменений.
+  drawer.querySelectorAll("button").forEach((b) => {
+    b.addEventListener("click", () => {
+      sidebar.classList.remove("menu-open");
+    });
+  });
 }
 
 // ======================= 11. ПОИСК =======================

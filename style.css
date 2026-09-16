@@ -383,10 +383,10 @@ input:focus {
   font-size: 15px;
   font-weight: 600;
   color: var(--text);
-  /* Длинное имя обрезается многоточием, а не выдавливает кнопки */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.2;
   display: block;
 }
 .me-username {
@@ -3651,4 +3651,83 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 .profile-name-counter.near-limit {
   color: var(--accent);
   font-weight: 600;
+}
+
+/* ====================================================== */
+/* МЕНЮ САЙДБАРА (бургер + выезжающий список)             */
+/* ====================================================== */
+
+/* Иконка «три полоски», нарисованная через CSS */
+.burger-icon {
+  width: 18px;
+  height: 14px;
+  display: block;
+  position: relative;
+}
+.burger-icon::before,
+.burger-icon::after,
+.burger-icon > span {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+}
+.burger-icon::before { top: 0; }
+.burger-icon::after  { bottom: 0; }
+.burger-icon > span  { top: 50%; transform: translateY(-50%); }
+
+/* Сам drawer: по умолчанию скрыт. */
+.sidebar-menu-drawer {
+  display: none;
+}
+.sidebar.menu-open .sidebar-menu-drawer {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 12px 16px;
+  gap: 4px;
+  flex: 1;
+  overflow-y: auto;
+  animation: drawerDown 0.2s ease;
+}
+
+/* Когда меню открыто — прячем список чатов и всё, что под ним. */
+.sidebar.menu-open .search-wrap,
+.sidebar.menu-open #birthday-banner,
+.sidebar.menu-open .section-title,
+.sidebar.menu-open .wheel-wrap {
+  display: none !important;
+}
+
+@keyframes drawerDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Пункты меню внутри drawer'а */
+.drawer-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 12px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 15px;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+  transition: background 0.12s, color 0.12s;
+}
+.drawer-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+.drawer-btn .cell-icon {
+  width: 22px;
+  height: 22px;
 }
