@@ -471,6 +471,9 @@ async function initApp() {
   setupMessagesScrollPagination();
   setupVerifiedTooltip();
   setupChatPins(); setupInviteUI();
+  // Предзагружаем иконки паттернов в фоне, чтобы к моменту покупки подарка
+  // они уже были в кэше — иначе паттерн появляется с задержкой в несколько секунд.
+  setTimeout(preloadPatternIcons, 1500);
   subscribeToPins();
   subscribeToChannelRequests();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
@@ -5598,14 +5601,40 @@ const PATTERN_MASK_CACHE = new Map();
 // Скачивает иконку через wsrv.nl (обход CORS у i.ibb.co),
 // прогоняет через FileReader → base64 и собирает SVG-маску,
 // где иконка маленькая в центре большого тайла.
+// Настройки паттернов: TILE — размер плитки (иконка + зазор), ICON — размер самой иконки.
+// Меняй эти два числа, чтобы управлять размером и промежутком.
+const PATTERN_SVG_TILE = 100;   // «внутренний» размер плитки в SVG (не трогай без нужды)
+const PATTERN_SVG_ICON = 25;    // размер иконки внутри плитки. 60 → зазор 40% от плитки.
+
 async function buildPatternMaskUrl(iconUrl) {
   if (!iconUrl) return null;
   if (PATTERN_MASK_CACHE.has(iconUrl)) return PATTERN_MASK_CACHE.get(iconUrl);
-  // Используем иконку напрямую как background-image — CSS-фоны не требуют CORS,
-  // поэтому прокси wsrv.nl больше не нужен. Тилящийся фон даёт много мини-рисунков.
-  const bgUrl = `url('${iconUrl}')`;
+
+  const tile = PATTERN_SVG_TILE;
+  const icon = PATTERN_SVG_ICON;
+  const off = (tile - icon) / 2;
+
+  // Оборачиваем иконку в SVG: сама иконка маленькая по центру, вокруг — прозрачный зазор.
+  // encodeURIComponent экранирует кавычки, поэтому внутри url('...') безопасно.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${tile}" height="${tile}"><image href="${iconUrl}" x="${off}" y="${off}" width="${icon}" height="${icon}"/></svg>`;
+  const bgUrl = `url('data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}')`;
   PATTERN_MASK_CACHE.set(iconUrl, bgUrl);
   return bgUrl;
+}
+
+// Предзагрузка всех иконок паттернов в кэш браузера.
+// Без этого после покупки подарка паттерн появляется с задержкой —
+// браузер только в этот момент начинает скачивать картинку с i.ibb.co.
+let patternIconsPreloaded = false;
+function preloadPatternIcons() {
+  if (patternIconsPreloaded) return;
+  patternIconsPreloaded = true;
+  GIFT_PATTERNS.forEach((p) => {
+    if (!p.icon) return;
+    const img = new Image();
+    img.decoding = "async";
+    img.src = p.icon;
+  });
 }
 
 const GIFT_PATTERNS = [
@@ -5755,6 +5784,7 @@ async function loadGiftCatalog() {
 function openGiftsOverlay(userId) {
   document.getElementById("gifts-overlay").classList.remove("hidden");
   refreshBalance();
+  preloadPatternIcons();
   renderGiftsMain(userId);
 }
 

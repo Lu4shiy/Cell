@@ -3296,7 +3296,7 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   inset: 0;
   pointer-events: none;
   opacity: 0.45;
-  background-size: 32px 32px;
+  background-size: 20px 20px;
   background-repeat: repeat;
   background-position: 0 0;
   z-index: 0;
@@ -3396,7 +3396,7 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   inset: 0;
   pointer-events: none;
   opacity: 0.42;
-  background-size: 64px 64px;
+  background-size: 40px 40px;
   background-repeat: repeat;
   background-position: 0 0;
   z-index: 1;
@@ -3483,7 +3483,7 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: help;
+  cursor: default;
   flex-shrink: 0;
 }
 .verified-badge svg {
