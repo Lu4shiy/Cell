@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-v1";
+const CACHE_VERSION = "cell-v2";
 
 const CACHE_FILES = [
   "./",
@@ -14,6 +14,8 @@ const CACHE_FILES = [
   "./app.js",
   "./crypto.js",
   "./icon.svg",
+  "./icon-192.png",
+  "./icon-512.png",
   "./manifest.json",
 ];
 
