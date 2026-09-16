@@ -587,6 +587,27 @@ let chatLastMsg = new Map();
 let chatIdByUser = new Map();
 const pendingChatAdds = new Set();
 let replyToMsg = null, editingMsgId = null;
+
+// Черновики сообщений по chat_id. Позволяют не терять набранный текст
+// при переключении между чатами и при возврате в чат.
+const chatDrafts = new Map();
+
+function saveDraftFor(chatId) {
+  if (!chatId) return;
+  // В режиме редактирования в инпуте лежит текст редактируемого сообщения,
+  // а не черновик — сохранять его как черновик нельзя.
+  if (editingMsgId) return;
+  const txt = getInputText();
+  if (txt) chatDrafts.set(chatId, txt);
+  else chatDrafts.delete(chatId);
+}
+
+function restoreDraftFor(chatId) {
+  if (!chatId) { clearInput(); return; }
+  const txt = chatDrafts.get(chatId);
+  if (txt) setInputFromMarkdown(txt);
+  else clearInput();
+}
 let selectionMode = false, selectedMsgIds = new Set();
 let contextMsgId = null, contextChatUser = null, contextChatCustomName = null;
 let forwardSourceMsgs = [], forwardSelectedChats = new Set();
@@ -2372,6 +2393,8 @@ async function updateChannelComposerState() {
 
 async function openChannel(chatId) {
   const mySeq = ++openSeq;
+  // Сохраняем черновик предыдущего чата, если это был DM
+  if (currentChatId) saveDraftFor(currentChatId);
   decryptedCache.clear();
   // СРАЗУ скрываем composer синхронно, до любых await — иначе мелькнёт
   document.getElementById("composer").classList.add("hidden");
@@ -2438,6 +2461,7 @@ async function openChannel(chatId) {
   if (mySeq !== openSeq) return;
 
   currentChatId = chatId;
+  restoreDraftFor(chatId);
   await loadMessages(chatId, mySeq);
   if (mySeq !== openSeq) return;
   await loadReactionsForVisibleMessages();
@@ -2997,6 +3021,8 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
 // ======================= 13. ОТКРЫТИЕ ЧАТА =======================
 async function openChatWith(otherUser) {
   const mySeq = ++openSeq;
+  // Сохраняем черновик предыдущего чата ДО любых манипуляций с инпутом
+  if (currentChatId) saveDraftFor(currentChatId);
   decryptedCache.clear();
   // СРАЗУ сбрасываем текущий чат, чтобы избежать случайной отправки в старый
   currentChatId = null;
@@ -3067,6 +3093,7 @@ async function openChatWith(otherUser) {
     return;
   }
   currentChatId = chatId;
+  restoreDraftFor(chatId);
   await loadMessages(chatId, mySeq);
   if (mySeq !== openSeq) return;
   await loadReactionsForVisibleMessages();
@@ -3199,11 +3226,17 @@ async function loadMessages(chatId, mySeq) {
     }).catch(() => {});
   }
 
-  for (const m of visible) {
-    if (mySeq !== undefined && mySeq !== openSeq) return;
-    if (currentChatId !== chatId) return;
-    await appendMessage(m);
-  }
+  // Рендерим все сообщения ПАРАЛЛЕЛЬНО и вставляем одним куском —
+  // иначе пользователь видит, как сообщения «доезжают» по одному
+  // (сначала старые, потом новые), и экран прыгает.
+  const renderedElements = await Promise.all(visible.map((m) => createMessageElement(m)));
+  if (mySeq !== undefined && mySeq !== openSeq) return;
+  if (currentChatId !== chatId) return;
+  const frag = document.createDocumentFragment();
+  renderedElements.forEach((el) => { if (el) frag.appendChild(el); });
+  box.appendChild(frag);
+  // Реакции рисуем после вставки в DOM
+  visible.forEach((m) => renderReactionsUI(m.id));
   scrollToBottom();
   rerenderPinMarks();
   refreshMessageGroups();
@@ -3455,15 +3488,9 @@ async function buildMsgHtml(msg) {
   return html;
 }
 
-async function appendMessage(msg) {
-  // Race-guard: не добавляем сообщения из чужого чата
-  if (msg.chat_id && currentChatId && msg.chat_id !== currentChatId) return;
-  const box = document.getElementById("messages");
-  if (document.querySelector(`[data-id="${msg.id}"]`)) return;
-  const empty = box.querySelector(".empty");
-  if (empty) empty.remove();
-
-  // Системные сообщения (токены, подарки) — по центру, без галочек
+// Создаёт DOM-элемент сообщения, но НЕ вставляет его в DOM.
+// Нужна для параллельного рендера пачки сообщений (batch-insert).
+async function createMessageElement(msg) {
   if (msg.message_type === "tokens" || msg.message_type === "gift") {
     const el = document.createElement("div");
     el.className = "msg-system" + (msg.message_type === "gift" ? " gift-msg" : "");
@@ -3471,13 +3498,10 @@ async function appendMessage(msg) {
     el.innerHTML = await renderSystemMessage(msg);
     el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
     el.addEventListener("click", onMsgClick);
-    box.appendChild(el);
     msgCache.set(msg.id, msg);
     fillGiftPatternsIn(el);
-    refreshMessageGroups();
-    return;
+    return el;
   }
-
   const isChannelMsg = currentChannelObj && msg.chat_id === currentChannelObj.id;
   const mine = !isChannelMsg && msg.sender_id === currentUser.id;
   const el = document.createElement("div");
@@ -3486,8 +3510,20 @@ async function appendMessage(msg) {
   el.innerHTML = await buildMsgHtml(msg);
   el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
   el.addEventListener("click", onMsgClick);
-  box.appendChild(el);
   msgCache.set(msg.id, msg);
+  return el;
+}
+
+async function appendMessage(msg) {
+  // Race-guard: не добавляем сообщения из чужого чата
+  if (msg.chat_id && currentChatId && msg.chat_id !== currentChatId) return;
+  const box = document.getElementById("messages");
+  if (document.querySelector(`[data-id="${msg.id}"]`)) return;
+  const empty = box.querySelector(".empty");
+  if (empty) empty.remove();
+  const el = await createMessageElement(msg);
+  if (!el) return;
+  box.appendChild(el);
   renderReactionsUI(msg.id);
   refreshMessageGroups();
 }
@@ -5323,6 +5359,7 @@ async function deleteChatForBoth() {
 
 function closeCurrentChat() {
   openSeq++;
+  if (currentChatId) saveDraftFor(currentChatId);
   decryptedCache.clear();
   currentChatId = null; currentOtherUser = null; pendingOtherUser = null;
   currentChannelObj = null; currentChannelIsAdmin = false;
@@ -5740,7 +5777,9 @@ async function startReply(msgId) {
   const msg = msgCache.get(msgId);
   if (!msg) return;
   if (msg.message_type === "tokens") return;
-  cancelEdit();
+  // Сбрасываем ТОЛЬКО режим редактирования, НЕ трогая текст в инпуте —
+  // чтобы при переходе «редактирование → ответ» уже набранное не пропало.
+  editingMsgId = null;
   replyToMsg = msg;
   const profile = await getProfile(msg.sender_id);
   const name = msg.sender_id === currentUser.id ? "Ты" : (profile ? profile.display_name : "?");
