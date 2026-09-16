@@ -1134,8 +1134,11 @@ const decryptedCache = new Map();
 const decryptedFileCache = new Map();
 
 // Фаза 4: E2EE каналов.
-// Ключ канала (AES-256 CryptoKey) для текущей сессии. Ключ — chatId.
+// Ключ канала (AES-256 CryptoKey) для шифрования/расшифровки.
 const channelKeyCache = new Map();
+// Тот же ключ, но в base64 — нужен для раздачи другим участникам
+// (CryptoKey нельзя экспортировать, если он был импортирован как неизвлекаемый).
+const channelKeyB64Cache = new Map();
 // Флаг: можно ли шифровать сообщения в канале (все подписчики с E2EE).
 const channelEncryptable = new Map();
 // Защита от параллельных sync одного и того же канала.
@@ -1143,6 +1146,7 @@ const syncingChannelIds = new Set();
 
 function resetChannelKeyState() {
   channelKeyCache.clear();
+  channelKeyB64Cache.clear();
   channelEncryptable.clear();
   syncingChannelIds.clear();
 }
@@ -1213,6 +1217,7 @@ async function getChannelKeyForMe(chatId) {
     // keyB64 — base64 от 32 байт AES-ключа. Импортируем как AES-GCM.
     const key = await Crypto.importFileKey(keyB64);
     channelKeyCache.set(chatId, key);
+    channelKeyB64Cache.set(chatId, keyB64);
     return key;
   } catch (e) {
     console.warn("getChannelKeyForMe:", e);
@@ -1222,8 +1227,8 @@ async function getChannelKeyForMe(chatId) {
 
 // Раздаёт текущий ключ канала всем подписчикам (bulk-запросом).
 async function shareChannelKeysWithMembers(chatId) {
-  const myKey = channelKeyCache.get(chatId);
-  if (!myKey) return;
+  const keyB64 = channelKeyB64Cache.get(chatId);
+  if (!keyB64) return;
 
   const { data: subs, error } = await supabase.rpc("get_channel_subscribers", { p_channel_id: chatId });
   if (error || !subs || !subs.length) return;
@@ -1241,7 +1246,6 @@ async function shareChannelKeysWithMembers(chatId) {
   // Если у кого-то из подписчиков нет public_key — канал целиком НЕ шифруем.
   let allHaveE2ee = true;
   const items = [];
-  const keyB64 = await Crypto.exportFileKey(myKey);
 
   for (const s of others) {
     const pub = pubMap.get(s.user_id);
@@ -1298,6 +1302,7 @@ async function syncChannelKeys(chatId) {
       });
       if (error) { console.warn("put_my_channel_key:", error); return; }
       channelKeyCache.set(chatId, keyCrypto);
+      channelKeyB64Cache.set(chatId, keyB64);
       myKey = keyCrypto;
     }
 
