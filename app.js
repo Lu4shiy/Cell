@@ -1498,16 +1498,21 @@ async function decryptChatPreview(msg, otherId, chatId) {
   try {
     const plain = await getPlaintext(msg, otherId);
     if (!plain || plain.startsWith("🔒")) return;
+    // Если получили тот же шифротекст, значит decryptMessage не сработал
+    if (plain === msg.content) return;
     updateChatPreviewText(chatId, msg, plain);
-  } catch (e) { /* silent */ }
+  } catch (e) {
+    console.warn("decryptChatPreview:", e);
+  }
 }
 
 function updateChatPreviewText(chatId, msg, plain) {
   const data = chatLastMsg.get(chatId);
   if (!data) return;
-  // Убеждаемся, что это всё ещё то же сообщение (не пришло новое поверх).
-  if (data.senderId !== msg.sender_id) return;
-  if (data.time !== new Date(msg.created_at).getTime()) return;
+  // Сверяем по ID сообщения — это надёжнее, чем по time/senderId,
+  // потому что между постановкой задачи и её завершением могло прийти
+  // новое сообщение (тогда time/senderId уже другие).
+  if (data.msgId !== msg.id) return;
   data.text = stripMarkdown(plain);
   chatLastMsg.set(chatId, data);
   updateChatItemPreview(chatId);
@@ -2409,6 +2414,7 @@ function subscribeToGlobalMessages() {
       chatLastMsg.set(m.chat_id, {
         text: previewText,
         time, senderId: m.sender_id,
+        msgId: m.id,
         unread: isMine ? (prev.unread || 0) : (prev.unread || 0) + 1,
       });
       // Если сообщение зашифровано — попробуем расшифровать превью асинхронно
@@ -2581,7 +2587,12 @@ async function loadRecentChats() {
       else previewRaw = stripMarkdown(it.lastMsg.content || "");
     }
     const preview = previewRaw;
-    chatLastMsg.set(it.chat_id, { text: preview, time: it.lastTime, senderId: it.lastMsg ? it.lastMsg.sender_id : null, unread: it.unread });
+    chatLastMsg.set(it.chat_id, {
+      text: preview, time: it.lastTime,
+      senderId: it.lastMsg ? it.lastMsg.sender_id : null,
+      msgId: it.lastMsg ? it.lastMsg.id : null,
+      unread: it.unread,
+    });
     // Асинхронно расшифровываем превью, если оно encrypted
     if (it.lastMsg && it.lastMsg.encrypted && it.lastMsg.message_type !== "attachment") {
       decryptChatPreview(it.lastMsg, it.user_id, it.chat_id);
@@ -2594,7 +2605,11 @@ async function loadRecentChats() {
         : it.lastMsg.message_type === "attachment" ? (it.lastMsg.file_kind === "image" ? "📷 Фото" : it.lastMsg.file_kind === "video" ? "🎥 Видео" : "📎 Файл")
         : stripMarkdown(it.lastMsg.content || ""))
       : "";
-    chatLastMsg.set(it.chat_id, { text: preview, time: it.lastTime, senderId: null, unread: it.unread });
+    chatLastMsg.set(it.chat_id, {
+      text: preview, time: it.lastTime, senderId: null,
+      msgId: it.lastMsg ? it.lastMsg.id : null,
+      unread: it.unread,
+    });
   });
 
   const unified = [...dmItems, ...channelItems].sort((a, b) => b.lastTime - a.lastTime);
@@ -3034,7 +3049,7 @@ async function addOrUpdateChatInList(chatId, otherUserId) {
     // Если realtime уже успел получить первое сообщение (subscribeToGlobalMessages
     // кладёт сюда превью и unread), НЕ затираем его, а используем.
     const existingPreview = chatLastMsg.get(chatId);
-    const fallbackPreview = { text: "", time: Date.now(), senderId: null, unread: 0 };
+    const fallbackPreview = { text: "", time: Date.now(), senderId: null, msgId: null, unread: 0 };
     if (!existingPreview) chatLastMsg.set(chatId, fallbackPreview);
     const previewData = existingPreview || fallbackPreview;
 
@@ -4103,23 +4118,10 @@ function setupWheel() {
   const wrap = document.getElementById("wheel-wrap");
   if (!wrap) return;
 
-  wrap.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    if (wheelScrollLock) return;
-    const dir = e.deltaY > 0 ? 1 : -1;
-    wheelScrollLock = true;
-    setTimeout(() => { wheelScrollLock = false; }, 180);
-    wheelMove(dir);
-  }, { passive: false });
-
-  let touchStartY = 0;
-  wrap.addEventListener("touchstart", (e) => {
-    touchStartY = e.touches[0].clientY;
-  }, { passive: true });
-  wrap.addEventListener("touchend", (e) => {
-    const dy = touchStartY - e.changedTouches[0].clientY;
-    if (Math.abs(dy) > 30) wheelMove(dy > 0 ? 1 : -1);
-  }, { passive: true });
+  // Скролл списка — нативный (колёсико, тачпад, тачскрин).
+  // Раньше здесь висел обработчик колеса с e.preventDefault() — он блокировал
+  // скролл в обоих режимах. Убрали его: пусть список скроллится сам.
+  // Навигация по чатам осталась через Alt+↑/↓ и клик.
 
   document.addEventListener("keydown", (e) => {
     if (!document.getElementById("chat-placeholder")?.classList.contains("hidden")) return;
