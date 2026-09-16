@@ -1101,6 +1101,25 @@ function firstChar(str) {
   // .toUpperCase() на эмодзи ничего не сломает — это no-op для символов без регистра
   return first.toUpperCase();
 }
+// Возвращает true, если строка — ровно один эмодзи (без текста).
+function isSingleEmoji(text) {
+  if (!text) return false;
+  const trimmed = String(text).trim();
+  if (!trimmed) return false;
+  let graphemes;
+  if (graphemeSegmenter) {
+    graphemes = [...graphemeSegmenter.segment(trimmed)].map((s) => s.segment);
+  } else {
+    graphemes = [...trimmed];
+  }
+  if (graphemes.length !== 1) return false;
+  const g = graphemes[0];
+  // Игнорируем ключевые символы 0-9, #, * — у них Emoji_Presentation = true,
+  // но это не «эмодзи» в обычном смысле.
+  if (/^[\d#*]$/.test(g)) return false;
+  return /\p{Extended_Pictographic}/u.test(g) || /\p{Emoji_Presentation}/u.test(g);
+}
+
 function paintAvatar(el, user) {
   if (!el) return;
   const av = user && user.avatar_url;
@@ -3471,7 +3490,8 @@ async function buildMsgHtml(msg) {
     }
   } else {
     const plain = await getPlaintext(msg);
-    html += `<div class="msg-text">${replaceFlagsInHtml(applyFormatting(escapeHtml(plain)))}</div>`;
+    const emojiOnly = isSingleEmoji(plain);
+    html += `<div class="msg-text${emojiOnly ? " emoji-only" : ""}">${replaceFlagsInHtml(applyFormatting(escapeHtml(plain)))}</div>`;
   }
   html += `<div class="msg-reactions" data-reactions-for="${msg.id}"></div>`;
 
@@ -7031,6 +7051,11 @@ function openGiftPurchase(gift, recipientId) {
   infoEl.textContent = `${gift.emoji} ${gift.name} — ${giftRarityLabel(gift.rarity)}${gift.collection ? " · " + gift.collection : ""}`;
   costEl.innerHTML = `Стоимость: ${NECTAR_HTML} <b>${gift.price}</b>`;
   captionInput.value = "";
+  const captionCounter = document.getElementById("gift-caption-counter");
+  if (captionCounter) captionCounter.textContent = "0 / 25";
+  captionInput.oninput = () => {
+    if (captionCounter) captionCounter.textContent = `${captionInput.value.length} / 25`;
+  };
   if (withNameCb) withNameCb.checked = false;
   if (withNameLabel) withNameLabel.textContent = isSelf ? "С моим именем" : "С тем именем";
   overlay.classList.remove("hidden");
@@ -7193,9 +7218,10 @@ async function renderGiftDetail(ownerId, ug) {
       ${recipientHtml}
 
       <div class="gift-info-table">
+        ${captionHtml}
         <div class="gift-info-row">
           <span class="gir-label">Владелец</span>
-          <span class="gir-value">${escapeHtml(ownerName)}</span>
+          <span class="gir-value"><a href="#" class="gift-recipient-link" data-uid="${ug.owner_id}">${escapeHtml(ownerName)}</a></span>
         </div>
         <div class="gift-info-row">
           <span class="gir-label">Редкость</span>
@@ -7215,7 +7241,6 @@ async function renderGiftDetail(ownerId, ug) {
           <span class="gir-label">Ценность</span>
           <span class="gir-value">${NECTAR_HTML} ${cat.price}</span>
         </div>
-        ${captionHtml}
       </div>
 
       <div class="gift-detail-actions">

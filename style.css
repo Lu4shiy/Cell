@@ -640,6 +640,14 @@ input:focus {
 }
 
 .msg-text { display: block; white-space: pre-wrap; word-wrap: break-word; }
+
+/* Одиночный эмодзи без текста — рендерим крупно (~5× обычного размера) */
+.msg-text.emoji-only {
+  font-size: 72px;
+  line-height: 1.05;
+  padding: 2px 4px;
+  text-align: center;
+}
 .msg-time { display: block; font-size: 11px; text-align: right; margin-top: 3px; }
 
 @keyframes msgIn {
@@ -3751,4 +3759,12 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   color: var(--accent);
   opacity: 0.7;
   background: var(--bg-side);
+}
+
+/* Счётчик символов подписи в окне покупки подарка */
+.gift-caption-counter {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: right;
+  margin: -6px 2px 10px 0;
 }

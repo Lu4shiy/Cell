@@ -172,7 +172,7 @@
         <div id="e2ee-composer-hint" class="e2ee-composer-hint hidden">
           🔒 <span id="e2ee-composer-hint-text">Зашифровано</span>
         </div>
-        
+
         <form class="composer" id="composer">
           <button type="button" id="attach-btn" class="attach-btn" title="Прикрепить файл"><img class="cell-icon" src="https://i.ibb.co/XrqrrXm9/icons8-link-100.png" alt="📎"></button>
           <input type="file" id="attach-input" multiple hidden>
@@ -432,7 +432,8 @@
     <div class="dialog">
       <div class="dialog-title" id="gift-purchase-title">Купить подарок</div>
       <div class="dialog-text" id="gift-purchase-info"></div>
-      <input type="text" id="gift-purchase-caption" placeholder="Подпись (необязательно)" maxlength="80">
+      <input type="text" id="gift-purchase-caption" placeholder="Подпись (необязательно)" maxlength="25">
+      <div class="gift-caption-counter" id="gift-caption-counter">0 / 25</div>
       <label class="toggle-row" style="padding:4px 0 10px;">
         <input type="checkbox" id="gift-purchase-with-name">
         <span id="gift-purchase-with-name-label">С моим именем</span>
