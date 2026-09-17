@@ -3317,6 +3317,30 @@ button:not(:disabled):active { transform: scale(0.97); }
   .gift-tile-emoji-symbol {
     font-size: 51px;
   }
+
+  /* Увеличенные тач-таргеты — по мелким кнопкам сложно попасть пальцем */
+  .icon-btn { min-width: 40px; min-height: 40px; padding: 8px 10px; }
+  .chat-header-text.clickable { padding: 6px 8px; }
+  .user-item { padding: 12px; }
+  .user-item .avatar { width: 48px; height: 48px; font-size: 18px; }
+  .unread-badge { min-width: 22px; height: 22px; font-size: 12px; }
+  .drawer-btn { padding: 16px 14px; }
+  .drawer-btn .cell-icon { width: 24px; height: 24px; }
+  .context-menu button { padding: 14px 14px; font-size: 15px; }
+  .menu button { padding: 14px 14px; font-size: 15px; }
+  .dialog-btn { padding: 14px 16px; font-size: 15px; }
+  .dialog-option { padding: 14px 16px; font-size: 15px; }
+  .quick-reaction-option { font-size: 24px; }
+  .emoji-item { font-size: 24px; }
+  .emoji-tab { width: 40px; height: 40px; font-size: 22px; }
+
+  /* На мобильном «Современный» режим списка бесполезен (нужны Alt+↑/↓),
+     скрываем секцию целиком. */
+  #settings-scroll-mode,
+  #settings-scroll-mode + .username-hint,
+  #settings-scroll-mode ~ .username-hint {
+    display: none !important;
+  }
 }
 
 /* ====================================================== */

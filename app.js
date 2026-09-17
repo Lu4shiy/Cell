@@ -3292,6 +3292,35 @@ function attachDoubleTap(el, handler) {
   });
 }
 
+// ============ АДАПТАЦИЯ РЕЖИМА СПИСКА К РАЗМЕРУ ЭКРАНА ============
+// Если экран стал мобильным — принудительно classic.
+// Если пользователь крутил настройку на десктопе и вернулся — восстановим.
+(function setupScrollModeWatcher() {
+  const mq = window.matchMedia("(max-width: 768px)");
+  const apply = () => {
+    if (mq.matches) {
+      // Мобильный — всегда classic
+      if (scrollMode !== "classic") {
+        scrollMode = "classic";
+        document.documentElement.dataset.scrollMode = "classic";
+        if (typeof applyScrollMode === "function") applyScrollMode();
+      }
+    } else {
+      // Десктоп — восстанавливаем сохранённый режим
+      let saved = "classic";
+      try { saved = localStorage.getItem(SCROLL_MODE_KEY) || "classic"; } catch (e) {}
+      if (saved !== "classic" && saved !== "wheel") saved = "classic";
+      if (scrollMode !== saved) {
+        scrollMode = saved;
+        document.documentElement.dataset.scrollMode = saved;
+        if (typeof applyScrollMode === "function") applyScrollMode();
+      }
+    }
+  };
+  if (mq.addEventListener) mq.addEventListener("change", apply);
+  else if (mq.addListener) mq.addListener(apply);
+})();
+
 // ============ LONG-PRESS (для тач-устройств) ============
 // Удержание пальца ~0.5с → вызываем ту же логику, что и ПКМ.
 // Если палец сдвинулся больше чем на 10px — отменяем (это скролл).
@@ -9898,6 +9927,14 @@ function setupSettings() {
     if (e.target === overlay) overlay.classList.add("hidden");
   });
 
+  // На мобильном скрываем всю секцию «Режим списка чатов» —
+  // там нет клавиатуры, wheel-режим не работает.
+  if (window.matchMedia("(max-width: 768px)").matches) {
+    const toggleBlock = document.getElementById("settings-scroll-mode");
+    const section = toggleBlock ? toggleBlock.closest(".profile-section") : null;
+    if (section) section.style.display = "none";
+  }
+
   if (toggle) {
     toggle.addEventListener("click", (e) => {
       const b = e.target.closest("button[data-mode]");
@@ -9950,16 +9987,23 @@ function applyScrollMode() {
   }
 }
 
-// Сохранить режим при старте — сделать это до initApp
+// Сохранить режим при старте — сделать это до initApp.
+// На мобильном всегда classic: wheel-режим требует Alt+↑/↓,
+// которых на тачскрине нет.
 (function initScrollMode() {
-  try {
-    const saved = localStorage.getItem(SCROLL_MODE_KEY);
-    if (saved === "classic" || saved === "wheel") {
-      scrollMode = saved;
-    } else {
-      scrollMode = "classic"; // по умолчанию — классический
-    }
-  } catch (e) { scrollMode = "classic"; }
+  const isMobile = window.matchMedia("(max-width: 768px)").matches;
+  if (isMobile) {
+    scrollMode = "classic";
+  } else {
+    try {
+      const saved = localStorage.getItem(SCROLL_MODE_KEY);
+      if (saved === "classic" || saved === "wheel") {
+        scrollMode = saved;
+      } else {
+        scrollMode = "classic";
+      }
+    } catch (e) { scrollMode = "classic"; }
+  }
   document.documentElement.dataset.scrollMode = scrollMode;
 })();
 
