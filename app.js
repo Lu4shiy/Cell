@@ -3404,6 +3404,7 @@ function setupMessagesDelegates() {
     lpTriggered = false;
     longPressTimer = setTimeout(() => {
       lpTriggered = true;
+      lastLongPressAt = Date.now();
       try { if (navigator.vibrate) navigator.vibrate(15); } catch (ex) {}
       const fake = {
         clientX: lpStartX, clientY: lpStartY, target: el,
@@ -3467,6 +3468,14 @@ function setupMessagesDelegates() {
 // Если палец сдвинулся больше чем на 10px — отменяем (это скролл).
 const LONG_PRESS_MS = 500;
 const LONG_PRESS_MOVE_TOLERANCE = 10;
+
+// Глобальный timestamp последнего long-press. Click-обработчики
+// проверяют его, чтобы не срабатывать «фантомным» кликом сразу после
+// отпускания пальца (иначе меню мгновенно закрывается).
+let lastLongPressAt = 0;
+function justLongPressed() {
+  return (Date.now() - lastLongPressAt) < 600;
+}
 
 // Глобальный timestamp последнего long-press — click-обработчики
 // проверяют его, чтобы не открыть чат сразу после открытия контекстного меню.
@@ -3833,9 +3842,15 @@ function openChatListContextMenuForChannel(ev, channel) {
   menu.style.left = x + "px"; menu.style.top = y + "px";
 }
 
-document.addEventListener("click", () => {
-  const m = document.getElementById("chat-list-context-menu"); if (m) m.classList.add("hidden");
-});
+document.addEventListener("pointerdown", (e) => {
+  const m = document.getElementById("chat-list-context-menu");
+  if (!m || m.classList.contains("hidden")) return;
+  if (m.contains(e.target)) return;
+  if (justLongPressed()) return;
+  m.classList.add("hidden");
+  e.preventDefault();
+  e.stopPropagation();
+}, true);
 
 document.getElementById("chat-list-context-menu").addEventListener("click", async (e) => {
   const btn = e.target.closest("button"); if (!btn) return;
@@ -6497,7 +6512,23 @@ function setupMessageMenu() {
     else if (action === "del") await handleDeleteOne(id);
     else if (action === "sel") enterSelectionMode(id);
   });
-  document.addEventListener("click", () => closeMsgContextMenu());
+  // Закрываем меню тапом/кликом вне его.
+  // Используем pointerdown в capture-фазе: срабатывает РАНЬШЕ, чем click —
+  // поэтому мы успеваем погасить событие, и кнопка под меню не нажмётся.
+  // Плюс проверяем justLongPressed() — «фантомный» click после отпускания
+  // пальца не должен закрывать только что открытое меню.
+  document.addEventListener("pointerdown", (e) => {
+    const menu = document.getElementById("msg-context-menu");
+    if (!menu || menu.classList.contains("hidden")) return;
+    // Тап внутри меню — не трогаем
+    if (menu.contains(e.target)) return;
+    // Только что был long-press — не закрываем (это отпускание пальца)
+    if (justLongPressed()) return;
+    // Закрываем меню и ГАСИМ событие, чтобы клик не дошёл до кнопки под меню
+    menu.classList.add("hidden");
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
 
   // === Contenteditable-инпут и форматирование ===
   const inputEl = document.getElementById("message-input");
@@ -7684,7 +7715,14 @@ function setupGiftsUI() {
         renderGiftsMain(currentUser.id);
       }
     });
-    document.addEventListener("click", () => giftMenu.classList.add("hidden"));
+    document.addEventListener("pointerdown", (e) => {
+      if (giftMenu.classList.contains("hidden")) return;
+      if (giftMenu.contains(e.target)) return;
+      if (justLongPressed()) return;
+      giftMenu.classList.add("hidden");
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
   }
 
   // Клик по имени в «Подарок для X»:
