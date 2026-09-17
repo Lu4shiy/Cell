@@ -3227,6 +3227,71 @@ function removeChatFromList(chatId) {
   refreshWheelLayout();
 }
 
+// ============ БЫСТРАЯ РЕАКЦИЯ (двойной тап по сообщению) ============
+const QUICK_REACTION_KEY = "cell_quick_reaction";
+const QUICK_REACTION_DEFAULT = "❤️";
+
+function getSavedQuickReaction() {
+  try {
+    return localStorage.getItem(QUICK_REACTION_KEY) || QUICK_REACTION_DEFAULT;
+  } catch (e) { return QUICK_REACTION_DEFAULT; }
+}
+
+// Возвращает эмодзи для двойного тапа по конкретному сообщению.
+// — Сначала сохранённая настройка.
+// — Если её нет в доступных реакциях этого чата (например, убрали в канале) — ❤️.
+// — Если и ❤️ нет — первая доступная.
+function getQuickReactionFor(msgId) {
+  const msg = msgCache.get(msgId);
+  let available = REACTION_EMOJIS;
+  if (msg && msg.chat_id && channelCache.has(msg.chat_id)) {
+    const ch = channelCache.get(msg.chat_id);
+    if (Array.isArray(ch.available_reactions) && ch.available_reactions.length) {
+      available = ch.available_reactions;
+    }
+  }
+  const saved = getSavedQuickReaction();
+  if (available.includes(saved)) return saved;
+  if (available.includes(QUICK_REACTION_DEFAULT)) return QUICK_REACTION_DEFAULT;
+  return available[0];
+}
+
+function onMessageDoubleTap(e, msgId) {
+  // Игнорируем клики по вложенным интерактивным элементам
+  if (e.target.closest("a, .reaction-chip, .spoiler, .msg-reply, .msg-fwd-link, .msg-attachment-file")) return;
+  const emoji = getQuickReactionFor(msgId);
+  if (!emoji) return;
+  toggleReaction(msgId, emoji);
+}
+
+// Вешает детектор двойного тапа/клика
+function attachDoubleTap(el, handler) {
+  let lastTapAt = 0;
+  let lastX = 0, lastY = 0;
+
+  el.addEventListener("touchend", (e) => {
+    if (e.changedTouches.length !== 1) return;
+    const t = e.changedTouches[0];
+    const now = Date.now();
+    const dx = Math.abs(t.clientX - lastX);
+    const dy = Math.abs(t.clientY - lastY);
+    if (now - lastTapAt < 320 && dx < 30 && dy < 30) {
+      lastTapAt = 0;
+      handler(e);
+    } else {
+      lastTapAt = now;
+      lastX = t.clientX;
+      lastY = t.clientY;
+    }
+  }, { passive: true });
+
+  el.addEventListener("dblclick", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handler(e);
+  });
+}
+
 // ============ LONG-PRESS (для тач-устройств) ============
 // Удержание пальца ~0.5с → вызываем ту же логику, что и ПКМ.
 // Если палец сдвинулся больше чем на 10px — отменяем (это скролл).
@@ -4033,6 +4098,7 @@ async function appendMessageBefore(msg, firstExisting) {
   el.innerHTML = await buildMsgHtml(msg);
   el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
   attachLongPress(el, (e) => openMsgContextMenu(e, msg.id));
+  attachDoubleTap(el, (e) => onMessageDoubleTap(e, msg.id));
   el.addEventListener("click", onMsgClick);
   box.insertBefore(el, firstExisting);
   msgCache.set(msg.id, msg);
@@ -4159,7 +4225,6 @@ async function buildMsgHtml(msg) {
   html += `<div class="msg-time">${viewsHtml}${time}${renderMsgStatus(msg)}`;
   if (msg.edited_at) html += `<span class="msg-edited">изменено</span>`;
   html += `</div>`;
-  html += `<button class="msg-add-reaction" data-add-reaction="${msg.id}" title="Реакция">😊</button>`;
   return html;
 }
 
@@ -4186,6 +4251,7 @@ async function createMessageElement(msg) {
   el.innerHTML = await buildMsgHtml(msg);
   el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
   attachLongPress(el, (e) => openMsgContextMenu(e, msg.id));
+  attachDoubleTap(el, (e) => onMessageDoubleTap(e, msg.id));
   el.addEventListener("click", onMsgClick);
   msgCache.set(msg.id, msg);
   return el;
@@ -4871,8 +4937,6 @@ function onMsgClick(e) {
     if (uname) openChatByUsername(uname);
     return;
   }
-  const addBtn = e.target.closest(".msg-add-reaction");
-  if (addBtn) { e.stopPropagation(); openReactionPickerFor(addBtn, addBtn.dataset.addReaction); return; }
   const chip = e.target.closest(".reaction-chip");
   if (chip) { e.stopPropagation(); toggleReaction(chip.dataset.messageId, chip.dataset.emoji); return; }
 }
@@ -6183,7 +6247,6 @@ function setupMessageMenu() {
     else if (action === "pin") await handlePinAction(id);
     else if (action === "copy") copyMessageText(id).catch(() => {});
     else if (action === "edit") startEdit(id);
-    else if (action === "react") openPickerForContext(id);
     else if (action === "fwd") await handleForwardOne(id);
     else if (action === "del") await handleDeleteOne(id);
     else if (action === "sel") enterSelectionMode(id);
@@ -6293,10 +6356,71 @@ function setupMessageMenu() {
   }, true);
 }
 
+// Реакция-панель внутри контекстного меню сообщения.
+// Хранит текущее состояние «раскрыто/свёрнуто» между открытиями меню.
+let contextReactionsExpanded = false;
+
+function renderMsgReactionsBar(msgId) {
+  const bar = document.getElementById("msg-reactions-bar");
+  if (!bar) return;
+  const msg = msgCache.get(msgId);
+  if (!msg) { bar.innerHTML = ""; return; }
+
+  // В канале — свои доступные реакции, в DM — стандартный набор
+  let available = REACTION_EMOJIS;
+  if (msg.chat_id && channelCache.has(msg.chat_id)) {
+    const ch = channelCache.get(msg.chat_id);
+    if (Array.isArray(ch.available_reactions) && ch.available_reactions.length) {
+      available = ch.available_reactions;
+    }
+  }
+
+  const main = available.slice(0, 7);
+  const rest = available.slice(7);
+
+  let html = main.map((em) =>
+    `<button type="button" class="reaction-emoji-btn" data-react-emoji="${escapeHtml(em)}" title="${escapeHtml(em)}">${em}</button>`
+  ).join("");
+
+  if (rest.length) {
+    const arrow = contextReactionsExpanded ? "▴" : "▾";
+    html += `<button type="button" class="reaction-emoji-btn expand-btn" data-react-expand="1" title="Ещё реакции">${arrow}</button>`;
+  }
+
+  if (contextReactionsExpanded && rest.length) {
+    html += `<div class="msg-reactions-bar-expanded">` +
+      rest.map((em) =>
+        `<button type="button" class="reaction-emoji-btn" data-react-emoji="${escapeHtml(em)}" title="${escapeHtml(em)}">${em}</button>`
+      ).join("") + `</div>`;
+  }
+
+  bar.innerHTML = html;
+
+  bar.querySelectorAll("[data-react-emoji]").forEach((btn) => {
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const emoji = btn.dataset.reactEmoji;
+      closeMsgContextMenu();
+      await toggleReaction(msgId, emoji);
+    });
+  });
+
+  const expandBtn = bar.querySelector("[data-react-expand]");
+  if (expandBtn) {
+    expandBtn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      contextReactionsExpanded = !contextReactionsExpanded;
+      renderMsgReactionsBar(msgId);
+    });
+  }
+}
+
 function openMsgContextMenu(e, msgId) {
   if (selectionMode) return;
   e.preventDefault(); e.stopPropagation();
   contextMsgId = msgId;
+  contextReactionsExpanded = false;
+  renderMsgReactionsBar(msgId);
   const msg = msgCache.get(msgId);
   const editBtn  = document.querySelector('#msg-context-menu button[data-action="edit"]');
   const replyBtn = document.querySelector('#msg-context-menu button[data-action="reply"]');
@@ -9725,6 +9849,24 @@ function setupSettings() {
 
   const mfaSetupClose = document.getElementById("mfa-setup-close");
   if (mfaSetupClose) mfaSetupClose.addEventListener("click", closeMfaSetup);
+
+  // Сетка быстрой реакции
+  const quickGrid = document.getElementById("quick-reaction-grid");
+  if (quickGrid) {
+    const renderQuickGrid = () => {
+      const current = getSavedQuickReaction();
+      quickGrid.innerHTML = REACTION_EMOJIS.map((em) =>
+        `<button type="button" class="quick-reaction-option ${em === current ? "selected" : ""}" data-quick-em="${escapeHtml(em)}">${em}</button>`
+      ).join("");
+      quickGrid.querySelectorAll("[data-quick-em]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          try { localStorage.setItem(QUICK_REACTION_KEY, btn.dataset.quickEm); } catch (ex) {}
+          renderQuickGrid();
+        });
+      });
+    };
+    renderQuickGrid();
+  }
 
   // Акцент-грид живёт в настройках
   const grid = document.getElementById("accent-grid");

@@ -765,26 +765,7 @@ input:focus {
 .reaction-chip:hover { transform: scale(1.06); }
 .reaction-chip.mine { background: var(--accent); border-color: var(--accent); color: #15110d; font-weight: 600; }
 
-.msg-add-reaction {
-  position: absolute;
-  top: -8px;
-  right: 6px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: none;
-  background: var(--bg-card);
-  color: var(--text-sub);
-  font-size: 14px;
-  cursor: pointer;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-  z-index: 2;
-}
-.msg:hover .msg-add-reaction { display: flex; }
-.msg-add-reaction:hover { color: var(--accent); }
+/* Старая hover-кнопка реакций удалена — реакции теперь в ПКМ/long-press меню. */
 
 /* Статусы сообщений */
 .msg-status { font-size: 11px; margin-left: 4px; display: inline-block; letter-spacing: -1px; }
@@ -1403,6 +1384,59 @@ input:focus {
   font-family: inherit;
 }
 .context-menu button:hover { background: var(--bg-hover); }
+
+/* Панель реакций внутри ПКМ-меню сообщения */
+.msg-context-with-reactions { padding: 8px 6px; }
+
+.msg-reactions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px 4px 8px;
+  max-width: 300px;
+}
+
+.msg-reactions-bar .reaction-emoji-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, transform 0.1s;
+  padding: 0;
+  font-family: inherit;
+}
+.msg-reactions-bar .reaction-emoji-btn:hover {
+  background: var(--bg-hover);
+  transform: scale(1.1);
+}
+.msg-reactions-bar .reaction-emoji-btn.expand-btn {
+  color: var(--text-sub);
+  font-size: 14px;
+}
+.msg-reactions-bar .reaction-emoji-btn.expand-btn:hover {
+  color: var(--accent);
+}
+
+.msg-reactions-bar-expanded {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-top: 4px;
+}
+
+.msg-context-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 2px 4px 6px;
+}
 
 .menu {
   position: absolute;
@@ -3292,6 +3326,32 @@ button:not(:disabled):active { transform: scale(0.97); }
 
 .dialog-settings { max-width: 460px; }
 
+/* Сетка выбора быстрой реакции */
+.quick-reaction-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.quick-reaction-option {
+  aspect-ratio: 1;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, border-color 0.12s, transform 0.1s;
+  padding: 0;
+  font-family: inherit;
+}
+.quick-reaction-option:hover { transform: scale(1.06); }
+.quick-reaction-option.selected {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.15);
+}
+
 /* ====================================================== */
 /* ПРЕДПРОСМОТР ВЛОЖЕНИЙ ПЕРЕД ОТПРАВКОЙ                    */
 /* ====================================================== */
@@ -3584,13 +3644,13 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 }
 
 .gift-tile-emoji {
-  width: 72%;
-  height: 72%;
-  border-radius: 14px;
+  width: 58%;
+  height: 58%;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 44px;
+  font-size: 32px;
   line-height: 1;
   position: relative;
   overflow: hidden;
