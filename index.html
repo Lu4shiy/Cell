@@ -933,7 +933,25 @@
       window.addEventListener('load', () => {
         navigator.serviceWorker
           .register('./sw.js', { scope: './' })
+          .then((reg) => {
+            // Проверяем обновления раз в час и при каждом возврате в приложение
+            const checkUpdate = () => reg.update().catch(() => {});
+            setInterval(checkUpdate, 60 * 60 * 1000);
+            document.addEventListener('visibilitychange', () => {
+              if (document.visibilityState === 'visible') checkUpdate();
+            });
+          })
           .catch((err) => console.warn('SW registration failed:', err));
+
+        // Когда новый SW активировался — мягко перезагружаем страницу,
+        // чтобы пользователь сразу увидел новую версию.
+        let refreshed = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshed) return;
+          refreshed = true;
+          // Небольшая задержка — чтобы не дёрнуть прямо в момент открытия
+          setTimeout(() => window.location.reload(), 200);
+        });
       });
     }
   </script>
