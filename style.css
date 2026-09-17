@@ -4063,6 +4063,19 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   animation: fadeIn 0.12s ease-out;
 }
 
+/* Модель подарка: картинка или эмодзи */
+.gift-model {
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+.gift-model-emoji {
+  display: block;
+  line-height: 1;
+  user-select: none;
+}
+
 /* Иконка Nectar */
 .nectar-icon {
   width: 1.05em;
