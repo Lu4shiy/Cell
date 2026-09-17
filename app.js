@@ -108,11 +108,8 @@ const ICONS = {
 
 function verifiedBadge(profile) {
   if (!profile || !profile.verified) return "";
-  return `<span class="verified-badge" data-verified-badge="1">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" fill="#1DA1F2"/>
-      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="#ffffff"/>
-    </svg>
+  return `<span class="verified-badge verified-badge-icon" data-verified-badge="1">
+    <span class="cell-icon" data-icon="check"></span>
   </span>`;
 }
 
@@ -560,13 +557,25 @@ function setInputFromMarkdown(md) {
   el.innerHTML = applyFormatting(escapeHtml(md || "")).replace(/\n/g, "<br>");
 }
 
-// Рендерит превью чата: экранирует HTML, но заменяет 🧩 на иконку Nectar.
-// Используется вместо escapeHtml(preview.slice(0, 60)) в списке чатов.
+// Хелпер: инлайновая иконка внутри текста
+function iconInline(name) {
+  return `<span class="cell-icon cell-icon-sm cell-inline" data-icon="${name}"></span>`;
+}
+
+// Рендерит превью чата: экранирует HTML и заменяет emoji на наши иконки.
 function renderPreviewHtml(text) {
   const s = String(text || "").slice(0, 60);
-  const escaped = escapeHtml(s);
-  return escaped.replace(/🧩/g,
+  let html = escapeHtml(s);
+  // Nectar
+  html = html.replace(/🧩/g,
     `<img class="nectar-icon" src="${NECTAR_ICON_URL}" alt="Nectar" draggable="false">`);
+  // Иконки-замены emoji в превью
+  html = html.replace(/🎁/g, iconInline("gift"));
+  html = html.replace(/📷/g, iconInline("camera"));
+  html = html.replace(/🎥/g, iconInline("camera"));
+  html = html.replace(/📎/g, iconInline("attach"));
+  html = html.replace(/🔒/g, iconInline("lock"));
+  return html;
 }
 
 function stripMarkdown(text) {
@@ -4451,7 +4460,7 @@ async function buildMsgHtml(msg) {
   let viewsHtml = "";
   if (currentChannelObj && currentChannelObj.id === msg.chat_id) {
     const vc = currentChannelViewsMap.get(msg.id) || 0;
-    if (vc > 0) viewsHtml = `<span class="msg-views">👁 ${vc}</span>`;
+    if (vc > 0) viewsHtml = `<span class="msg-views">${iconInline("eye")}${vc}</span>`;
   }
 
   html += `<div class="msg-time">${viewsHtml}${time}${renderMsgStatus(msg)}`;
@@ -4550,7 +4559,7 @@ function updateMessageViewsInUI(msgId, count) {
       viewsEl.className = "msg-views";
       timeEl.insertBefore(viewsEl, timeEl.firstChild);
     }
-    viewsEl.textContent = `👁 ${count}`;
+    viewsEl.innerHTML = iconInline("eye") + count;
   } else if (viewsEl) {
     viewsEl.remove();
   }
@@ -5776,7 +5785,7 @@ async function buildAttachmentHtml(msg) {
     return `<video src="${escapeHtml(displayUrl)}" class="msg-attachment-video" controls preload="metadata" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="video" data-att-msg-id="${msg.id}"></video>`;
   }
   return `<a class="msg-attachment-file" href="${escapeHtml(displayUrl)}" target="_blank" rel="noopener" download="${escapeHtml(name)}">
-    <span class="maf-icon">📎</span>
+    <span class="maf-icon"><span class="cell-icon" data-icon="attach"></span></span>
     <span style="flex:1;min-width:0;">
       <span class="maf-name">${escapeHtml(name)}</span>
       <span class="maf-size">${escapeHtml(formatFileSize(size))}</span>
@@ -9726,7 +9735,7 @@ function rerenderPinMarks() {
       const pin = document.createElement("span");
       pin.className = "msg-pin-mark";
       pin.title = "Закреплено";
-      pin.textContent = "📌";
+      pin.innerHTML = '<span class="cell-icon cell-icon-sm" data-icon="pin"></span>';
       timeEl.insertBefore(pin, timeEl.firstChild);
     } else if (!pinnedIds.has(id) && existing) {
       existing.remove();

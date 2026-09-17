@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-v7";
+const CACHE_VERSION = "cell-v8";
 
 const CACHE_FILES = [
   "./",

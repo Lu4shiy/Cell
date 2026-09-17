@@ -417,6 +417,10 @@ input:focus {
 
 .icon-btn:hover { background: var(--bg-hover); color: var(--accent); }
 
+/* В шапке чата иконочные кнопки всегда окрашены в цвет приложения */
+.chat-header .icon-btn { color: var(--accent); }
+.chat-header .icon-btn:hover { color: var(--accent-hover); }
+
 .sidebar-actions {
   display: flex;
   align-items: center;
@@ -3464,6 +3468,39 @@ button:not(:disabled):active { transform: scale(0.97); }
 .cell-icon[data-icon="phone"]        { --icon: url("https://i.ibb.co/B2nTLVx9/icons8-phone-100.png"); }
 
 .icon-btn { display: flex; align-items: center; justify-content: center; }
+
+/* Инлайновые иконки внутри текста (превью чата, счётчики) */
+.cell-inline {
+  display: inline-block;
+  vertical-align: -3px;
+  margin-right: 4px;
+  width: 14px;
+  height: 14px;
+}
+
+/* Verified-галочка — синяя, как было у SVG */
+.verified-badge.verified-badge-icon .cell-icon {
+  background-color: #1DA1F2;
+  width: 1.05em;
+  height: 1.05em;
+}
+
+/* Глаз в счётчике просмотров */
+.msg-views .cell-icon {
+  display: inline-block;
+  vertical-align: -3px;
+  margin-right: 3px;
+  width: 12px;
+  height: 12px;
+}
+
+/* Пин в метке закрепа */
+.msg-pin-mark .cell-icon {
+  display: inline-block;
+  vertical-align: -2px;
+  width: 12px;
+  height: 12px;
+}
 
 /* ====================================================== */
 /* НАСТРОЙКИ                                               */

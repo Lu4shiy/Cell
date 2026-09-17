@@ -161,7 +161,7 @@
         </div>
 
         <div id="pin-bar" class="pin-bar hidden">
-          <span class="pin-bar-icon">📌</span>
+          <span class="pin-bar-icon"><span class="cell-icon" data-icon="pin"></span></span>
           <div class="pin-bar-content">
             <div class="pin-bar-title" id="pin-bar-title">Закреплённое сообщение</div>
             <div class="pin-bar-text" id="pin-bar-text"></div>
@@ -183,12 +183,12 @@
         </div>
 
         <div id="e2ee-unlock-banner" class="e2ee-unlock-banner hidden">
-          🔒 <span>Сообщения в этом чате зашифрованы.</span>
+          <span class="cell-icon" data-icon="lock"></span> <span>Сообщения в этом чате зашифрованы.</span>
           <button type="button" id="e2ee-unlock-banner-btn">Разблокировать</button>
         </div>
 
         <div id="e2ee-composer-hint" class="e2ee-composer-hint hidden">
-          🔒 <span id="e2ee-composer-hint-text">Зашифровано</span>
+          <span class="cell-icon cell-icon-sm" data-icon="lock"></span> <span id="e2ee-composer-hint-text">Зашифровано</span>
         </div>
 
         <form class="composer" id="composer">
@@ -279,7 +279,7 @@
         <div class="profile-label">День рождения</div>
         <div class="birthday-input-wrap">
           <input type="text" id="profile-birthday" placeholder="ДД.ММ или ДД.ММ.ГГГГ" maxlength="10" autocomplete="off">
-          <button type="button" id="profile-birthday-calendar" class="birthday-calendar-btn" title="Выбрать дату">📅</button>
+          <button type="button" id="profile-birthday-calendar" class="birthday-calendar-btn" title="Выбрать дату"><span class="cell-icon" data-icon="calendar"></span></button>
           <div id="birthday-calendar" class="birthday-calendar hidden">
             <div class="bc-header">
               <button type="button" class="bc-nav" data-bc="prev-year" title="Год назад">«</button>
@@ -301,7 +301,7 @@
       </div>
 
       <button class="profile-gifts-btn" id="profile-gifts-btn">
-        <span>🎁 Подарки</span>
+        <span style="display:flex;align-items:center;gap:8px;"><span class="cell-icon" data-icon="gift"></span>Подарки</span>
         <span class="gifts-count-badge" id="profile-gifts-count">0</span>
       </button>
 
@@ -355,7 +355,7 @@
           </div>
         </div>
         <div class="profile-info-row">
-          <span class="pir-icon">📅</span>
+          <span class="pir-icon"><span class="cell-icon" data-icon="calendar"></span></span>
           <div class="pir-body">
             <div class="pir-value" id="user-profile-created">—</div>
             <div class="pir-label">Дата регистрации аккаунта</div>
@@ -364,7 +364,7 @@
       </div>
 
       <button class="profile-gifts-btn" id="user-profile-gifts-btn">
-        <span>🎁 Подарки</span>
+        <span style="display:flex;align-items:center;gap:8px;"><span class="cell-icon" data-icon="gift"></span>Подарки</span>
         <span class="gifts-count-badge" id="user-profile-gifts-count">0</span>
       </button>
 
@@ -527,14 +527,14 @@
           </div>
         </div>
         <div class="profile-info-row">
-          <span class="pir-icon">👁</span>
+          <span class="pir-icon"><span class="cell-icon" data-icon="eye"></span></span>
           <div class="pir-body">
             <div class="pir-value" id="channel-profile-views">0</div>
             <div class="pir-label">Просмотров за все время</div>
           </div>
         </div>
         <div class="profile-info-row">
-          <span class="pir-icon">📅</span>
+          <span class="pir-icon"><span class="cell-icon" data-icon="calendar"></span></span>
           <div class="pir-body">
             <div class="pir-value" id="channel-profile-created">—</div>
             <div class="pir-label">Дата создания</div>
