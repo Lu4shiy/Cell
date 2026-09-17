@@ -3315,7 +3315,7 @@ button:not(:disabled):active { transform: scale(0.97); }
   }
   /* Подарки — иконка символа чуть крупнее на мобильном */
   .gift-tile-emoji-symbol {
-    font-size: 34px;
+    font-size: 51px;
   }
 }
 
@@ -3688,7 +3688,8 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 .gift-tile-emoji-symbol {
   position: relative;
   z-index: 1;
-  font-size: 30px;
+  font-size: 51px;
+  line-height: 1;
 }
 
 .gift-tile-ribbon {
