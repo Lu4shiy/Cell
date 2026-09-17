@@ -8383,6 +8383,33 @@ window.addEventListener("unhandledrejection", (e) => {
 });
 
 // ======================================================
+// ЗАПРЕТ PINCH-ZOOM НА МОБИЛЬНЫХ
+// ======================================================
+// Мета-тег viewport покрывает современные браузеры, но старые iOS Safari
+// его игнорируют. Явно гасим жесты двумя пальцами и double-tap zoom.
+(function disablePinchZoom() {
+  // Запрещаем жесты с двумя и более пальцами (pinch)
+  document.addEventListener("touchstart", (e) => {
+    if (e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
+
+  // Запрещаем zoom через gesture-события (Safari)
+  document.addEventListener("gesturestart", (e) => e.preventDefault());
+  document.addEventListener("gesturechange", (e) => e.preventDefault());
+  document.addEventListener("gestureend", (e) => e.preventDefault());
+
+  // Запрещаем double-tap zoom (iOS Safari < 13)
+  let lastTouchEnd = 0;
+  document.addEventListener("touchend", (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) {
+      e.preventDefault();
+    }
+    lastTouchEnd = now;
+  }, { passive: false });
+})();
+
+// ======================================================
 // 30. КАНАЛЫ: СОЗДАНИЕ
 // ======================================================
 
