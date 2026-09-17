@@ -3382,17 +3382,86 @@ button:not(:disabled):active { transform: scale(0.97); }
 /* ИКОНКИ CELL                                             */
 /* ====================================================== */
 
+/* ======================================================
+   КАСТОМНЫЕ ИКОНКИ: маска + окраска в currentColor
+   ====================================================== */
+
 .cell-icon {
+  display: inline-block;
   width: 20px;
   height: 20px;
-  display: block;
+  background-color: currentColor;
+  -webkit-mask-image: var(--icon);
+          mask-image: var(--icon);
+  -webkit-mask-size: contain;
+          mask-size: contain;
+  -webkit-mask-position: center;
+          mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
   pointer-events: none;
-  filter: brightness(0.9);
-  transition: filter 0.15s;
+  flex-shrink: 0;
+  vertical-align: middle;
+  transition: background-color 0.15s;
 }
-.icon-btn:hover .cell-icon { filter: brightness(1.2) sepia(1) saturate(2) hue-rotate(-10deg); }
-.cell-icon-sm { width: 16px; height: 16px; display: block; pointer-events: none; }
-.cell-icon-lg { width: 36px; height: 36px; display: block; pointer-events: none; }
+.cell-icon-sm { width: 16px; height: 16px; }
+.cell-icon-lg { width: 36px; height: 36px; }
+
+/* При наведении на иконочную кнопку — окрашиваем в accent */
+.icon-btn:hover .cell-icon { background-color: var(--accent); }
+
+/* --- Сами иконки: URL задаётся через data-icon --- */
+.cell-icon[data-icon="menu"]         { --icon: url("https://i.ibb.co/RTm827Y2/icons8-menu-100.png"); }
+.cell-icon[data-icon="plus"]         { --icon: url("https://i.ibb.co/3mzyss3c/icons8-plus-100.png"); }
+.cell-icon[data-icon="settings"]     { --icon: url("https://i.ibb.co/Nn163DW5/icons8-settings-100.png"); }
+.cell-icon[data-icon="info"]         { --icon: url("https://i.ibb.co/MxdqLmhX/icons8-info-100.png"); }
+.cell-icon[data-icon="logout"]       { --icon: url("https://i.ibb.co/Rk5CTKVf/icons8-logout-100.png"); }
+.cell-icon[data-icon="cancel"]       { --icon: url("https://i.ibb.co/chc6VshW/icons8-cancel-100.png"); }
+.cell-icon[data-icon="menuVertical"] { --icon: url("https://i.ibb.co/Mxt4KXGm/icons8-menu-vertical-100.png"); }
+.cell-icon[data-icon="pin"]          { --icon: url("https://i.ibb.co/93q8mMsM/icons8-pin-100.png"); }
+.cell-icon[data-icon="search"]       { --icon: url("https://i.ibb.co/Gf39Nbfw/icons8-search-100.png"); }
+.cell-icon[data-icon="left"]         { --icon: url("https://i.ibb.co/TBsFzwsW/icons8-left-100.png"); }
+.cell-icon[data-icon="right"]        { --icon: url("https://i.ibb.co/0j2T5pSF/icons8-right-100.png"); }
+.cell-icon[data-icon="down"]         { --icon: url("https://i.ibb.co/N2CmnrTg/icons8-down-100.png"); }
+.cell-icon[data-icon="up"]           { --icon: url("https://i.ibb.co/CpLH9d14/icons8-up-100.png"); }
+.cell-icon[data-icon="back"]         { --icon: url("https://i.ibb.co/ZCqX2wv/icons8-back-100.png"); }
+.cell-icon[data-icon="forward"]      { --icon: url("https://i.ibb.co/rRhqvpkp/icons8-forward-100.png"); }
+.cell-icon[data-icon="forwardArrow"] { --icon: url("https://i.ibb.co/FqVY25TM/icons8-forward-arrow-100.png"); }
+.cell-icon[data-icon="attach"]       { --icon: url("https://i.ibb.co/WWKScFby/icons8-attach-100.png"); }
+.cell-icon[data-icon="happy"]        { --icon: url("https://i.ibb.co/MyFyBjCp/icons8-happy-100.png"); }
+.cell-icon[data-icon="sent"]         { --icon: url("https://i.ibb.co/2YLJqjGy/icons8-sent-100.png"); }
+.cell-icon[data-icon="addFile"]      { --icon: url("https://i.ibb.co/4yWy9LL/icons8-add-file-100.png"); }
+.cell-icon[data-icon="checkboxOff"]  { --icon: url("https://i.ibb.co/GfgpKzW2/icons8-unchecked-checkbox-100.png"); }
+.cell-icon[data-icon="checkboxOn"]   { --icon: url("https://i.ibb.co/VdVLWCy/icons8-checked-checkbox-100.png"); }
+.cell-icon[data-icon="external"]     { --icon: url("https://i.ibb.co/DDYJBbmQ/icons8-external-link-100.png"); }
+.cell-icon[data-icon="copy"]         { --icon: url("https://i.ibb.co/N6czDhg9/icons8-100.png"); }
+.cell-icon[data-icon="copyLink"]     { --icon: url("https://i.ibb.co/jPxmYW92/icons8-100.png"); }
+.cell-icon[data-icon="addLink"]      { --icon: url("https://i.ibb.co/SwgNs95x/icons8-add-link-100.png"); }
+.cell-icon[data-icon="deleteLink"]   { --icon: url("https://i.ibb.co/0pBv1JBF/icons8-delete-link-1-100.png"); }
+.cell-icon[data-icon="share"]        { --icon: url("https://i.ibb.co/gMCXfSQm/icons8-share-100.png"); }
+.cell-icon[data-icon="camera"]       { --icon: url("https://i.ibb.co/cXDycp4t/icons8-camera-100.png"); }
+.cell-icon[data-icon="download"]     { --icon: url("https://i.ibb.co/vCcf4z9T/icons8-download-100.png"); }
+.cell-icon[data-icon="upload"]       { --icon: url("https://i.ibb.co/jvkhQgzC/icons8-upload-100.png"); }
+.cell-icon[data-icon="save"]         { --icon: url("https://i.ibb.co/0j6zWPKB/icons8-save-100.png"); }
+.cell-icon[data-icon="eye"]          { --icon: url("https://i.ibb.co/1Y5CtsFy/icons8-eye-100.png"); }
+.cell-icon[data-icon="lock"]         { --icon: url("https://i.ibb.co/HL843yqH/icons8-lock-100.png"); }
+.cell-icon[data-icon="padlock"]      { --icon: url("https://i.ibb.co/S48ZYB8J/icons8-padlock-100.png"); }
+.cell-icon[data-icon="check"]        { --icon: url("https://i.ibb.co/BHV9HPwq/icons8-check-mark-100.png"); }
+.cell-icon[data-icon="protect"]      { --icon: url("https://i.ibb.co/dxV6ZPj/icons8-protect-100.png"); }
+.cell-icon[data-icon="error"]        { --icon: url("https://i.ibb.co/2zYhmmx/icons8-error-100.png"); }
+.cell-icon[data-icon="gift"]         { --icon: url("https://i.ibb.co/LzYxLkJb/icons8-gift-100.png"); }
+.cell-icon[data-icon="star"]         { --icon: url("https://i.ibb.co/pr5KjpvN/icons8-star-100.png"); }
+.cell-icon[data-icon="favorite"]     { --icon: url("https://i.ibb.co/RkqmHj4T/icons8-favorite-100.png"); }
+.cell-icon[data-icon="heart"]        { --icon: url("https://i.ibb.co/7BkZr68/icons8-heart-100.png"); }
+.cell-icon[data-icon="home"]         { --icon: url("https://i.ibb.co/d0w14w2c/icons8-home-100.png"); }
+.cell-icon[data-icon="folder"]       { --icon: url("https://i.ibb.co/MDWNyVx0/icons8-folder-100.png"); }
+.cell-icon[data-icon="calendar"]     { --icon: url("https://i.ibb.co/mFzbsxdN/icons8-calendar-100.png"); }
+.cell-icon[data-icon="notification"] { --icon: url("https://i.ibb.co/Nd1wqj5C/icons8-notification-100.png"); }
+.cell-icon[data-icon="pencil"]       { --icon: url("https://i.ibb.co/N6BxF52S/icons8-pencil-100.png"); }
+.cell-icon[data-icon="bot"]          { --icon: url("https://i.ibb.co/wNTsVXTn/icons8-bot-100.png"); }
+.cell-icon[data-icon="location"]     { --icon: url("https://i.ibb.co/dJJtz3xp/icons8-location-100.png"); }
+.cell-icon[data-icon="email"]        { --icon: url("https://i.ibb.co/Zzf1w0DZ/icons8-email-100.png"); }
+.cell-icon[data-icon="phone"]        { --icon: url("https://i.ibb.co/B2nTLVx9/icons8-phone-100.png"); }
 
 .icon-btn { display: flex; align-items: center; justify-content: center; }
 
@@ -3981,28 +4050,6 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 /* ====================================================== */
 /* МЕНЮ САЙДБАРА (бургер + выезжающий список)             */
 /* ====================================================== */
-
-/* Иконка «три полоски», нарисованная через CSS */
-.burger-icon {
-  width: 18px;
-  height: 14px;
-  display: block;
-  position: relative;
-}
-.burger-icon::before,
-.burger-icon::after,
-.burger-icon > span {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: currentColor;
-  border-radius: 1px;
-}
-.burger-icon::before { top: 0; }
-.burger-icon::after  { bottom: 0; }
-.burger-icon > span  { top: 50%; transform: translateY(-50%); }
 
 /* Сам drawer: по умолчанию скрыт. */
 .sidebar-menu-drawer {

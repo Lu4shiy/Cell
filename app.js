@@ -25,39 +25,85 @@ const BASE_AVATARS = [["#ff8c42","#ffb37a"],["#2196f3","#64b5f6"],["#4caf50","#8
 const REACTION_EMOJIS = ["👍","👎","❤️","🤣","🤮","🤯","🤬","😡","🎉","😅"];
 
 // ---- Иконки Cell ----
+// Активные (используются в UI). Отрисовываются через CSS-маску — красятся в currentColor.
 const ICONS = {
-  plus:        "https://i.ibb.co/vxd50Lys/icons8-1500.png",
-  search:      "https://i.ibb.co/6zRygtc/icons8-1500.png",
-  arrowRight:  "https://i.ibb.co/sJ5cRDq5/icons8-100.png",
-  arrowUp:     "https://i.ibb.co/4RQ8CxV6/icons8-arrow-up-100.png",
-  arrowDown:   "https://i.ibb.co/hx2WcJm1/icons8-100.png",
-  miniRight:   "https://i.ibb.co/YFYkyF74/icons8-100.png",
-  miniLeft:    "https://i.ibb.co/MxBsK2rf/icons8-100.png",
-  arrowLeft:   "https://i.ibb.co/93dShvBP/icons8-100.png",
-  undo:        "https://i.ibb.co/W4JjxNdk/icons8-100.png",
-  redo:        "https://i.ibb.co/7JkncpWz/icons8-100.png",
-  checkboxOff: "https://i.ibb.co/Q7GpR0tj/icons8-unchecked-checkbox-100.png",
-  checkboxOn:  "https://i.ibb.co/Xx1gZN2H/icons8-checked-checkbox-100.png",
-  upload:      "https://i.ibb.co/pvyKyg4v/icons8-upload-100.png",
-  findFile:    "https://i.ibb.co/8L9MNx03/icons8-view-100.png",
-  addFile:     "https://i.ibb.co/whVjBfR3/icons8-add-file-100.png",
-  addLink:     "https://i.ibb.co/4ZtzJ06c/icons8-add-link-100.png",
-  email:       "https://i.ibb.co/ns3L6RZX/icons8-at-sign-100.png",
-  calendar:    "https://i.ibb.co/dZjkzXz/icons8-calendar-100.png",
-  logout:      "https://i.ibb.co/gbTLc2jJ/icons8-change-user-100.png",
-  deleteLink:  "https://i.ibb.co/0y0fG5n2/icons8-delete-link-100.png",
-  download:    "https://i.ibb.co/fzzrdz3V/icons8-download-100.png",
-  error:       "https://i.ibb.co/GvBQMp9G/icons8-error-sign-100.png",
-  features:    "https://i.ibb.co/C5FZd4mj/icons8-features-list-100.png",
-  gear:        "https://i.ibb.co/CsBkQMQv/icons8-gear-100.png",
-  info:        "https://i.ibb.co/nqcVPKHp/icons8-info-popup-100.png",
-  language:    "https://i.ibb.co/5Xr3V3Kv/icons8-language-100.png",
-  link:        "https://i.ibb.co/XrqrrXm9/icons8-link-100.png",
-  save:        "https://i.ibb.co/Lh0mHcsY/icons8-save-100.png",
-  saveAs:      "https://i.ibb.co/MkZN03VX/icons8-save-as-100.png",
-  switchOff:   "https://i.ibb.co/0jsYMd1s/icons8-switch-off-100.png",
-  switchOn:    "https://i.ibb.co/MDfhc887/icons8-switch-on-100.png",
-  verified:    "https://i.ibb.co/TB7T6kgN/image.png",
+  // === Сайдбар / глобальные ===
+  menu:            "https://i.ibb.co/RTm827Y2/icons8-menu-100.png",
+  plus:            "https://i.ibb.co/3mzyss3c/icons8-plus-100.png",
+  settings:        "https://i.ibb.co/Nn163DW5/icons8-settings-100.png",
+  info:            "https://i.ibb.co/MxdqLmhX/icons8-info-100.png",
+  logout:          "https://i.ibb.co/Rk5CTKVf/icons8-logout-100.png",
+
+  // === Общие (стрелки, крестик, точки, пин, поиск) ===
+  cancel:          "https://i.ibb.co/chc6VshW/icons8-cancel-100.png",
+  menuVertical:    "https://i.ibb.co/Mxt4KXGm/icons8-menu-vertical-100.png",
+  pin:             "https://i.ibb.co/93q8mMsM/icons8-pin-100.png",
+  search:          "https://i.ibb.co/Gf39Nbfw/icons8-search-100.png",
+  left:            "https://i.ibb.co/TBsFzwsW/icons8-left-100.png",
+  right:           "https://i.ibb.co/0j2T5pSF/icons8-right-100.png",
+  down:            "https://i.ibb.co/N2CmnrTg/icons8-down-100.png",
+  up:              "https://i.ibb.co/CpLH9d14/icons8-up-100.png",
+  back:            "https://i.ibb.co/ZCqX2wv/icons8-back-100.png",
+  forward:         "https://i.ibb.co/rRhqvpkp/icons8-forward-100.png",
+  forwardArrow:    "https://i.ibb.co/FqVY25TM/icons8-forward-arrow-100.png",
+
+  // === Composer / вложения ===
+  attach:          "https://i.ibb.co/WWKScFby/icons8-attach-100.png",
+  happy:           "https://i.ibb.co/MyFyBjCp/icons8-happy-100.png",
+  sent:            "https://i.ibb.co/2YLJqjGy/icons8-sent-100.png",
+  addFile:         "https://i.ibb.co/4yWy9LL/icons8-add-file-100.png",
+  checkboxOff:     "https://i.ibb.co/GfgpKzW2/icons8-unchecked-checkbox-100.png",
+  checkboxOn:      "https://i.ibb.co/VdVLWCy/icons8-checked-checkbox-100.png",
+
+  // === Ссылки / инвайты ===
+  external:        "https://i.ibb.co/DDYJBbmQ/icons8-external-link-100.png",
+  copy:            "https://i.ibb.co/N6czDhg9/icons8-100.png",
+  copyLink:        "https://i.ibb.co/jPxmYW92/icons8-100.png",
+  addLink:         "https://i.ibb.co/SwgNs95x/icons8-add-link-100.png",
+  deleteLink:      "https://i.ibb.co/0pBv1JBF/icons8-delete-link-1-100.png",
+  share:           "https://i.ibb.co/gMCXfSQm/icons8-share-100.png",
+
+  // === Медиа / файлы ===
+  camera:          "https://i.ibb.co/cXDycp4t/icons8-camera-100.png",
+  download:        "https://i.ibb.co/vCcf4z9T/icons8-download-100.png",
+  upload:          "https://i.ibb.co/jvkhQgzC/icons8-upload-100.png",
+  save:            "https://i.ibb.co/0j6zWPKB/icons8-save-100.png",
+  eye:             "https://i.ibb.co/1Y5CtsFy/icons8-eye-100.png",
+
+  // === Защита / статусы ===
+  lock:            "https://i.ibb.co/HL843yqH/icons8-lock-100.png",
+  padlock:         "https://i.ibb.co/S48ZYB8J/icons8-padlock-100.png",
+  check:           "https://i.ibb.co/BHV9HPwq/icons8-check-mark-100.png",
+  protect:         "https://i.ibb.co/dxV6ZPj/icons8-protect-100.png",
+  error:           "https://i.ibb.co/2zYhmmx/icons8-error-100.png",
+
+  // === Подарки / избранное ===
+  gift:            "https://i.ibb.co/LzYxLkJb/icons8-gift-100.png",
+  star:            "https://i.ibb.co/pr5KjpvN/icons8-star-100.png",
+  favorite:        "https://i.ibb.co/RkqmHj4T/icons8-favorite-100.png",
+  heart:           "https://i.ibb.co/7BkZr68/icons8-heart-100.png",
+
+  // === Прочее (в запасе на будущее) ===
+  home:            "https://i.ibb.co/d0w14w2c/icons8-home-100.png",
+  folder:          "https://i.ibb.co/MDWNyVx0/icons8-folder-100.png",
+  calendar:        "https://i.ibb.co/mFzbsxdN/icons8-calendar-100.png",
+  notification:    "https://i.ibb.co/Nd1wqj5C/icons8-notification-100.png",
+  pencil:          "https://i.ibb.co/N6BxF52S/icons8-pencil-100.png",
+  bot:             "https://i.ibb.co/wNTsVXTn/icons8-bot-100.png",
+  location:        "https://i.ibb.co/dJJtz3xp/icons8-location-100.png",
+  email:           "https://i.ibb.co/Zzf1w0DZ/icons8-email-100.png",
+  phone:           "https://i.ibb.co/B2nTLVx9/icons8-phone-100.png",
+
+  // === Оставлены из старого набора (не переопределены новым списком) ===
+  undo:            "https://i.ibb.co/W4JjxNdk/icons8-100.png",
+  redo:            "https://i.ibb.co/7JkncpWz/icons8-100.png",
+  features:        "https://i.ibb.co/C5FZd4mj/icons8-features-list-100.png",
+  language:        "https://i.ibb.co/5Xr3V3Kv/icons8-language-100.png",
+  saveAs:          "https://i.ibb.co/MkZN03VX/icons8-save-as-100.png",
+  switchOff:       "https://i.ibb.co/0jsYMd1s/icons8-switch-off-100.png",
+  switchOn:        "https://i.ibb.co/MDfhc887/icons8-switch-on-100.png",
+  findFile:        "https://i.ibb.co/8L9MNx03/icons8-view-100.png",
+  verified:        "https://i.ibb.co/TB7T6kgN/image.png",
 };
 
 function verifiedBadge(profile) {
@@ -3469,16 +3515,9 @@ function setupMessagesDelegates() {
 const LONG_PRESS_MS = 500;
 const LONG_PRESS_MOVE_TOLERANCE = 10;
 
-// Глобальный timestamp последнего long-press. Click-обработчики
-// проверяют его, чтобы не срабатывать «фантомным» кликом сразу после
-// отпускания пальца (иначе меню мгновенно закрывается).
-let lastLongPressAt = 0;
-function justLongPressed() {
-  return (Date.now() - lastLongPressAt) < 600;
-}
-
 // Глобальный timestamp последнего long-press — click-обработчики
-// проверяют его, чтобы не открыть чат сразу после открытия контекстного меню.
+// проверяют его, чтобы не сработать «фантомным» кликом сразу после
+// отпускания пальца.
 let lastLongPressAt = 0;
 
 function attachLongPress(el, handler) {
@@ -3535,12 +3574,12 @@ function attachLongPress(el, handler) {
 }
 
 // Хелпер: true, если только что был long-press (в течение 600 мс).
-// Используется в click-обработчиках, чтобы погасить «фантомный» click.
+// Click-обработчики проверяют его, чтобы не сработать «фантомным» кликом
+// сразу после отпускания пальца.
 function justLongPressed() {
   return (Date.now() - lastLongPressAt) < 600;
 }
 
-// ============ Кнопка «назад» на мобильном ============
 function setupMobileBackButton() {
   const btn = document.getElementById("mobile-back-btn");
   if (!btn) return;
@@ -8066,7 +8105,7 @@ async function renderGiftsMain(userId) {
       const isLimited = cat.max_supply !== null && cat.max_supply !== undefined;
       const ribbon = isLimited ? `<div class="gift-tile-ribbon">#${ug.serial_number}</div>` : "";
       const pinMark = ug.pinned_at
-        ? `<div class="gift-tile-pin"><img class="gift-pin-icon" src="https://i.ibb.co/W4YMJWPd/icons8-94.png" alt=""></div>`
+        ? `<div class="gift-tile-pin"><span class="cell-icon cell-icon-sm" data-icon="pin"></span></div>`
         : "";
       const patternIcon = cat.rarity === "epic" ? getPatternIcon(ug.pattern_id) : null;
       const inProfileClass = (isMe && ug.in_profile) ? " in-profile" : "";
@@ -9392,7 +9431,7 @@ async function renderChannelEditAdmins() {
           <div class="admin-row-username">@${escapeHtml(p.username)}</div>
         </div>
         <span class="admin-row-role admin">Админ</span>
-        <button type="button" class="admin-row-remove" data-remove-admin="${p.id}" title="Снять">✕</button>
+        <button type="button" class="admin-row-remove" data-remove-admin="${p.id}" title="Снять"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
       </div>
     `).join("");
     listEl.querySelectorAll(".admin-row").forEach((row) => {
@@ -9977,10 +10016,10 @@ async function refreshInviteList() {
     return `
       <div class="invite-item" data-invite-id="${inv.id}">
         <span class="invite-item-code"><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></span>
-        <button class="invite-item-open" data-open-code="${inv.code}" title="Открыть в этой вкладке">↗</button>
-        <button class="invite-item-share" data-share-code="${inv.code}" title="Переслать">↪️</button>
-        <button class="invite-item-copy" data-copy-code="${inv.code}" title="Скопировать">📋</button>
-        <button class="invite-item-revoke" data-revoke-id="${inv.id}" title="Отозвать">✕</button>
+        <button class="invite-item-open" data-open-code="${inv.code}" title="Открыть в этой вкладке"><span class="cell-icon cell-icon-sm" data-icon="external"></span></button>
+        <button class="invite-item-share" data-share-code="${inv.code}" title="Переслать"><span class="cell-icon cell-icon-sm" data-icon="share"></span></button>
+        <button class="invite-item-copy" data-copy-code="${inv.code}" title="Скопировать"><span class="cell-icon cell-icon-sm" data-icon="copyLink"></span></button>
+        <button class="invite-item-revoke" data-revoke-id="${inv.id}" title="Отозвать"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
       </div>`;
   }).join("");
 
@@ -10002,8 +10041,9 @@ async function refreshInviteList() {
         tmp.value = url; document.body.appendChild(tmp); tmp.select();
         document.execCommand("copy"); document.body.removeChild(tmp);
       }
-      btn.textContent = "✓";
-      setTimeout(() => { btn.textContent = "📋"; }, 1200);
+      const iconEl = btn.querySelector(".cell-icon");
+      if (iconEl) iconEl.setAttribute("data-icon", "check");
+      setTimeout(() => { if (iconEl) iconEl.setAttribute("data-icon", "copyLink"); }, 1200);
     });
   });
   listEl.querySelectorAll("[data-open-code]").forEach((btn) => {
@@ -10080,8 +10120,8 @@ async function openChannelRequestsDialog() {
         ${escapeHtml(p.display_name)}
         <div class="admin-row-username">@${escapeHtml(p.username)}</div>
       </div>
-      <button type="button" class="request-approve" data-approve="${p._requestId}" title="Одобрить">✓</button>
-      <button type="button" class="request-reject" data-reject="${p._requestId}" title="Отклонить">✕</button>
+      <button type="button" class="request-approve" data-approve="${p._requestId}" title="Одобрить"><span class="cell-icon cell-icon-sm" data-icon="check"></span></button>
+      <button type="button" class="request-reject" data-reject="${p._requestId}" title="Отклонить"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
     </div>
   `).join("");
 
@@ -10313,7 +10353,7 @@ function updateAttachAsFileIcon() {
   const cb = document.getElementById("attach-as-file");
   const icon = document.getElementById("attach-as-file-icon");
   if (!cb || !icon) return;
-  icon.src = cb.checked ? ICONS.checkboxOn : ICONS.checkboxOff;
+  icon.setAttribute("data-icon", cb.checked ? "checkboxOn" : "checkboxOff");
 }
 
 function renderAttachPreview() {
