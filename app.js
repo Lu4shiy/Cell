@@ -93,6 +93,8 @@ const ICONS = {
   location:        "https://i.ibb.co/dJJtz3xp/icons8-location-100.png",
   email:           "https://i.ibb.co/Zzf1w0DZ/icons8-email-100.png",
   phone:           "https://i.ibb.co/B2nTLVx9/icons8-phone-100.png",
+  birthday:        "https://i.ibb.co/0Rdgd9Qh/icons8-birthday-100.png",
+  typing:          "https://i.ibb.co/SSq1TyZ/icons8-typing-100.png",
 
   // === Оставлены из старого набора (не переопределены новым списком) ===
   undo:            "https://i.ibb.co/W4JjxNdk/icons8-100.png",

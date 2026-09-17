@@ -1830,7 +1830,8 @@ input:focus {
   padding: 10px 4px;
   border-radius: 10px;
 }
-.pir-icon { width: 26px; text-align: center; font-size: 16px; color: var(--text-dim); flex-shrink: 0; }
+.pir-icon { width: 26px; text-align: center; font-size: 16px; color: var(--text-dim); flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.pir-icon .cell-icon { width: 18px; height: 18px; }
 .pir-body { flex: 1; min-width: 0; }
 .pir-value { font-size: 15px; color: var(--text); word-break: break-word; }
 .pir-label { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
@@ -3466,6 +3467,8 @@ button:not(:disabled):active { transform: scale(0.97); }
 .cell-icon[data-icon="location"]     { --icon: url("https://i.ibb.co/dJJtz3xp/icons8-location-100.png"); }
 .cell-icon[data-icon="email"]        { --icon: url("https://i.ibb.co/Zzf1w0DZ/icons8-email-100.png"); }
 .cell-icon[data-icon="phone"]        { --icon: url("https://i.ibb.co/B2nTLVx9/icons8-phone-100.png"); }
+.cell-icon[data-icon="birthday"]     { --icon: url("https://i.ibb.co/0Rdgd9Qh/icons8-birthday-100.png"); }
+.cell-icon[data-icon="typing"]       { --icon: url("https://i.ibb.co/SSq1TyZ/icons8-typing-100.png"); }
 
 .icon-btn { display: flex; align-items: center; justify-content: center; }
 
@@ -3478,9 +3481,9 @@ button:not(:disabled):active { transform: scale(0.97); }
   height: 14px;
 }
 
-/* Verified-галочка — синяя, как было у SVG */
+/* Verified-галочка — в цвет приложения */
 .verified-badge.verified-badge-icon .cell-icon {
-  background-color: #1DA1F2;
+  background-color: var(--accent);
   width: 1.05em;
   height: 1.05em;
 }
