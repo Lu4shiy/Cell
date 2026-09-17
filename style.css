@@ -114,7 +114,7 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-html, body { height: 100%; }
+html, body { height: 100%; height: 100dvh; }
 
 body {
   background: var(--bg);
@@ -3175,12 +3175,83 @@ button:not(:disabled):active { transform: scale(0.97); }
 /* Мобильная                                                */
 /* ====================================================== */
 
-@media (max-width: 700px) {
-  .sidebar { width: 100%; min-width: 100%; }
+/* Кнопка «назад» — видна только на мобильном */
+.mobile-back-btn {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  font-size: 22px;
+  font-family: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s;
+}
+.mobile-back-btn:hover { background: var(--bg-hover); }
+.mobile-back-btn:active { background: var(--bg-active); }
+
+@media (max-width: 768px) {
+  /* На мобильном одна область занимает весь экран.
+     По умолчанию — сайдбар (список чатов). Когда открыт чат — чат-область. */
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    border-right: none;
+  }
   .chat-area { display: none; }
+
+  .app.mobile-chat-open .sidebar { display: none; }
+  .app.mobile-chat-open .chat-area { display: flex; }
+
+  /* Кнопка «назад» */
+  .mobile-back-btn { display: flex; }
+
+  /* Сообщения шире */
   .msg { max-width: 85%; }
+
+  /* Шапка чата — компактнее */
+  .chat-header { padding: 10px 12px; gap: 8px; min-height: 60px; }
+  .chat-header .icon-btn { padding: 6px 8px; font-size: 20px; }
+  .chat-title { font-size: 15px; }
+  .chat-subtitle { font-size: 12px; }
+
+  /* Композер — компактнее */
+  .composer { padding: 10px 12px; gap: 6px; }
+  .attach-btn, .emoji-btn, .send-btn { width: 40px; height: 40px; }
+  .message-input { padding: 10px 14px 10px 16px; font-size: 15px; }
+
+  /* Авторизация */
   .auth-card { padding: 28px 22px 24px; }
   .logo { font-size: 28px; }
+
+  /* Эмодзи-пикер — на всю ширину снизу */
+  .emoji-picker {
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-width: none;
+    bottom: 68px;
+  }
+
+  /* Высоты под safe-area (вырезы на iPhone) */
+  .app { height: 100dvh; }
+  .sidebar {
+    height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .chat-content {
+    height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .composer {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0));
+  }
 }
 
 /* ====================================================== */

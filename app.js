@@ -635,6 +635,18 @@ let chatLastMsg = new Map();
 let chatIdByUser = new Map();
 const pendingChatAdds = new Set();
 let replyToMsg = null, editingMsgId = null;
+
+// Мобильный режим: одна область на весь экран — либо список чатов, либо чат.
+const mobileMedia = window.matchMedia("(max-width: 768px)");
+function isMobileView() { return mobileMedia.matches; }
+
+function enterMobileChat() {
+  if (!isMobileView()) return;
+  document.getElementById("app-screen").classList.add("mobile-chat-open");
+}
+function exitMobileChat() {
+  document.getElementById("app-screen").classList.remove("mobile-chat-open");
+}
 // Кэш «chatId → userId собеседника» для DM. Нужен, чтобы расшифровывать
 // превью последних сообщений в списке чатов (не только в открытом чате).
 let chatOtherUserCache = new Map();
@@ -1713,6 +1725,7 @@ function showAuth() {
   lastSeenInterval = otherUserInterval = statusPollInterval = deliveredInterval = null;
   lastSeenThrottleAt = 0;
   applyAccent("orange");
+  document.getElementById("app-screen").classList.remove("mobile-chat-open");
   document.getElementById("auth-screen").classList.remove("hidden");
   document.getElementById("app-screen").classList.add("hidden");
 }
@@ -1720,6 +1733,7 @@ function showAuth() {
 // ======================= 5. ИНИЦИАЛИЗАЦИЯ =======================
 async function initApp() {
   setupSidebarMenu();
+  setupMobileBackButton();
   setupMfaUI();
   setupE2eeUI();
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
@@ -3019,6 +3033,7 @@ async function openChannel(chatId) {
 
   currentChatId = chatId;
   restoreDraftFor(chatId);
+  enterMobileChat();
 
   // Фаза 4: если я владелец/админ и E2EE разблокирована —
   // синхронизируем ключ канала (создание, раздача подписчикам).
@@ -3208,6 +3223,15 @@ function removeChatFromList(chatId) {
   const listEl = document.getElementById("users-list");
   if (listEl.querySelectorAll(".user-item").length === 0) listEl.innerHTML = '<div class="empty">У вас пока нет чатов.</div>';
   refreshWheelLayout();
+}
+
+// ============ Кнопка «назад» на мобильном ============
+function setupMobileBackButton() {
+  const btn = document.getElementById("mobile-back-btn");
+  if (!btn) return;
+  btn.onclick = () => {
+    exitMobileChat();
+  };
 }
 
 // ============ Меню сайдбара (бургер) ============
@@ -3671,11 +3695,13 @@ async function openChatWith(otherUser) {
     msgCache.clear(); reactionsCache.clear();
     if (currentChannel) { supabase.removeChannel(currentChannel); currentChannel = null; }
     if (reactionsChannel) { supabase.removeChannel(reactionsChannel); reactionsChannel = null; }
+    enterMobileChat();
     updateE2eeComposerHint();
     return;
   }
   currentChatId = chatId;
   restoreDraftFor(chatId);
+  enterMobileChat();
   await loadMessages(chatId, mySeq);
   if (mySeq !== openSeq) return;
   await loadReactionsForVisibleMessages();
