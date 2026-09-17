@@ -3254,6 +3254,18 @@ button:not(:disabled):active { transform: scale(0.97); }
 .mobile-back-btn:active { background: var(--bg-active); }
 
 @media (max-width: 768px) {
+  /* Safe-area-top: на iPhone с вырезом шапка не должна уходить под статус-бар */
+  .sidebar-header,
+  .chat-header {
+    padding-top: calc(12px + env(safe-area-inset-top, 0));
+  }
+  .sidebar,
+  .chat-content {
+    padding-top: env(safe-area-inset-top, 0);
+  }
+  /* Подрезаем верхний padding, если он уже добавлен через .sidebar-header */
+  .sidebar-header { padding-top: calc(12px + env(safe-area-inset-top, 0)); }
+
   /* Отключаем «встроенное» долгое нажатие Safari (Copy / Look up / Share),
      чтобы не конфликтовало с нашим long-press. На .msg оставляем выделение
      текста рабочим — там это нужно для копирования. */
@@ -3295,6 +3307,9 @@ button:not(:disabled):active { transform: scale(0.97); }
   /* Композер — компактнее */
   .composer { padding: 10px 12px; gap: 6px; }
   .attach-btn, .emoji-btn, .send-btn { width: 40px; height: 40px; }
+
+  /* На мобильном клавиатура сама даёт эмодзи — кнопка не нужна */
+  .emoji-btn { display: none !important; }
   .message-input { padding: 10px 14px 10px 16px; font-size: 15px; }
 
   /* Авторизация */

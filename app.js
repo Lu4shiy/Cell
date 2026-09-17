@@ -274,6 +274,10 @@ function setupMfaUI() {
         return;
       }
 
+      // Обновляем сессию — на мобильных без этого токен иногда не успевает
+      // «доехать» до Supabase, и запросы идут с уровнем aal1.
+      try { await supabase.auth.refreshSession(); } catch (e) { /* silent */ }
+
       document.getElementById("mfa-challenge-overlay").classList.add("hidden");
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -1772,6 +1776,7 @@ async function initApp() {
   setupMessagesScrollPagination();
   setupVerifiedTooltip();
   setupChatPins(); setupInviteUI();
+  setupMessagesDelegates();
   // Предзагружаем иконки паттернов в фоне, чтобы к моменту покупки подарка
   // они уже были в кэше — иначе паттерн появляется с задержкой в несколько секунд.
   setTimeout(preloadPatternIcons, 1500);
@@ -3349,6 +3354,87 @@ function attachDoubleTap(el, handler) {
   else if (mq.addListener) mq.addListener(apply);
 })();
 
+// ============ ДЕЛЕГИРОВАННЫЕ ОБРАБОТЧИКИ СООБЩЕНИЙ ============
+// Все ПКМ/long-press/dblclick ловим на контейнере #messages,
+// а не на каждом сообщении. Это разгружает DOM в разы.
+function setupMessagesDelegates() {
+  const box = document.getElementById("messages");
+  if (!box || box.__delegatesBound) return;
+  box.__delegatesBound = true;
+
+  let longPressTimer = null;
+  let lpStartX = 0, lpStartY = 0;
+  let lpTriggered = false;
+  let lastTapAt = 0;
+  let lastTapEl = null;
+
+  box.addEventListener("touchstart", (e) => {
+    const el = e.target.closest(".msg, .msg-system");
+    if (!el) return;
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    lpStartX = t.clientX; lpStartY = t.clientY;
+    lpTriggered = false;
+    longPressTimer = setTimeout(() => {
+      lpTriggered = true;
+      try { if (navigator.vibrate) navigator.vibrate(15); } catch (ex) {}
+      const fake = {
+        clientX: lpStartX, clientY: lpStartY, target: el,
+        preventDefault: () => {}, stopPropagation: () => {},
+      };
+      openMsgContextMenu(fake, el.dataset.id);
+    }, 500);
+  }, { passive: true });
+
+  box.addEventListener("touchmove", (e) => {
+    if (!longPressTimer) return;
+    const t = e.touches[0];
+    if (!t) return;
+    if (Math.abs(t.clientX - lpStartX) > 10 || Math.abs(t.clientY - lpStartY) > 10) {
+      clearTimeout(longPressTimer); longPressTimer = null;
+    }
+  }, { passive: true });
+
+  box.addEventListener("touchend", (e) => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    if (lpTriggered) {
+      e.preventDefault();
+      lpTriggered = false;
+      return;
+    }
+    const el = e.target.closest(".msg");
+    if (!el) return;
+    if (e.changedTouches.length !== 1) return;
+    const t = e.changedTouches[0];
+    const now = Date.now();
+    if (now - lastTapAt < 320 && lastTapEl === el &&
+        Math.abs(t.clientX - lpStartX) < 40) {
+      lastTapAt = 0; lastTapEl = null;
+      if (e.target.closest("a, .reaction-chip, .spoiler, .msg-reply, .msg-fwd-link, .msg-attachment-file")) return;
+      const emoji = getQuickReactionFor(el.dataset.id);
+      if (emoji) toggleReaction(el.dataset.id, emoji);
+    } else {
+      lastTapAt = now; lastTapEl = el;
+    }
+  }, { passive: false });
+
+  box.addEventListener("contextmenu", (e) => {
+    const el = e.target.closest(".msg, .msg-system");
+    if (!el) return;
+    e.preventDefault();
+    openMsgContextMenu(e, el.dataset.id);
+  });
+
+  box.addEventListener("dblclick", (e) => {
+    const el = e.target.closest(".msg");
+    if (!el) return;
+    if (e.target.closest("a, .reaction-chip, .spoiler, .msg-reply, .msg-fwd-link, .msg-attachment-file")) return;
+    e.preventDefault();
+    const emoji = getQuickReactionFor(el.dataset.id);
+    if (emoji) toggleReaction(el.dataset.id, emoji);
+  });
+}
+
 // ============ LONG-PRESS (для тач-устройств) ============
 // Удержание пальца ~0.5с → вызываем ту же логику, что и ПКМ.
 // Если палец сдвинулся больше чем на 10px — отменяем (это скролл).
@@ -4036,6 +4122,10 @@ async function loadMessages(chatId, mySeq) {
   refreshMessageGroups();
   buildChatTimeline();
 
+  // Если у каких-то вложений URL не отрисовался сразу — повторим попытку
+  // через небольшую задержку. Закрывает гонку «realtime INSERT → signed URL ещё не готов».
+  setTimeout(() => { refreshAttachmentUrls().catch(() => {}); }, 800);
+
   if (isChannel) {
     await viewsPromise;
     if (mySeq !== undefined && mySeq !== openSeq) return;
@@ -4138,8 +4228,6 @@ async function appendMessageBefore(msg, firstExisting) {
     el.className = "msg-system" + (msg.message_type === "gift" ? " gift-msg" : "");
     el.dataset.id = msg.id;
     el.innerHTML = await renderSystemMessage(msg);
-    el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
-    attachLongPress(el, (e) => openMsgContextMenu(e, msg.id));
     el.addEventListener("click", onMsgClick);
     box.insertBefore(el, firstExisting);
     msgCache.set(msg.id, msg);
@@ -4153,9 +4241,6 @@ async function appendMessageBefore(msg, firstExisting) {
   el.className = "msg " + (mine ? "mine" : "other");
   el.dataset.id = msg.id;
   el.innerHTML = await buildMsgHtml(msg);
-  el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
-  attachLongPress(el, (e) => openMsgContextMenu(e, msg.id));
-  attachDoubleTap(el, (e) => onMessageDoubleTap(e, msg.id));
   el.addEventListener("click", onMsgClick);
   box.insertBefore(el, firstExisting);
   msgCache.set(msg.id, msg);
@@ -4288,13 +4373,29 @@ async function buildMsgHtml(msg) {
 // Создаёт DOM-элемент сообщения, но НЕ вставляет его в DOM.
 // Нужна для параллельного рендера пачки сообщений (batch-insert).
 async function createMessageElement(msg) {
+  try {
+    return await _createMessageElementImpl(msg);
+  } catch (e) {
+    console.error("createMessageElement failed:", e, msg);
+    // Аварийный фолбэк — простое текстовое сообщение
+    const el = document.createElement("div");
+    const isChannelMsg = currentChannelObj && msg.chat_id === currentChannelObj.id;
+    const mine = !isChannelMsg && msg.sender_id === currentUser.id;
+    el.className = "msg " + (mine ? "mine" : "other");
+    el.dataset.id = msg.id;
+    el.textContent = msg.content || "(ошибка отображения)";
+    el.addEventListener("click", onMsgClick);
+    msgCache.set(msg.id, msg);
+    return el;
+  }
+}
+
+async function _createMessageElementImpl(msg) {
   if (msg.message_type === "tokens" || msg.message_type === "gift") {
     const el = document.createElement("div");
     el.className = "msg-system" + (msg.message_type === "gift" ? " gift-msg" : "");
     el.dataset.id = msg.id;
     el.innerHTML = await renderSystemMessage(msg);
-    el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
-    attachLongPress(el, (e) => openMsgContextMenu(e, msg.id));
     el.addEventListener("click", onMsgClick);
     msgCache.set(msg.id, msg);
     fillGiftPatternsIn(el);
@@ -4306,9 +4407,6 @@ async function createMessageElement(msg) {
   el.className = "msg " + (mine ? "mine" : "other");
   el.dataset.id = msg.id;
   el.innerHTML = await buildMsgHtml(msg);
-  el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
-  attachLongPress(el, (e) => openMsgContextMenu(e, msg.id));
-  attachDoubleTap(el, (e) => onMessageDoubleTap(e, msg.id));
   el.addEventListener("click", onMsgClick);
   msgCache.set(msg.id, msg);
   return el;
@@ -5313,11 +5411,30 @@ function renderEmojiGrid() {
 }
 
 function insertEmoji(emoji) {
-  restoreEmojiSelection();
-  document.execCommand("insertText", false, emoji);
+  const input = document.getElementById("message-input");
+  if (!input) return;
+  input.focus();
+  // Восстанавливаем сохранённое выделение
+  if (emojiSavedRange) {
+    try {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(emojiSavedRange);
+    } catch (e) { /* silent */ }
+  }
+  // Вставляем символ через Range — без устаревшего execCommand.
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  const node = document.createTextNode(emoji);
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.setEndAfter(node);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  emojiSavedRange = range.cloneRange();
   addRecentEmoji(emoji);
-  saveEmojiSelection();
-  // Пикер не закрываем — можно накликать несколько, как в Телеграме
 }
 
 // (глобальный обработчик убран — используем inline onerror="window.__emojiFallback(this)"
@@ -5563,10 +5680,10 @@ async function buildAttachmentHtml(msg) {
   }
 
   if (kind === "image") {
-    return `<img src="${escapeHtml(displayUrl)}" class="msg-attachment-image" alt="" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="image">`;
+    return `<img src="${escapeHtml(displayUrl)}" class="msg-attachment-image" alt="" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="image" data-att-msg-id="${msg.id}">`;
   }
   if (kind === "video") {
-    return `<video src="${escapeHtml(displayUrl)}" class="msg-attachment-video" controls preload="metadata" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="video"></video>`;
+    return `<video src="${escapeHtml(displayUrl)}" class="msg-attachment-video" controls preload="metadata" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="video" data-att-msg-id="${msg.id}"></video>`;
   }
   return `<a class="msg-attachment-file" href="${escapeHtml(displayUrl)}" target="_blank" rel="noopener" download="${escapeHtml(name)}">
     <span class="maf-icon">📎</span>
@@ -5576,6 +5693,38 @@ async function buildAttachmentHtml(msg) {
     </span>
   </a>`;
 }
+
+// Перебирает все вложения в текущем чате и обновляет src, если URL протух
+// или не загрузился при первом рендере. Вызывается по требованию и после
+// восстановления соединения.
+async function refreshAttachmentUrls() {
+  const nodes = document.querySelectorAll(
+    "#messages [data-att-msg-id]"
+  );
+  for (const el of nodes) {
+    const msgId = el.dataset.attMsgId;
+    const msg = msgCache.get(msgId);
+    if (!msg) continue;
+    // Если элемент уже отрисован — но src пустой или равен "#"
+    const curSrc = el.tagName === "IMG" ? el.src : (el.src || el.getAttribute("src") || "");
+    if (curSrc && curSrc !== "#" && !curSrc.startsWith("data:")) {
+      // Уже что-то стоит — проверим, загрузилось ли
+      if (el.tagName === "IMG" && el.complete && el.naturalWidth > 0) continue;
+    }
+    // Готовим URL заново
+    let newUrl = null;
+    if (msg.file_key_enc && msg.file_iv) {
+      newUrl = await getDecryptedFileUrl(msg);
+    } else {
+      newUrl = await getSignedUrl(msg.image_url);
+    }
+    if (newUrl && newUrl !== el.src) {
+      el.src = newUrl;
+      el.dataset.mediaUrl = newUrl;
+    }
+  }
+}
+window.refreshAttachmentUrls = refreshAttachmentUrls;
 
 async function handleAttachments(files, caption, asFile) {
   if (currentChannelObj) {
@@ -5886,6 +6035,10 @@ function subscribeToChat(chatId) {
           : true;
         await appendMessage(m);
         if (wasNearBottom) scrollToBottom();
+        // Если у сообщения есть вложение — проверим URL ещё раз через полсекунды
+        if (m.message_type === "attachment") {
+          setTimeout(() => { refreshAttachmentUrls().catch(() => {}); }, 600);
+        }
         if (currentChannelObj) {
           if (currentChannelIsSubscribed) markChatRead(chatId);
           if (m.sender_id !== currentUser.id) {
@@ -8388,23 +8541,27 @@ window.addEventListener("unhandledrejection", (e) => {
 // Мета-тег viewport покрывает современные браузеры, но старые iOS Safari
 // его игнорируют. Явно гасим жесты двумя пальцами и double-tap zoom.
 (function disablePinchZoom() {
-  // Запрещаем жесты с двумя и более пальцами (pinch)
+  // Жесты двумя пальцами
   document.addEventListener("touchstart", (e) => {
     if (e.touches.length > 1) e.preventDefault();
   }, { passive: false });
+  document.addEventListener("touchmove", (e) => {
+    if (e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
 
-  // Запрещаем zoom через gesture-события (Safari)
-  document.addEventListener("gesturestart", (e) => e.preventDefault());
-  document.addEventListener("gesturechange", (e) => e.preventDefault());
-  document.addEventListener("gestureend", (e) => e.preventDefault());
+  // iOS Safari gesture events (pinch)
+  ["gesturestart", "gesturechange", "gestureend"].forEach((ev) => {
+    document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+  });
 
-  // Запрещаем double-tap zoom (iOS Safari < 13)
+  // Double-tap zoom. НЕ трогаем, если тап был по эмодзи-кнопке —
+  // иначе на iOS не работает быстрая реакция двойным тапом.
   let lastTouchEnd = 0;
   document.addEventListener("touchend", (e) => {
+    const el = e.target;
+    if (el && el.closest && el.closest(".msg")) return;
     const now = Date.now();
-    if (now - lastTouchEnd <= 300) {
-      e.preventDefault();
-    }
+    if (now - lastTouchEnd <= 300) e.preventDefault();
     lastTouchEnd = now;
   }, { passive: false });
 })();
