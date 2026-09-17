@@ -6378,7 +6378,8 @@ function renderMsgReactionsBar(msgId) {
   const main = available.slice(0, 7);
   const rest = available.slice(7);
 
-  let html = main.map((em) =>
+  let html = `<div class="msg-reactions-main">`;
+  html += main.map((em) =>
     `<button type="button" class="reaction-emoji-btn" data-react-emoji="${escapeHtml(em)}" title="${escapeHtml(em)}">${em}</button>`
   ).join("");
 
@@ -6386,6 +6387,7 @@ function renderMsgReactionsBar(msgId) {
     const arrow = contextReactionsExpanded ? "▴" : "▾";
     html += `<button type="button" class="reaction-emoji-btn expand-btn" data-react-expand="1" title="Ещё реакции">${arrow}</button>`;
   }
+  html += `</div>`;
 
   if (contextReactionsExpanded && rest.length) {
     html += `<div class="msg-reactions-bar-expanded">` +
