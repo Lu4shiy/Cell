@@ -264,19 +264,21 @@ function setupMfaUI() {
         return;
       }
 
-      // КРИТИЧНО: verify иногда возвращает success БЕЗ ошибки при неверном коде.
-      // Проверяем фактический уровень сессии — после успешного TOTP он должен
-      // стать aal2. Если остался aal1 — код не прошёл, не пускаем.
-      const { data: aalAfter } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      if (!aalAfter || aalAfter.currentLevel !== "aal2") {
-        errEl.textContent = "Неверный код";
+      // КРИТИЧНО: на PWA / мобильных уровень сессии aal2 «доезжает» с задержкой.
+      // Пробуем несколько раз: refreshSession + getAuthenticatorAssuranceLevel.
+      let aal2Ok = false;
+      for (let i = 0; i < 6; i++) {
+        try { await supabase.auth.refreshSession(); } catch (e) { /* silent */ }
+        const { data: aalAfter } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aalAfter && aalAfter.currentLevel === "aal2") { aal2Ok = true; break; }
+        await new Promise((r) => setTimeout(r, 300));
+      }
+
+      if (!aal2Ok) {
+        errEl.textContent = "Не удалось подтвердить 2FA. Попробуй ещё раз через 30 секунд.";
         codeInput.value = "";
         return;
       }
-
-      // Обновляем сессию — на мобильных без этого токен иногда не успевает
-      // «доехать» до Supabase, и запросы идут с уровнем aal1.
-      try { await supabase.auth.refreshSession(); } catch (e) { /* silent */ }
 
       document.getElementById("mfa-challenge-overlay").classList.add("hidden");
       const { data: { user } } = await supabase.auth.getUser();
@@ -1603,7 +1605,23 @@ function updateChatPreviewText(chatId, msg, plain) {
 }
 
 // ======================= 3. АКЦЕНТ / АВАТАРЫ =======================
-function applyAccent(accent) { document.documentElement.setAttribute("data-accent", accent || "orange"); }
+function applyAccent(accent) {
+  document.documentElement.setAttribute("data-accent", accent || "orange");
+  // Синхронизируем цвет системной шапки (PWA/Android/iOS) с цветом --bg-side
+  try {
+    const sideBg = getComputedStyle(document.documentElement)
+      .getPropertyValue("--bg-side").trim();
+    if (sideBg) {
+      let meta = document.querySelector('meta[name="theme-color"]');
+      if (!meta) {
+        meta = document.createElement("meta");
+        meta.name = "theme-color";
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute("content", sideBg);
+    }
+  } catch (e) { /* silent */ }
+}
 function hashCode(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
 // Первый НЕпробельный символ строки. Возвращает целую графему (эмодзи, букву или составной эмодзи).
 // Если строка пустая — "?".

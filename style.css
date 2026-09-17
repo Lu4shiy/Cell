@@ -1289,7 +1289,8 @@ input:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px;
+  padding: calc(40px + env(safe-area-inset-top, 0)) calc(40px + env(safe-area-inset-right, 0))
+           calc(40px + env(safe-area-inset-bottom, 0)) calc(40px + env(safe-area-inset-left, 0));
   animation: fadeIn 0.15s ease-out;
   cursor: zoom-out;
 }
@@ -1314,8 +1315,8 @@ input:focus {
 
 .media-viewer-close {
   position: fixed;
-  top: 16px;
-  right: 20px;
+  top: calc(16px + env(safe-area-inset-top, 0));
+  right: calc(20px + env(safe-area-inset-right, 0));
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -3254,17 +3255,11 @@ button:not(:disabled):active { transform: scale(0.97); }
 .mobile-back-btn:active { background: var(--bg-active); }
 
 @media (max-width: 768px) {
-  /* Safe-area-top: на iPhone с вырезом шапка не должна уходить под статус-бар */
+  /* Safe-area-top: только у шапки — иначе двойной отступ */
   .sidebar-header,
   .chat-header {
     padding-top: calc(12px + env(safe-area-inset-top, 0));
   }
-  .sidebar,
-  .chat-content {
-    padding-top: env(safe-area-inset-top, 0);
-  }
-  /* Подрезаем верхний padding, если он уже добавлен через .sidebar-header */
-  .sidebar-header { padding-top: calc(12px + env(safe-area-inset-top, 0)); }
 
   /* Отключаем «встроенное» долгое нажатие Safari (Copy / Look up / Share),
      чтобы не конфликтовало с нашим long-press. На .msg оставляем выделение
@@ -3567,8 +3562,8 @@ button:not(:disabled):active { transform: scale(0.97); }
 }
 .media-viewer-nav:hover { background: rgba(255, 255, 255, 0.22); }
 .media-viewer-nav:active { transform: translateY(-50%) scale(0.92); }
-.media-viewer-prev { left: 24px; }
-.media-viewer-next { right: 24px; }
+.media-viewer-prev { left: calc(24px + env(safe-area-inset-left, 0)); }
+.media-viewer-next { right: calc(24px + env(safe-area-inset-right, 0)); }
 
 /* ====================================================== */
 /* РЕЖИМ СПИСКА: КЛАССИЧЕСКИЙ                              */
