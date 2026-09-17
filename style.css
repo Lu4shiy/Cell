@@ -1390,6 +1390,10 @@ input:focus {
   border-radius: 8px;
   font-size: 14px;
   font-family: inherit;
+  /* Не даём выделять текст на кнопках long-press'ом */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 .context-menu button:hover { background: var(--bg-hover); }
 
@@ -1483,6 +1487,9 @@ input:focus {
   border-radius: 8px;
   font-size: 14px;
   font-family: inherit;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 .menu button:hover { background: var(--bg-hover); }
 
@@ -3334,7 +3341,9 @@ button:not(:disabled):active { transform: scale(0.97); }
   }
   .chat-content {
     height: 100dvh;
-    padding-bottom: env(safe-area-inset-bottom, 0);
+    /* padding-bottom НЕ добавляем — иначе под композером
+       появляется полоска с сотовым узором. Safe-area уже
+       учитывается в padding-bottom у .composer. */
   }
   .composer {
     padding-bottom: calc(10px + env(safe-area-inset-bottom, 0));

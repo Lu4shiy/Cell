@@ -682,6 +682,9 @@ function enterMobileChat() {
 }
 function exitMobileChat() {
   document.getElementById("app-screen").classList.remove("mobile-chat-open");
+  // Снимаем подсветку со всех чатов — мы вышли из переписки,
+  // ничего не должно оставаться «выбранным».
+  document.querySelectorAll(".user-item.active").forEach((el) => el.classList.remove("active"));
 }
 // Кэш «chatId → userId собеседника» для DM. Нужен, чтобы расшифровывать
 // превью последних сообщений в списке чатов (не только в открытом чате).
@@ -2776,9 +2779,10 @@ function renderChatItem(it, user) {
 function bindChatItemEvents(el, user) {
   const listEl = document.getElementById("users-list");
   el.addEventListener("click", () => {
+    // Погашаем «фантомный» click сразу после long-press
+    if (justLongPressed()) return;
     listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
     el.classList.add("active");
-    // openSeq++ произойдёт внутри openChatWith — это отменит все висящие загрузки
     openChatWith(user);
   });
   el.addEventListener("contextmenu", (ev) => { ev.preventDefault(); openChatListContextMenu(ev, user, el); });
@@ -2823,6 +2827,7 @@ function renderDmItemHtml(it, profileMap) {
     if (m.message_type === "tokens") preview = `🧩 +${m.tokens_amount}`;
     else if (m.message_type === "gift") preview = "🎁 Подарок";
     else if (m.message_type === "attachment") preview = m.file_kind === "image" ? "📷 Фото" : m.file_kind === "video" ? "🎥 Видео" : "📎 Файл";
+    else if (m.encrypted) preview = "🔒 Зашифровано";
     else preview = (m.sender_id === currentUser.id ? "Вы: " : "") + stripMarkdown(m.content || "");
   } else {
     preview = "Нет сообщений";
@@ -2853,6 +2858,7 @@ function renderChannelItemHtml(it) {
     if (m.message_type === "tokens") preview = `🧩 +${m.tokens_amount}`;
     else if (m.message_type === "gift") preview = "🎁 Подарок";
     else if (m.message_type === "attachment") preview = m.file_kind === "image" ? "📷 Фото" : m.file_kind === "video" ? "🎥 Видео" : "📎 Файл";
+    else if (m.encrypted) preview = "🔒 Зашифровано";
     else preview = stripMarkdown(m.content || "");
   } else {
     preview = "Нет сообщений";
@@ -2876,6 +2882,8 @@ function renderChannelItemHtml(it) {
 
 function bindChannelItemEvents(el, channel) {
   el.addEventListener("click", () => {
+    // Погашаем «фантомный» click сразу после long-press
+    if (justLongPressed()) return;
     const listEl = document.getElementById("users-list");
     listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
     el.classList.add("active");
@@ -3460,6 +3468,10 @@ function setupMessagesDelegates() {
 const LONG_PRESS_MS = 500;
 const LONG_PRESS_MOVE_TOLERANCE = 10;
 
+// Глобальный timestamp последнего long-press — click-обработчики
+// проверяют его, чтобы не открыть чат сразу после открытия контекстного меню.
+let lastLongPressAt = 0;
+
 function attachLongPress(el, handler) {
   let timer = null;
   let startX = 0, startY = 0;
@@ -3473,8 +3485,8 @@ function attachLongPress(el, handler) {
     triggered = false;
     timer = setTimeout(() => {
       triggered = true;
+      lastLongPressAt = Date.now();
       try { if (navigator.vibrate) navigator.vibrate(15); } catch (ex) {}
-      // Фейковое событие — та же форма, что у contextmenu
       const fake = {
         clientX: startX,
         clientY: startY,
@@ -3501,7 +3513,6 @@ function attachLongPress(el, handler) {
   el.addEventListener("touchend", (e) => {
     if (timer) { clearTimeout(timer); timer = null; }
     if (triggered) {
-      // Гасим последующий click — иначе после закрытия меню ещё и чат откроется
       e.preventDefault();
       e.stopPropagation();
       triggered = false;
@@ -3512,6 +3523,12 @@ function attachLongPress(el, handler) {
     if (timer) { clearTimeout(timer); timer = null; }
     triggered = false;
   });
+}
+
+// Хелпер: true, если только что был long-press (в течение 600 мс).
+// Используется в click-обработчиках, чтобы погасить «фантомный» click.
+function justLongPressed() {
+  return (Date.now() - lastLongPressAt) < 600;
 }
 
 // ============ Кнопка «назад» на мобильном ============
