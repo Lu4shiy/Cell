@@ -264,8 +264,22 @@ function setupMfaUI() {
         return;
       }
 
+      // КРИТИЧНО: verify иногда возвращает success БЕЗ ошибки при неверном коде.
+      // Проверяем фактический уровень сессии — после успешного TOTP он должен
+      // стать aal2. Если остался aal1 — код не прошёл, не пускаем.
+      const { data: aalAfter } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (!aalAfter || aalAfter.currentLevel !== "aal2") {
+        errEl.textContent = "Неверный код";
+        codeInput.value = "";
+        return;
+      }
+
       document.getElementById("mfa-challenge-overlay").classList.add("hidden");
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        errEl.textContent = "Не удалось получить данные пользователя";
+        return;
+      }
       showApp(user);
     } catch (e) {
       errEl.textContent = e.message || "Ошибка проверки кода";
@@ -394,6 +408,20 @@ async function openMfaSetup() {
         factorId, challengeId: chal.id, code,
       });
       if (verErr) { err.textContent = verErr.message || "Неверный код"; return; }
+
+      // Дополнительная проверка: фактор должен стать «verified».
+      // Без неё бывает, что SDK думает «всё ок», но при следующем входе
+      // 2FA не запрашивается, пока не перезагрузишь страницу.
+      const { data: factorsAfter } = await supabase.auth.mfa.listFactors();
+      const verified = factorsAfter && factorsAfter.totp &&
+        factorsAfter.totp.find(f => f.id === factorId && f.status === "verified");
+      if (!verified) {
+        err.textContent = "Фактор не активировался. Попробуй ещё раз.";
+        return;
+      }
+
+      // Обновляем сессию — чтобы статус MFA сразу подтянулся во всех местах.
+      try { await supabase.auth.refreshSession(); } catch (e) { /* silent */ }
 
       await refreshMfaStatus();
       closeMfaSetup();
