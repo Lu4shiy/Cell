@@ -3293,8 +3293,14 @@ button:not(:disabled):active { transform: scale(0.97); }
   /* Сообщения шире */
   .msg { max-width: 85%; }
 
-  /* Шапка чата — компактнее */
-  .chat-header { padding: 10px 12px; gap: 8px; min-height: 60px; }
+  /* Шапка чата — компактнее. ВАЖНО: padding-top ставим отдельно,
+     чтобы не потерять safe-area-inset-top (иначе налезает на вырез). */
+  .chat-header {
+    padding: 10px 12px;
+    padding-top: calc(10px + env(safe-area-inset-top, 0));
+    gap: 8px;
+    min-height: calc(60px + env(safe-area-inset-top, 0));
+  }
   .chat-header .icon-btn { padding: 6px 8px; font-size: 20px; }
   .chat-title { font-size: 15px; }
   .chat-subtitle { font-size: 12px; }

@@ -9,7 +9,9 @@ import * as Crypto from "./crypto.js";
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: window.sessionStorage,
+    // localStorage — переживает закрытие PWA/вкладки.
+    // sessionStorage стирался при выходе из приложения, из-за чего требовался повторный вход.
+    storage: window.localStorage,
     storageKey: "imaginer-auth",
     persistSession: true,
     autoRefreshToken: true,
@@ -1784,7 +1786,6 @@ function showAuth() {
 async function initApp() {
   setupSidebarMenu();
   setupMobileBackButton();
-  setupMfaUI();
   setupE2eeUI();
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
   setupAttachments(); setupMediaViewer(); setupEmojiPicker(); setupAboutDialog();
@@ -8299,7 +8300,7 @@ async function renderGiftDetail(ownerId, ug) {
   // Количество
   const maxSupply = (cat.max_supply !== null && cat.max_supply !== undefined) ? cat.max_supply : null;
   const qtyValue = maxSupply !== null
-    ? `#${ug.serial_number} · выпущено ${maxSupply}`
+    ? `#${ug.serial_number} · лимит ${maxSupply}`
     : `#${ug.serial_number}`;
 
   // Подпись
@@ -10385,6 +10386,11 @@ function setupAttachPreviewDialog() {
 // 45. АВТОЗАПУСК (в самом конце — чтобы все переменные,
 // включая scrollMode и SCROLL_MODE_KEY, уже были объявлены)
 // ======================================================
+
+// ⚠️ ВАЖНО: обработчики 2FA навешиваем ДО первого входа.
+// Раньше они вешались только в initApp(), а он вызывался после showApp() —
+// т.е. при первой попытке входа с 2FA кнопки на экране были «мёртвые».
+setupMfaUI();
 
 (async () => {
   const { data: { session } } = await supabase.auth.getSession();
