@@ -87,6 +87,8 @@ const ICONS = {
   home:            "https://i.ibb.co/d0w14w2c/icons8-home-100.png",
   folder:          "https://i.ibb.co/MDWNyVx0/icons8-folder-100.png",
   calendar:        "https://i.ibb.co/mFzbsxdN/icons8-calendar-100.png",
+  dollarBag:       "https://i.ibb.co/v6gYZ8r9/icons8-dollar-bag-100.png",
+  shop:            "https://i.ibb.co/Y7Y910n1/icons8-shop-100.png",
   notification:    "https://i.ibb.co/Nd1wqj5C/icons8-notification-100.png",
   pencil:          "https://i.ibb.co/N6BxF52S/icons8-pencil-100.png",
   bot:             "https://i.ibb.co/wNTsVXTn/icons8-bot-100.png",
@@ -8163,7 +8165,7 @@ async function renderGiftsMain(userId) {
   const catalogMap = new Map(catalog.map((g) => [g.id, g]));
 
   let html = "";
-  html += `<button class="gift-card-button" style="width:100%;padding:12px;margin-bottom:12px;" id="open-catalog-btn">🛍️ Купить подарок${!isMe ? " для " + escapeHtml((profileCache.get(userId) || {}).display_name || "") : ""}</button>`;
+  html += `<button class="gift-card-button" style="width:100%;padding:12px;margin-bottom:12px;" id="open-catalog-btn"><span class="cell-icon cell-icon-sm" data-icon="shop" style="vertical-align:-3px;margin-right:6px;"></span>Купить подарок${!isMe ? " для " + escapeHtml((profileCache.get(userId) || {}).display_name || "") : ""}</button>`;
 
   if (!gifts.length) {
     html += isMe
@@ -8525,8 +8527,8 @@ async function renderGiftDetail(ownerId, ug) {
           <button class="dialog-btn ${isInProfile ? "dialog-cancel" : "dialog-primary"}" id="gift-toggle-visible">
             ${isInProfile ? "Скрыть из профиля" : "Добавить в профиль"}
           </button>
-          <button class="dialog-btn" id="gift-send">🎁 Подарить</button>
-          <button class="dialog-btn" id="gift-sell">💰 Продать за ${NECTAR_HTML} ${Math.floor(cat.price * 0.85)}</button>
+          <button class="dialog-btn" id="gift-send"><span class="cell-icon cell-icon-sm" data-icon="gift" style="vertical-align:-3px;margin-right:6px;"></span>Подарить</button>
+          <button class="dialog-btn" id="gift-sell"><span class="cell-icon cell-icon-sm" data-icon="dollarBag" style="vertical-align:-3px;margin-right:6px;"></span>Продать за ${NECTAR_HTML} ${Math.floor(cat.price * 0.85)}</button>
         ` : `
           <div class="dialog-text" style="text-align:center;">Подарок принадлежит другому пользователю</div>
         `}

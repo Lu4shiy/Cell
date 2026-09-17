@@ -3461,6 +3461,8 @@ button:not(:disabled):active { transform: scale(0.97); }
 .cell-icon[data-icon="home"]         { --icon: url("https://i.ibb.co/d0w14w2c/icons8-home-100.png"); }
 .cell-icon[data-icon="folder"]       { --icon: url("https://i.ibb.co/MDWNyVx0/icons8-folder-100.png"); }
 .cell-icon[data-icon="calendar"]     { --icon: url("https://i.ibb.co/mFzbsxdN/icons8-calendar-100.png"); }
+.cell-icon[data-icon="dollarBag"]    { --icon: url("https://i.ibb.co/v6gYZ8r9/icons8-dollar-bag-100.png"); }
+.cell-icon[data-icon="shop"]         { --icon: url("https://i.ibb.co/Y7Y910n1/icons8-shop-100.png"); }
 .cell-icon[data-icon="notification"] { --icon: url("https://i.ibb.co/Nd1wqj5C/icons8-notification-100.png"); }
 .cell-icon[data-icon="pencil"]       { --icon: url("https://i.ibb.co/N6BxF52S/icons8-pencil-100.png"); }
 .cell-icon[data-icon="bot"]          { --icon: url("https://i.ibb.co/wNTsVXTn/icons8-bot-100.png"); }
