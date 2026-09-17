@@ -1857,15 +1857,18 @@ input:focus {
 }
 .gender-toggle button {
   flex: 1;
-  padding: 10px;
+  padding: 10px 6px;
   background: transparent;
   border: none;
   color: var(--text-dim);
   cursor: pointer;
   border-radius: 9px;
-  font-size: 13px;
+  font-size: 12px;
   font-family: inherit;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: all 0.15s;
 }
 .gender-toggle button.active {
