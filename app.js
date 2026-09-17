@@ -2730,6 +2730,7 @@ function bindChatItemEvents(el, user) {
     openChatWith(user);
   });
   el.addEventListener("contextmenu", (ev) => { ev.preventDefault(); openChatListContextMenu(ev, user, el); });
+  attachLongPress(el, (ev) => openChatListContextMenu(ev, user, el));
 }
 
 function renderChatListUnified(items, profileMap) {
@@ -2832,6 +2833,7 @@ function bindChannelItemEvents(el, channel) {
     ev.preventDefault();
     openChatListContextMenuForChannel(ev, channel);
   });
+  attachLongPress(el, (ev) => openChatListContextMenuForChannel(ev, channel));
 }
 
 async function checkChannelAdmin(channelId, userId) {
@@ -3223,6 +3225,66 @@ function removeChatFromList(chatId) {
   const listEl = document.getElementById("users-list");
   if (listEl.querySelectorAll(".user-item").length === 0) listEl.innerHTML = '<div class="empty">У вас пока нет чатов.</div>';
   refreshWheelLayout();
+}
+
+// ============ LONG-PRESS (для тач-устройств) ============
+// Удержание пальца ~0.5с → вызываем ту же логику, что и ПКМ.
+// Если палец сдвинулся больше чем на 10px — отменяем (это скролл).
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_MOVE_TOLERANCE = 10;
+
+function attachLongPress(el, handler) {
+  let timer = null;
+  let startX = 0, startY = 0;
+  let triggered = false;
+
+  el.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    startX = t.clientX;
+    startY = t.clientY;
+    triggered = false;
+    timer = setTimeout(() => {
+      triggered = true;
+      try { if (navigator.vibrate) navigator.vibrate(15); } catch (ex) {}
+      // Фейковое событие — та же форма, что у contextmenu
+      const fake = {
+        clientX: startX,
+        clientY: startY,
+        target: el,
+        preventDefault: () => {},
+        stopPropagation: () => {},
+      };
+      handler(fake);
+    }, LONG_PRESS_MS);
+  }, { passive: true });
+
+  el.addEventListener("touchmove", (e) => {
+    if (!timer) return;
+    const t = e.touches[0];
+    if (!t) return;
+    const dx = Math.abs(t.clientX - startX);
+    const dy = Math.abs(t.clientY - startY);
+    if (dx > LONG_PRESS_MOVE_TOLERANCE || dy > LONG_PRESS_MOVE_TOLERANCE) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  }, { passive: true });
+
+  el.addEventListener("touchend", (e) => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (triggered) {
+      // Гасим последующий click — иначе после закрытия меню ещё и чат откроется
+      e.preventDefault();
+      e.stopPropagation();
+      triggered = false;
+    }
+  });
+
+  el.addEventListener("touchcancel", () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    triggered = false;
+  });
 }
 
 // ============ Кнопка «назад» на мобильном ============
@@ -3955,6 +4017,7 @@ async function appendMessageBefore(msg, firstExisting) {
     el.dataset.id = msg.id;
     el.innerHTML = await renderSystemMessage(msg);
     el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
+    attachLongPress(el, (e) => openMsgContextMenu(e, msg.id));
     el.addEventListener("click", onMsgClick);
     box.insertBefore(el, firstExisting);
     msgCache.set(msg.id, msg);
@@ -3969,6 +4032,7 @@ async function appendMessageBefore(msg, firstExisting) {
   el.dataset.id = msg.id;
   el.innerHTML = await buildMsgHtml(msg);
   el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
+  attachLongPress(el, (e) => openMsgContextMenu(e, msg.id));
   el.addEventListener("click", onMsgClick);
   box.insertBefore(el, firstExisting);
   msgCache.set(msg.id, msg);
@@ -4108,6 +4172,7 @@ async function createMessageElement(msg) {
     el.dataset.id = msg.id;
     el.innerHTML = await renderSystemMessage(msg);
     el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
+    attachLongPress(el, (e) => openMsgContextMenu(e, msg.id));
     el.addEventListener("click", onMsgClick);
     msgCache.set(msg.id, msg);
     fillGiftPatternsIn(el);
@@ -4120,6 +4185,7 @@ async function createMessageElement(msg) {
   el.dataset.id = msg.id;
   el.innerHTML = await buildMsgHtml(msg);
   el.addEventListener("contextmenu", (e) => openMsgContextMenu(e, msg.id));
+  attachLongPress(el, (e) => openMsgContextMenu(e, msg.id));
   el.addEventListener("click", onMsgClick);
   msgCache.set(msg.id, msg);
   return el;
@@ -7634,12 +7700,14 @@ async function renderGiftsMain(userId) {
       if (ug) renderGiftDetail(userId, ug);
     });
     if (isMe) {
-      el.addEventListener("contextmenu", (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
+      const ctxHandler = (ev) => {
+        if (ev.preventDefault) ev.preventDefault();
+        if (ev.stopPropagation) ev.stopPropagation();
         const ug = gifts.find((g) => g.id === el.dataset.giftUgId);
         if (ug) openGiftTileContextMenu(ev, ug.id, !!ug.pinned_at, !!ug.in_profile);
-      });
+      };
+      el.addEventListener("contextmenu", ctxHandler);
+      attachLongPress(el, ctxHandler);
     }
   });
 }

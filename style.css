@@ -3197,6 +3197,20 @@ button:not(:disabled):active { transform: scale(0.97); }
 .mobile-back-btn:active { background: var(--bg-active); }
 
 @media (max-width: 768px) {
+  /* Отключаем «встроенное» долгое нажатие Safari (Copy / Look up / Share),
+     чтобы не конфликтовало с нашим long-press. На .msg оставляем выделение
+     текста рабочим — там это нужно для копирования. */
+  .user-item,
+  .msg-system,
+  .gift-tile {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .msg {
+    -webkit-touch-callout: none;
+  }
+
   /* На мобильном одна область занимает весь экран.
      По умолчанию — сайдбар (список чатов). Когда открыт чат — чат-область. */
   .sidebar {
