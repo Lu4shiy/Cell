@@ -3290,7 +3290,10 @@ button:not(:disabled):active { transform: scale(0.97); }
 .mobile-back-btn:hover { background: var(--bg-hover); }
 .mobile-back-btn:active { background: var(--bg-active); }
 
-@media (max-width: 768px) {
+/* ⚠️ Мобильные стили только на РЕАЛЬНЫХ тач-устройствах.
+   pointer: coarse = основной ввод — палец (телефон/планшет).
+   Узкое окно браузера на компе по-прежнему pointer: fine — не считается мобильным. */
+@media (max-width: 768px) and (pointer: coarse) {
   /* Safe-area-top: только у шапки — иначе двойной отступ */
   .sidebar-header,
   .chat-header {

@@ -757,7 +757,9 @@ const pendingChatAdds = new Set();
 let replyToMsg = null, editingMsgId = null;
 
 // Мобильный режим: одна область на весь экран — либо список чатов, либо чат.
-const mobileMedia = window.matchMedia("(max-width: 768px)");
+// ⚠️ Только для РЕАЛЬНЫХ тач-устройств (pointer: coarse), не для узкого окна
+// браузера на компе.
+const mobileMedia = window.matchMedia("(max-width: 768px) and (pointer: coarse)");
 function isMobileView() { return mobileMedia.matches; }
 
 function enterMobileChat() {
@@ -3476,7 +3478,7 @@ function attachDoubleTap(el, handler) {
 // Если экран стал мобильным — принудительно classic.
 // Если пользователь крутил настройку на десктопе и вернулся — восстановим.
 (function setupScrollModeWatcher() {
-  const mq = window.matchMedia("(max-width: 768px)");
+  const mq = window.matchMedia("(max-width: 768px) and (pointer: coarse)");
   const apply = () => {
     if (mq.matches) {
       // Мобильный — всегда classic
@@ -4197,9 +4199,18 @@ async function loadMessages(chatId, mySeq) {
   messagesLoadingMore = false;
   messagesOldestTs = null;
 
-  const [hidesRes, clearRes] = await Promise.all([
+  // 🔴 Параллельно: hides, clears и первая пачка сообщений.
+  // Раньше шло последовательно (hides → clears → messages), это +300–500 мс.
+  const [hidesRes, clearRes, initialMsgsRes] = await Promise.all([
     supabase.from("message_hides").select("message_id").eq("user_id", currentUser.id),
     supabase.from("chat_clears").select("cleared_at").eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle(),
+    (() => {
+      let q = supabase.from("messages").select("*")
+        .eq("chat_id", chatId)
+        .order("created_at", { ascending: false })
+        .limit(MESSAGES_PAGE_SIZE);
+      return q;
+    })(),
   ]);
   if (mySeq !== undefined && mySeq !== openSeq) return;
   if (currentChatId !== chatId) return;
@@ -4229,13 +4240,19 @@ async function loadMessages(chatId, mySeq) {
     }
   }
 
-  // Грузим ПОСЛЕДНИЕ MESSAGES_PAGE_SIZE сообщений
-  let query = supabase.from("messages").select("*")
-    .eq("chat_id", chatId)
-    .order("created_at", { ascending: false })
-    .limit(MESSAGES_PAGE_SIZE);
-  if (clearedAt) query = query.gt("created_at", clearedAt);
-  const { data, error } = await query;
+  // Сообщения уже загружены параллельно выше. Но если нужен фильтр по clearedAt —
+  // перезапрашиваем (это редкий случай).
+  let data, error;
+  if (clearedAt) {
+    const res = await supabase.from("messages").select("*")
+      .eq("chat_id", chatId)
+      .gt("created_at", clearedAt)
+      .order("created_at", { ascending: false })
+      .limit(MESSAGES_PAGE_SIZE);
+    data = res.data; error = res.error;
+  } else {
+    data = initialMsgsRes.data; error = initialMsgsRes.error;
+  }
   if (mySeq !== undefined && mySeq !== openSeq) return;
   if (currentChatId !== chatId) return;
   if (error) { box.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
@@ -7055,19 +7072,16 @@ function openMsgContextMenu(e, msgId) {
   if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
   menu.style.left = x + "px"; menu.style.top = y + "px";
 
-  // 🔴 Пока палец НЕ отпущен после long-press — никакие действия в меню
-  // не должны происходить. Отключаем pointer-events целиком, чтобы
-  // палец, оказавшийся над кнопкой, не «провалился» в неё при отпускании.
+  // 🔴 Пока палец не отпущен после long-press — меню не должно реагировать
+  // ни на нажатия, ни на hover. Простая схема на setTimeout: 700 мс
+  // (long-press 500 мс + запас 200 мс). Никаких pointerup/touchend
+  // слушателей — они «залипали» в ПКМ-сценарии: после правого клика
+  // меню оставалось с pointer-events: none, и кнопки не работали.
   menu.style.pointerEvents = "none";
-  const releaseMenu = () => {
+  clearTimeout(window.__msgMenuReleaseTimer);
+  window.__msgMenuReleaseTimer = setTimeout(() => {
     menu.style.pointerEvents = "";
-    document.removeEventListener("touchend", releaseMenu);
-    document.removeEventListener("touchcancel", releaseMenu);
-    document.removeEventListener("pointerup", releaseMenu);
-  };
-  document.addEventListener("touchend", releaseMenu, { once: true });
-  document.addEventListener("touchcancel", releaseMenu, { once: true });
-  document.addEventListener("pointerup", releaseMenu, { once: true });
+  }, 700);
 }
 
 function closeMsgContextMenu() {
@@ -10694,7 +10708,7 @@ function setupSettings() {
 
   // На мобильном скрываем всю секцию «Режим списка чатов» —
   // там нет клавиатуры, wheel-режим не работает.
-  if (window.matchMedia("(max-width: 768px)").matches) {
+  if (window.matchMedia("(max-width: 768px) and (pointer: coarse)").matches) {
     const toggleBlock = document.getElementById("settings-scroll-mode");
     const section = toggleBlock ? toggleBlock.closest(".profile-section") : null;
     if (section) section.style.display = "none";
@@ -10756,7 +10770,7 @@ function applyScrollMode() {
 // На мобильном всегда classic: wheel-режим требует Alt+↑/↓,
 // которых на тачскрине нет.
 (function initScrollMode() {
-  const isMobile = window.matchMedia("(max-width: 768px)").matches;
+  const isMobile = window.matchMedia("(max-width: 768px) and (pointer: coarse)").matches;
   if (isMobile) {
     scrollMode = "classic";
   } else {

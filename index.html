@@ -983,7 +983,11 @@
         });
 
         navigator.serviceWorker
-          .register('./sw.js', { scope: './' })
+          // 🔴 updateViaCache: 'none' — обязательно для PWA. Иначе Chrome
+          // кэширует sw.js через HTTP-кэш (у GH Pages есть Cache-Control),
+          // и reg.update() не видит новую версию. Плашка обновления никогда
+          // не появится, пока не почистишь кэш руками.
+          .register('./sw.js', { scope: './', updateViaCache: 'none' })
           .then((reg) => {
             // Если новый SW уже ждал с прошлого запуска — сразу показываем баннер
             if (reg.waiting && navigator.serviceWorker.controller) {

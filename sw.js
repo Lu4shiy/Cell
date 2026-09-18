@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-v16";
+const CACHE_VERSION = "cell-v17";
 
 const CACHE_FILES = [
   "./",
@@ -73,19 +73,34 @@ self.addEventListener("fetch", (event) => {
   // Сам SW и его файлы не кэшируем (иначе не сможет обновиться)
   if (url.pathname.endsWith("/sw.js")) return;
 
-  // network-first: сначала пытаемся в сеть, при неудаче — из кэша.
-  // Так пользователь всегда получает свежую версию, но при оффлайне
-  // приложение всё равно открывается.
+  // 🔴 stale-while-revalidate: сначала отдаём из кэша (мгновенно),
+  // параллельно обновляем кэш в фоне. Так приложение и все его файлы
+  // грузятся МГНОВЕННО на повторных заходах, а свежие версии подтянутся
+  // через update-баннер (см. index.html + reg.update()).
+  // Первый заход — идём в сеть (кэша нет).
   event.respondWith(
-    fetch(req)
-      .then((res) => {
-        // Кэшируем успешный ответ (копию, чтобы не трогать оригинал)
-        if (res && res.status === 200 && res.type === "basic") {
-          const copy = res.clone();
-          caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy));
-        }
-        return res;
-      })
-      .catch(() => caches.match(req).then((cached) => cached || caches.match("./index.html")))
+    caches.open(CACHE_VERSION).then(async (cache) => {
+      const cached = await cache.match(req);
+
+      const networkPromise = fetch(req)
+        .then((res) => {
+          if (res && res.status === 200 && res.type === "basic") {
+            cache.put(req, res.clone());
+          }
+          return res;
+        })
+        .catch(() => null);
+
+      if (cached) {
+        // Не ждём сеть — отдаём из кэша немедленно.
+        // networkPromise обновит кэш в фоне.
+        event.waitUntil(networkPromise);
+        return cached;
+      }
+
+      const fresh = await networkPromise;
+      if (fresh) return fresh;
+      return caches.match("./index.html");
+    })
   );
 });
