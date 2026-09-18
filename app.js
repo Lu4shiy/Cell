@@ -2937,6 +2937,59 @@ function subscribeToMemberships() {
         if (others && others.length) await addOrUpdateChatInList(chatId, others[0].user_id);
       }
     })
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_members" }, async (payload) => {
+      // 🔴 Переименование чата (custom_name) — это UPDATE в chat_members.
+      // Без этого обработчика переименование на одном устройстве не
+      // подхватывалось на втором (у того же аккаунта) до перезагрузки.
+      const row = payload.new;
+      if (!row) return;
+      // custom_name у КАЖДОГО пользователя свой, поэтому реагируем только
+      // на изменение своей строки (у которой user_id === currentUser.id).
+      if (row.user_id !== currentUser.id) return;
+      const chatId = row.chat_id;
+      if (!chatId) return;
+      const newCustomName = row.custom_name || "";
+
+      // 1. Обновляем карточку в списке чатов
+      const el = document.querySelector(`.user-item[data-chat-id="${chatId}"]`);
+      if (el) {
+        el.dataset.customName = newCustomName;
+        const isChannel = el.dataset.chatType === "channel";
+        const nameEl = el.querySelector(".user-item-name");
+        if (nameEl) {
+          if (isChannel) {
+            const ch = channelCache.get(chatId);
+            if (ch) {
+              nameEl.innerHTML = escapeHtml(newCustomName || ch.name) +
+                verifiedBadge(ch) + '<span class="channel-mark">📢</span>';
+            }
+          } else {
+            const uid = el.dataset.userId;
+            const p = uid ? profileCache.get(uid) : null;
+            if (p) {
+              nameEl.innerHTML = escapeHtml(newCustomName || p.display_name) +
+                verifiedBadge(p) + (isBlockedByMe(uid) ? " 🚫" : "");
+            }
+          }
+        }
+      }
+
+      // 2. Если этот чат открыт — обновляем заголовок в шапке
+      if (currentChatId === chatId) {
+        if (currentChannelObj && currentChannelObj.id === chatId) {
+          document.getElementById("chat-title").innerHTML =
+            escapeHtml(newCustomName || currentChannelObj.name) + verifiedBadge(currentChannelObj);
+        } else if (currentOtherUser) {
+          document.getElementById("chat-title").innerHTML =
+            escapeHtml(newCustomName || currentOtherUser.display_name) + verifiedBadge(currentOtherUser);
+        }
+      }
+
+      // 3. Обновляем контекстное меню (на случай, если открыто на этом чате)
+      if (contextChatUser && contextChatUser.id === el?.dataset.userId) {
+        contextChatCustomName = newCustomName || null;
+      }
+    })
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_members" }, async (payload) => {
       const chatId = payload.old && payload.old.chat_id;
       if (!chatId) return;
