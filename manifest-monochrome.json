@@ -1,0 +1,12 @@
+{
+  "name": "Cell",
+  "short_name": "Cell",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#15110d",
+  "theme_color": "#1d1712",
+  "icons": [
+    { "src": "icons/icon-monochrome.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
