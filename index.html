@@ -1005,17 +1005,27 @@
               });
             });
 
-            // Проверяем обновления раз в час и при возврате в приложение.
-            // Само по себе это НЕ перезагружает страницу — просто проверяет,
-            // не появилась ли новая версия sw.js.
-            const checkUpdate = () => reg.update().catch(() => {});
-            // 🔴 Вызываем СРАЗУ — чтобы новая версия обнаруживалась при загрузке,
-            // а не через час. Без этого плашка появлялась только после F5.
+            // 🔴 Проверяем обновления АГРЕССИВНО:
+            // — сразу при загрузке;
+            // — раз в 5 минут (в PWA страница живёт сутками);
+            // — при visibilitychange (возврат на вкладку);
+            // — при focus (клик по окну PWA / переключение).
+            // Это критично для PWA: HTTP-кэш sw.js очень цепкий, и reg.update()
+            // при редких вызовах просто не успевает увидеть новую версию.
+            const checkUpdate = () => {
+              reg.update().catch(() => {});
+              // На случай, если после update() появился waiting SW —
+              // сразу показываем баннер, не дожидаясь updatefound.
+              if (reg.waiting && navigator.serviceWorker.controller) {
+                showUpdateBanner();
+              }
+            };
             checkUpdate();
-            setInterval(checkUpdate, 60 * 60 * 1000);
+            setInterval(checkUpdate, 5 * 60 * 1000);
             document.addEventListener('visibilitychange', () => {
               if (document.visibilityState === 'visible') checkUpdate();
             });
+            window.addEventListener('focus', checkUpdate);
           })
           .catch((err) => console.warn('SW registration failed:', err));
       });

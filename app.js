@@ -2739,7 +2739,7 @@ async function loadRecentChats() {
 
   const [msgsRes, othersRes, readsRes, hidesRes] = await Promise.all([
     supabase.from("messages").select("id, chat_id, sender_id, content, created_at, message_type, tokens_amount, delivered_at, read_at, encrypted, file_iv, file_key_enc")
-      .in("chat_id", chatIds).order("created_at", { ascending: false }).limit(1000),
+      .in("chat_id", chatIds).order("created_at", { ascending: false }).limit(500),
     supabase.from("chat_members").select("chat_id, user_id").in("chat_id", chatIds).neq("user_id", currentUser.id),
     supabase.from("chat_reads").select("chat_id, last_read_at").eq("user_id", currentUser.id),
     supabase.from("chat_hides").select("chat_id, hidden_at").eq("user_id", currentUser.id),
@@ -3596,6 +3596,29 @@ const LONG_PRESS_MOVE_TOLERANCE = 10;
 // отпускания пальца.
 let lastLongPressAt = 0;
 
+// 🔴 Флаг: сейчас на экране активен тач (палец не отпущен).
+// Нужен, чтобы блокировать pointer-events у открытых меню, пока
+// пользователь не отпустит палец. На ПК (мышь) флаг всегда false —
+// поэтому ПКМ работает мгновенно, без задержек.
+let isTouchActive = false;
+document.addEventListener("touchstart", () => { isTouchActive = true; }, true);
+document.addEventListener("touchend", () => { isTouchActive = false; }, true);
+document.addEventListener("touchcancel", () => { isTouchActive = false; }, true);
+
+// Блокирует взаимодействие с элементом, пока палец не отпущен.
+// На мыши (ПКМ) — ничего не делает, всё работает сразу.
+function blockUntilTouchRelease(el) {
+  if (!el || !isTouchActive) return;
+  el.style.pointerEvents = "none";
+  const release = () => {
+    el.style.pointerEvents = "";
+    document.removeEventListener("touchend", release, true);
+    document.removeEventListener("touchcancel", release, true);
+  };
+  document.addEventListener("touchend", release, true);
+  document.addEventListener("touchcancel", release, true);
+}
+
 function attachLongPress(el, handler) {
   let timer = null;
   let startX = 0, startY = 0;
@@ -3933,6 +3956,7 @@ function openChatListContextMenu(ev, user, el) {
   if (x + rect.width > window.innerWidth - 8) x = window.innerWidth - rect.width - 8;
   if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
   menu.style.left = x + "px"; menu.style.top = y + "px";
+  blockUntilTouchRelease(menu);
 }
 
 function openChatListContextMenuForChannel(ev, channel) {
@@ -3955,6 +3979,7 @@ function openChatListContextMenuForChannel(ev, channel) {
   if (x + rect.width > window.innerWidth - 8) x = window.innerWidth - rect.width - 8;
   if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
   menu.style.left = x + "px"; menu.style.top = y + "px";
+  blockUntilTouchRelease(menu);
 }
 
 document.addEventListener("pointerdown", (e) => {
@@ -5899,6 +5924,51 @@ async function getSignedUrl(url) {
   }
 }
 
+// 🔴 Ленивая загрузка зашифрованного вложения: сначала placeholder,
+// потом асинхронно скачиваем + расшифровываем + подменяем в DOM.
+// Критично для скорости открытия чата с E2EE-вложениями.
+async function lazyLoadEncryptedAttachment(placeholderId, msg) {
+  const placeholder = document.getElementById(placeholderId);
+  if (!placeholder) return;
+
+  let displayUrl = null;
+  try {
+    displayUrl = await getDecryptedFileUrl(msg);
+  } catch (e) {
+    displayUrl = null;
+  }
+
+  const el = document.getElementById(placeholderId);
+  if (!el) return;
+
+  if (!displayUrl) {
+    el.outerHTML = `<div class="msg-attachment-uploading" style="max-width:260px;display:block;text-align:center;line-height:1.4;">
+      🔒 Файл зашифрован.<br>Разблокируйте в настройках, чтобы просмотреть.
+    </div>`;
+    return;
+  }
+
+  const kind = msg.file_kind || "file";
+  const name = msg.file_name || "файл";
+  const size = msg.file_size || 0;
+  let html;
+  if (kind === "image") {
+    html = `<img src="${escapeHtml(displayUrl)}" class="msg-attachment-image" alt="" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="image" data-att-msg-id="${msg.id}">`;
+  } else if (kind === "video") {
+    html = `<video src="${escapeHtml(displayUrl)}" class="msg-attachment-video" controls preload="metadata" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="video" data-att-msg-id="${msg.id}"></video>`;
+  } else {
+    html = `<a class="msg-attachment-file" href="${escapeHtml(displayUrl)}" target="_blank" rel="noopener" download="${escapeHtml(name)}">
+      <span class="maf-icon"><span class="cell-icon" data-icon="attach"></span></span>
+      <span style="flex:1;min-width:0;">
+        <span class="maf-name">${escapeHtml(name)}</span>
+        <span class="maf-size">${escapeHtml(formatFileSize(size))}</span>
+      </span>
+    </a>`;
+  }
+  el.outerHTML = html;
+}
+window.lazyLoadEncryptedAttachment = lazyLoadEncryptedAttachment;
+
 async function buildAttachmentHtml(msg) {
   const url = msg.image_url || "";
   const name = msg.file_name || "файл";
@@ -5909,20 +5979,21 @@ async function buildAttachmentHtml(msg) {
   }
 
   const isEncryptedFile = !!(msg.file_key_enc && msg.file_iv);
-  let displayUrl = null;
-  let decryptFailed = false;
 
+  // 🔴 Зашифрованные файлы — ленивая загрузка. Не блокируем рендер чата.
   if (isEncryptedFile) {
-    displayUrl = await getDecryptedFileUrl(msg);
-    if (!displayUrl) decryptFailed = true;
-  } else {
-    displayUrl = await getSignedUrl(url);
+    const placeholderId = "att-" + msg.id + "-" + Math.random().toString(36).slice(2, 8);
+    setTimeout(() => { lazyLoadEncryptedAttachment(placeholderId, msg); }, 0);
+    if (kind === "image" || kind === "video") {
+      return `<div id="${placeholderId}" class="msg-attachment-uploading" style="width:200px;height:140px;display:flex;align-items:center;justify-content:center;">🔒 Загрузка...</div>`;
+    }
+    return `<div id="${placeholderId}" class="msg-attachment-uploading">🔒 Загрузка файла...</div>`;
   }
 
-  if (decryptFailed) {
-    return `<div class="msg-attachment-uploading" style="max-width:260px;display:block;text-align:center;line-height:1.4;">
-      🔒 Файл зашифрован.<br>Разблокируйте в настройках, чтобы просмотреть.
-    </div>`;
+  // Незашифрованные — сразу. Signed URL уже в кэше (batch-prefetch).
+  const displayUrl = await getSignedUrl(url);
+  if (!displayUrl) {
+    return `<div class="msg-attachment-uploading">⏳ Загрузка…</div>`;
   }
 
   if (kind === "image") {
@@ -6758,14 +6829,6 @@ async function copyMessageText(id) {
 function setupMessageMenu() {
   const menuEl = document.getElementById("msg-context-menu");
   menuEl.addEventListener("click", async (e) => {
-    // Пока палец после long-press ещё не отпущен (в течение 400 мс),
-    // клик по кнопкам игнорируем. Иначе палец, который держал сообщение,
-    // при отпускании случайно «проваливается» в первую кнопку меню.
-    if (Date.now() - msgMenuOpenedAt < 400) {
-      e.stopPropagation();
-      e.preventDefault();
-      return;
-    }
     const btn = e.target.closest("button");
     if (!btn) return;
     e.stopPropagation();
@@ -6861,6 +6924,7 @@ function setupMessageMenu() {
         if (y < 8) y = 8;
         fmtMenu.style.left = x + "px";
         fmtMenu.style.top = y + "px";
+        blockUntilTouchRelease(fmtMenu);
       };
 
       inputEl.addEventListener("contextmenu", (e) => {
@@ -7072,16 +7136,10 @@ function openMsgContextMenu(e, msgId) {
   if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
   menu.style.left = x + "px"; menu.style.top = y + "px";
 
-  // 🔴 Пока палец не отпущен после long-press — меню не должно реагировать
-  // ни на нажатия, ни на hover. Простая схема на setTimeout: 700 мс
-  // (long-press 500 мс + запас 200 мс). Никаких pointerup/touchend
-  // слушателей — они «залипали» в ПКМ-сценарии: после правого клика
-  // меню оставалось с pointer-events: none, и кнопки не работали.
-  menu.style.pointerEvents = "none";
-  clearTimeout(window.__msgMenuReleaseTimer);
-  window.__msgMenuReleaseTimer = setTimeout(() => {
-    menu.style.pointerEvents = "";
-  }, 700);
+  // 🔴 Пока палец не отпущен (long-press на тач-устройстве) — блокируем
+  // взаимодействие с меню, чтобы палец не «провалился» в кнопку под собой.
+  // На ПКМ (мышь) — блокировка не срабатывает, всё работает сразу.
+  blockUntilTouchRelease(menu);
 }
 
 function closeMsgContextMenu() {
@@ -8585,6 +8643,7 @@ function openGiftTileContextMenu(ev, ugId, isPinned, inProfile) {
   if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
   menu.style.left = x + "px";
   menu.style.top = y + "px";
+  blockUntilTouchRelease(menu);
 }
 
 async function renderCatalog(recipientId) {
