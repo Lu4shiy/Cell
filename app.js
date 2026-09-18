@@ -2449,6 +2449,10 @@ function cropperInit() {
   const imgEl = document.getElementById("cropper-img");
   if (!stage || !imgEl || !cropperState.img) return;
 
+  // 🔴 Устанавливаем src DOM-элементу. Без этого тег <img> пустой — отсюда
+  // чёрный экран в окне кроппера.
+  imgEl.src = cropperState.img.src;
+
   const W = stage.clientWidth;
   const H = stage.clientHeight;
   cropperState.stageW = W;
