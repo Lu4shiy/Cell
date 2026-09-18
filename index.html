@@ -925,15 +925,81 @@
     <button data-action="visibility">Добавить в профиль</button>
   </div>
 
+  <!-- Плашка «Доступна новая версия» -->
+  <div id="update-banner" class="update-banner hidden">
+    <span>Доступна новая версия Cell</span>
+    <button type="button" id="update-banner-reload">Перезагрузить</button>
+    <button type="button" id="update-banner-close" aria-label="Скрыть">✕</button>
+  </div>
+
   <script type="module" src="app.js"></script>
 
   <!-- Регистрация service worker (PWA) -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
+        const updateBanner = document.getElementById('update-banner');
+        const reloadBtn = document.getElementById('update-banner-reload');
+        const closeBtn = document.getElementById('update-banner-close');
+        let reloadTriggered = false;
+
+        function showUpdateBanner() {
+          if (!updateBanner) return;
+          updateBanner.classList.remove('hidden');
+        }
+        function hideUpdateBanner() {
+          if (!updateBanner) return;
+          updateBanner.classList.add('hidden');
+        }
+
+        if (closeBtn) closeBtn.addEventListener('click', hideUpdateBanner);
+
+        if (reloadBtn) {
+          reloadBtn.addEventListener('click', () => {
+            reloadTriggered = true;
+            hideUpdateBanner();
+            navigator.serviceWorker.getRegistration()
+              .then((reg) => {
+                if (reg && reg.waiting) {
+                  // Просим новый SW активироваться.
+                  // Ответный controllerchange перезагрузит страницу (см. ниже).
+                  reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                } else {
+                  window.location.reload();
+                }
+              })
+              .catch(() => window.location.reload());
+          });
+        }
+
+        // Когда новый SW активировался после нашего SKIP_WAITING — перезагружаем страницу.
+        // ⚠️ Только если это был наш явный перезапуск. Иначе не трогаем —
+        // фоновое обновление SW не должно ронять страницу.
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!reloadTriggered) return;
+          reloadTriggered = false;
+          window.location.reload();
+        });
+
         navigator.serviceWorker
           .register('./sw.js', { scope: './' })
           .then((reg) => {
+            // Если новый SW уже ждал с прошлого запуска — сразу показываем баннер
+            if (reg.waiting && navigator.serviceWorker.controller) {
+              showUpdateBanner();
+            }
+
+            reg.addEventListener('updatefound', () => {
+              const newWorker = reg.installing;
+              if (!newWorker) return;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // Новый SW скачан и ждёт активации
+                  showUpdateBanner();
+                }
+              });
+            });
+
             // Проверяем обновления раз в час и при возврате в приложение.
             // Само по себе это НЕ перезагружает страницу — просто проверяет,
             // не появилась ли новая версия sw.js.
@@ -944,11 +1010,6 @@
             });
           })
           .catch((err) => console.warn('SW registration failed:', err));
-
-        // ⚠️ НЕ перезагружаем автоматически при controllerchange.
-        // Иначе каждое обновление SW в фоне мгновенно роняло страницу.
-        // Новая версия применится при следующем полноценном запуске PWA
-        // (kill + открытие) либо вручную (pull-to-refresh / закрыть-открыть).
       });
     }
   </script>

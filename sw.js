@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-v11";
+const CACHE_VERSION = "cell-v12";
 
 const CACHE_FILES = [
   "./",
@@ -33,7 +33,10 @@ self.addEventListener("install", (event) => {
       );
     })
   );
-  self.skipWaiting();
+  // ⚠️ НЕ вызываем self.skipWaiting() здесь.
+  // Ждём, пока пользователь нажмёт «Перезагрузить» в плашке —
+  // тогда из index.html придёт сообщение SKIP_WAITING.
+  // Без этого новая версия молча подменяла старую при следующем запуске.
 });
 
 self.addEventListener("activate", (event) => {
@@ -47,6 +50,15 @@ self.addEventListener("activate", (event) => {
     )
   );
   self.clients.claim();
+});
+
+// Слушаем сообщения от страницы.
+// index.html отправляет { type: "SKIP_WAITING" }, когда пользователь
+// нажал «Перезагрузить» в плашке обновления.
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("fetch", (event) => {

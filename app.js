@@ -5,6 +5,16 @@
 const SUPABASE_URL = "https://uiktqkxfsoewjpgjpizf.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpa3Rxa3hmc29ld2pwZ2pwaXpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyODY5MjksImV4cCI6MjEwNDg2MjkyOX0.2OC3vrfusHK6Lqv1Yh5KfZ42Ypm02sE1XAloTSUxo2k";
 
+// Разделяем сессии: обычная вкладка браузера и установленное PWA-приложение
+// должны иметь независимые входы. Иначе они делят один localStorage и
+// вход в одном окне затирает сессию в другом.
+const isStandalonePWA =
+  window.matchMedia("(display-mode: standalone)").matches ||
+  window.matchMedia("(display-mode: window-controls-overlay)").matches ||
+  window.navigator.standalone === true;
+
+const AUTH_STORAGE_KEY = isStandalonePWA ? "imaginer-auth-pwa" : "imaginer-auth";
+
 import * as Crypto from "./crypto.js";
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -12,7 +22,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     // localStorage — переживает закрытие PWA/вкладки.
     // sessionStorage стирался при выходе из приложения, из-за чего требовался повторный вход.
     storage: window.localStorage,
-    storageKey: "imaginer-auth",
+    storageKey: AUTH_STORAGE_KEY,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false,
