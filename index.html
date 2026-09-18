@@ -8,8 +8,31 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
 
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json" id="app-manifest-link">
+  <!-- PWA: манифест создаётся инлайн-скриптом, чтобы Chrome сразу получил правильный манифест.
+       Если поставить статический <link rel="manifest" href="manifest.json">, Chrome
+       прочитает его раньше, чем выполнится app.js — и иконка не сменится при переустановке. -->
+  <script>
+    (function () {
+      var map = {
+        classic:    "manifest.json",
+        monochrome: "manifest-monochrome.json",
+        sea:        "manifest-sea.json",
+        fury:       "manifest-fury.json",
+        inverse:    "manifest-inverse.json",
+        gradient:   "manifest-gradient.json"
+      };
+      var href = "manifest.json";
+      try {
+        var saved = localStorage.getItem("cell_app_icon");
+        if (saved && map[saved]) href = map[saved];
+      } catch (e) { /* silent */ }
+      var link = document.createElement("link");
+      link.rel = "manifest";
+      link.href = href;
+      link.id = "app-manifest-link";
+      document.head.appendChild(link);
+    })();
+  </script>
   <meta name="theme-color" content="#1d1712">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
