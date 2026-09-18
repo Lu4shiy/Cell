@@ -11428,6 +11428,80 @@ function subscribeToChannelRequests() {
 }
 
 // ======================================================
+// ВЫБОР ИКОНКИ ПРИЛОЖЕНИЯ (только PWA)
+// ======================================================
+
+const APP_ICON_KEY = "cell_app_icon";
+const APP_ICON_MANIFESTS = {
+  classic:    "manifest.json",
+  monochrome: "manifest-monochrome.json",
+  sea:        "manifest-sea.json",
+  fury:       "manifest-fury.json",
+  inverse:    "manifest-inverse.json",
+  gradient:   "manifest-gradient.json",
+};
+const APP_ICON_LABELS = {
+  classic:    "Классический",
+  monochrome: "Монохром",
+  sea:        "Море",
+  fury:       "Ярость",
+  inverse:    "Реверсивный",
+  gradient:   "Градиент",
+};
+
+function applyAppIcon(key) {
+  if (!APP_ICON_MANIFESTS[key]) key = "classic";
+  const link = document.getElementById("app-manifest-link");
+  if (link) link.setAttribute("href", APP_ICON_MANIFESTS[key]);
+  try { localStorage.setItem(APP_ICON_KEY, key); } catch (e) {}
+  document.querySelectorAll("[data-app-icon]").forEach((el) => {
+    el.classList.toggle("selected", el.dataset.appIcon === key);
+  });
+}
+
+// Применяем сохранённую иконку при загрузке (сразу, до initApp).
+(function initAppIconEarly() {
+  // Применяем только в PWA — на сайте иконка не имеет смысла.
+  if (!isStandalonePWA) return;
+  let saved = "classic";
+  try { saved = localStorage.getItem(APP_ICON_KEY) || "classic"; } catch (e) {}
+  const link = document.getElementById("app-manifest-link");
+  if (link && APP_ICON_MANIFESTS[saved]) {
+    link.setAttribute("href", APP_ICON_MANIFESTS[saved]);
+  }
+})();
+
+function renderAppIconGrid() {
+  const grid = document.getElementById("app-icon-grid");
+  if (!grid) return;
+  const keys = Object.keys(APP_ICON_MANIFESTS);
+  let current = "classic";
+  try { current = localStorage.getItem(APP_ICON_KEY) || "classic"; } catch (e) {}
+
+  grid.innerHTML = keys.map((k) => `
+    <button type="button" class="app-icon-option ${k === current ? "selected" : ""}"
+            data-app-icon="${k}" title="${APP_ICON_LABELS[k]}">
+      <span class="app-icon-preview app-icon-${k}"></span>
+      <span class="app-icon-label">${APP_ICON_LABELS[k]}</span>
+    </button>
+  `).join("");
+
+  grid.querySelectorAll("[data-app-icon]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const k = btn.dataset.appIcon;
+      if (k === current) return;
+      current = k;
+      applyAppIcon(k);
+      await showAlertDialog(
+        "Иконка изменена",
+        "Чтобы увидеть новую иконку, полностью закрой приложение и запусти снова.\n\n" +
+        "Если иконка не обновилась — удали PWA с домашнего экрана и добавь заново."
+      );
+    });
+  });
+}
+
+// ======================================================
 // 43. НАСТРОЙКИ: РЕЖИМ СПИСКА ЧАТОВ
 // ======================================================
 // ВАЖНО: SCROLL_MODE_KEY и scrollMode объявлены в самом верху файла,
@@ -11499,6 +11573,19 @@ function setupSettings() {
     const toggleBlock = document.getElementById("settings-scroll-mode");
     const section = toggleBlock ? toggleBlock.closest(".profile-section") : null;
     if (section) section.style.display = "none";
+  }
+
+  // Секция «Иконка приложения» — только в PWA и только не на iOS.
+  // iOS Safari не позволяет менять иконку после установки на домашний экран.
+  const iconSection = document.getElementById("settings-app-icon-section");
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (iconSection) {
+    if (!isStandalonePWA || isIOS) {
+      iconSection.style.display = "none";
+    } else {
+      renderAppIconGrid();
+    }
   }
 
   if (toggle) {

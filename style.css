@@ -4229,6 +4229,80 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 }
 
 /* ====================================================== */
+/* ВЫБОР ИКОНКИ ПРИЛОЖЕНИЯ                                 */
+/* ====================================================== */
+
+.app-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.app-icon-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-sub);
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.app-icon-option:hover {
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+}
+.app-icon-option.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.25);
+}
+
+.app-icon-preview {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: block;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
+
+/* Превью — рисуем мини-SVG через data-URL, чтобы не тащить картинки */
+.app-icon-classic {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%2315110d'/><polygon points='256,32 480,148 480,364 256,480 32,364 32,148' fill='%23f5a623'/><circle cx='256' cy='256' r='70' fill='%2315110d'/></svg>");
+}
+.app-icon-monochrome {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%23000'/><polygon points='256,32 480,148 480,364 256,480 32,364 32,148' fill='%23fff'/><circle cx='256' cy='256' r='70' fill='%23000'/></svg>");
+}
+.app-icon-sea {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%230a1c34'/><polygon points='256,32 480,148 480,364 256,480 32,364 32,148' fill='%234a90e2'/><circle cx='256' cy='256' r='70' fill='%230a1c34'/></svg>");
+}
+.app-icon-fury {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%23000'/><polygon points='256,32 480,148 480,364 256,480 32,364 32,148' fill='%23e85a4a'/><circle cx='256' cy='256' r='70' fill='%23000'/></svg>");
+}
+.app-icon-inverse {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%23fff'/><polygon points='256,32 480,148 480,364 256,480 32,364 32,148' fill='%23000'/><circle cx='256' cy='256' r='70' fill='%23fff'/></svg>");
+}
+.app-icon-gradient {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0%25' stop-color='%23ffd84a'/><stop offset='100%25' stop-color='%23f5a623'/></linearGradient></defs><rect width='512' height='512' fill='%23000'/><polygon points='256,32 480,148 480,364 256,480 32,364 32,148' fill='url(%23g)'/><circle cx='256' cy='256' r='70' fill='%23000'/></svg>");
+}
+
+.app-icon-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ====================================================== */
 /* КРОП АВАТАРА                                            */
 /* ====================================================== */
 
