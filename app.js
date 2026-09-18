@@ -1908,6 +1908,7 @@ async function initApp() {
   subscribeToPins();
   subscribeToChannelRequests();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
+  setupAvatarCropper();
   setupBirthdayClose(); setupTokensDialog(); setupChannelCreate(); setupChannelEdit();
   supabase.from("profiles").select("id").limit(1).then(() => {});
   subscribeToBlocks(); subscribeToGlobalChanges(); subscribeToProfiles();
@@ -2388,15 +2389,317 @@ async function saveProfileField(fields) {
   if (error) console.error(error);
 }
 
+// ═══════════════════════════════════════════════════════
+// КРОП АВАТАРА — универсальный (профиль + каналы)
+// ═══════════════════════════════════════════════════════
+
+const CROPPER_CIRCLE_FRACTION = 0.9;  // диаметр круга = 90% от stage (см. CSS)
+const CROPPER_OUTPUT_SIZE = 400;      // размер итогового квадрата
+
+const cropperState = {
+  img: null,
+  naturalW: 0,
+  naturalH: 0,
+  stageW: 0,
+  stageH: 0,
+  scale: 1,
+  minScale: 1,
+  maxScale: 4,
+  x: 0,
+  y: 0,
+  callback: null,
+  // drag
+  dragStartX: 0,
+  dragStartY: 0,
+  dragStartTranslateX: 0,
+  dragStartTranslateY: 0,
+  isDragging: false,
+  // pinch
+  pinchStartDist: 0,
+  pinchStartScale: 1,
+  pinchStartPointX: 0,
+  pinchStartPointY: 0,
+  pinchActive: false,
+  pinchEndTimer: null,
+};
+
+function cropperUpdateTransform() {
+  const imgEl = document.getElementById("cropper-img");
+  if (!imgEl) return;
+  imgEl.style.transform =
+    `translate(-50%, -50%) translate(${cropperState.x}px, ${cropperState.y}px) scale(${cropperState.scale})`;
+}
+
+function cropperClampTranslate() {
+  const stage = document.getElementById("cropper-stage");
+  if (!stage) return;
+  const W = stage.clientWidth;
+  const H = stage.clientHeight;
+  const R = Math.min(W, H) * CROPPER_CIRCLE_FRACTION / 2;
+  const sw = cropperState.naturalW * cropperState.scale;
+  const sh = cropperState.naturalH * cropperState.scale;
+  const rangeX = Math.max(0, sw / 2 - R);
+  const rangeY = Math.max(0, sh / 2 - R);
+  cropperState.x = Math.max(-rangeX, Math.min(rangeX, cropperState.x));
+  cropperState.y = Math.max(-rangeY, Math.min(rangeY, cropperState.y));
+}
+
+function cropperInit() {
+  const stage = document.getElementById("cropper-stage");
+  const imgEl = document.getElementById("cropper-img");
+  if (!stage || !imgEl || !cropperState.img) return;
+
+  const W = stage.clientWidth;
+  const H = stage.clientHeight;
+  cropperState.stageW = W;
+  cropperState.stageH = H;
+
+  const diameter = Math.min(W, H) * CROPPER_CIRCLE_FRACTION;
+  const minScale = Math.max(
+    diameter / cropperState.naturalW,
+    diameter / cropperState.naturalH
+  );
+  cropperState.minScale = minScale;
+  cropperState.maxScale = minScale * 4;
+  cropperState.scale = minScale;
+  cropperState.x = 0;
+  cropperState.y = 0;
+
+  imgEl.style.width = cropperState.naturalW + "px";
+  imgEl.style.height = cropperState.naturalH + "px";
+  cropperUpdateTransform();
+
+  const zoomSlider = document.getElementById("cropper-zoom");
+  if (zoomSlider) {
+    zoomSlider.min = String(minScale);
+    zoomSlider.max = String(cropperState.maxScale);
+    zoomSlider.step = String((cropperState.maxScale - minScale) / 100 || 0.01);
+    zoomSlider.value = String(minScale);
+  }
+}
+
+function openAvatarCropper(file, onApply) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      cropperState.img = img;
+      cropperState.naturalW = img.naturalWidth;
+      cropperState.naturalH = img.naturalHeight;
+      cropperState.callback = onApply;
+
+      const overlay = document.getElementById("avatar-cropper-overlay");
+      overlay.classList.remove("hidden");
+
+      // Ждём кадр, чтобы stage получил реальные размеры
+      requestAnimationFrame(() => cropperInit());
+    };
+    img.onerror = () => {
+      showAlertDialog("Ошибка", "Не удалось открыть изображение");
+    };
+    img.src = reader.result;
+  };
+  reader.onerror = () => {
+    showAlertDialog("Ошибка", "Не удалось прочитать файл");
+  };
+  reader.readAsDataURL(file);
+}
+
+function closeAvatarCropper() {
+  document.getElementById("avatar-cropper-overlay").classList.add("hidden");
+  cropperState.img = null;
+  cropperState.callback = null;
+}
+
+function cropperApply() {
+  if (!cropperState.img || !cropperState.callback) return;
+  const stage = document.getElementById("cropper-stage");
+  if (!stage) return;
+
+  const W = stage.clientWidth;
+  const H = stage.clientHeight;
+  const diameter = Math.min(W, H) * CROPPER_CIRCLE_FRACTION;
+  const k = CROPPER_OUTPUT_SIZE / diameter;
+
+  const OUT = CROPPER_OUTPUT_SIZE;
+  const canvas = document.createElement("canvas");
+  canvas.width = OUT;
+  canvas.height = OUT;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
+  const dw = cropperState.naturalW * cropperState.scale * k;
+  const dh = cropperState.naturalH * cropperState.scale * k;
+  const dx = OUT / 2 + cropperState.x * k - dw / 2;
+  const dy = OUT / 2 + cropperState.y * k - dh / 2;
+
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, OUT, OUT);
+  ctx.drawImage(cropperState.img, dx, dy, dw, dh);
+
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.88);
+  const cb = cropperState.callback;
+  closeAvatarCropper();
+  cb(dataUrl);
+}
+
+function setupAvatarCropper() {
+  const overlay = document.getElementById("avatar-cropper-overlay");
+  const stage = document.getElementById("cropper-stage");
+  const applyBtn = document.getElementById("cropper-apply");
+  const cancelBtn = document.getElementById("cropper-cancel");
+  const zoomSlider = document.getElementById("cropper-zoom");
+  if (!overlay || !stage) return;
+
+  applyBtn.addEventListener("click", cropperApply);
+  cancelBtn.addEventListener("click", closeAvatarCropper);
+
+  zoomSlider.addEventListener("input", () => {
+    const v = parseFloat(zoomSlider.value);
+    if (!isNaN(v)) {
+      cropperState.scale = v;
+      cropperClampTranslate();
+      cropperUpdateTransform();
+    }
+  });
+
+  // ---- Тач: drag + pinch ----
+  stage.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 2) {
+      cropperState.pinchActive = true;
+      if (cropperState.pinchEndTimer) {
+        clearTimeout(cropperState.pinchEndTimer);
+        cropperState.pinchEndTimer = null;
+      }
+      const bodyRect = stage.getBoundingClientRect();
+      const cx = bodyRect.left + bodyRect.width / 2;
+      const cy = bodyRect.top + bodyRect.height / 2;
+      const t0 = e.touches[0], t1 = e.touches[1];
+      cropperState.pinchStartDist =
+        Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY) || 1;
+      cropperState.pinchStartScale = cropperState.scale;
+      const midX = (t0.clientX + t1.clientX) / 2;
+      const midY = (t0.clientY + t1.clientY) / 2;
+      cropperState.pinchStartPointX =
+        (midX - cx - cropperState.x) / cropperState.scale;
+      cropperState.pinchStartPointY =
+        (midY - cy - cropperState.y) / cropperState.scale;
+    } else if (e.touches.length === 1) {
+      cropperState.isDragging = true;
+      cropperState.dragStartX = e.touches[0].clientX;
+      cropperState.dragStartY = e.touches[0].clientY;
+      cropperState.dragStartTranslateX = cropperState.x;
+      cropperState.dragStartTranslateY = cropperState.y;
+    }
+  }, { passive: true });
+
+  stage.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const bodyRect = stage.getBoundingClientRect();
+      const cx = bodyRect.left + bodyRect.width / 2;
+      const cy = bodyRect.top + bodyRect.height / 2;
+      const t0 = e.touches[0], t1 = e.touches[1];
+      const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      const ratio = dist / cropperState.pinchStartDist;
+      const newScale = Math.max(
+        cropperState.minScale,
+        Math.min(cropperState.maxScale, cropperState.pinchStartScale * ratio)
+      );
+      const midX = (t0.clientX + t1.clientX) / 2;
+      const midY = (t0.clientY + t1.clientY) / 2;
+      cropperState.scale = newScale;
+      cropperState.x = midX - cx - cropperState.pinchStartPointX * newScale;
+      cropperState.y = midY - cy - cropperState.pinchStartPointY * newScale;
+      // Плавно гасим смещение у нижнего предела — чтобы не «уползало»
+      const t = Math.max(0, (newScale - cropperState.minScale) /
+        (cropperState.minScale * 0.4));
+      if (t < 1) {
+        cropperState.x *= t;
+        cropperState.y *= t;
+      }
+      cropperClampTranslate();
+      cropperUpdateTransform();
+      if (zoomSlider) zoomSlider.value = String(newScale);
+    } else if (e.touches.length === 1 && cropperState.isDragging) {
+      e.preventDefault();
+      cropperState.x = cropperState.dragStartTranslateX +
+        (e.touches[0].clientX - cropperState.dragStartX);
+      cropperState.y = cropperState.dragStartTranslateY +
+        (e.touches[0].clientY - cropperState.dragStartY);
+      cropperClampTranslate();
+      cropperUpdateTransform();
+    }
+  }, { passive: false });
+
+  stage.addEventListener("touchend", (e) => {
+    if (e.touches.length === 1) {
+      // Переход 2→1: пересобираем стартовые точки
+      cropperState.isDragging = true;
+      cropperState.dragStartX = e.touches[0].clientX;
+      cropperState.dragStartY = e.touches[0].clientY;
+      cropperState.dragStartTranslateX = cropperState.x;
+      cropperState.dragStartTranslateY = cropperState.y;
+    }
+    if (e.touches.length === 0) {
+      cropperState.isDragging = false;
+      if (cropperState.pinchActive) {
+        if (cropperState.pinchEndTimer) clearTimeout(cropperState.pinchEndTimer);
+        cropperState.pinchEndTimer = setTimeout(() => {
+          cropperState.pinchActive = false;
+          cropperState.pinchEndTimer = null;
+        }, 250);
+      }
+    }
+  });
+
+  // ---- Мышь (ПК): drag ----
+  stage.addEventListener("mousedown", (e) => {
+    cropperState.isDragging = true;
+    cropperState.dragStartX = e.clientX;
+    cropperState.dragStartY = e.clientY;
+    cropperState.dragStartTranslateX = cropperState.x;
+    cropperState.dragStartTranslateY = cropperState.y;
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!cropperState.isDragging) return;
+    cropperState.x = cropperState.dragStartTranslateX + (e.clientX - cropperState.dragStartX);
+    cropperState.y = cropperState.dragStartTranslateY + (e.clientY - cropperState.dragStartY);
+    cropperClampTranslate();
+    cropperUpdateTransform();
+  });
+  window.addEventListener("mouseup", () => {
+    cropperState.isDragging = false;
+  });
+
+  // ---- Колесо (ПК) ----
+  stage.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const step = 0.08;
+    const newScale = Math.max(
+      cropperState.minScale,
+      Math.min(cropperState.maxScale, cropperState.scale + (e.deltaY > 0 ? -step : step))
+    );
+    cropperState.scale = newScale;
+    cropperClampTranslate();
+    cropperUpdateTransform();
+    if (zoomSlider) zoomSlider.value = String(newScale);
+  }, { passive: false });
+}
+
 async function handleAvatarUpload(e) {
   const file = e.target.files && e.target.files[0]; e.target.value = "";
   if (!file) return;
-  const dataUrl = await resizeImage(file, 200); if (!dataUrl) return;
-  myProfile.avatar_url = dataUrl;
-  paintAvatar(document.getElementById("profile-avatar-preview"), myProfile);
-  paintAvatar(document.getElementById("me-avatar"), myProfile);
-  renderAvatarGrid();
-  await saveProfileField({ avatar_url: dataUrl });
+  openAvatarCropper(file, async (dataUrl) => {
+    myProfile.avatar_url = dataUrl;
+    paintAvatar(document.getElementById("profile-avatar-preview"), myProfile);
+    paintAvatar(document.getElementById("me-avatar"), myProfile);
+    renderAvatarGrid();
+    await saveProfileField({ avatar_url: dataUrl });
+  });
 }
 
 function resizeImage(file, maxSize) {
@@ -9720,10 +10023,11 @@ function renderChannelAvatarGrid() {
 async function handleChannelAvatarUpload(e) {
   const file = e.target.files && e.target.files[0]; e.target.value = "";
   if (!file) return;
-  const dataUrl = await resizeImage(file, 200); if (!dataUrl) return;
-  channelCreateAvatarUrl = dataUrl;
-  paintAvatar(document.getElementById("channel-avatar-preview"), { display_name: "К", avatar_url: dataUrl });
-  renderChannelAvatarGrid();
+  openAvatarCropper(file, (dataUrl) => {
+    channelCreateAvatarUrl = dataUrl;
+    paintAvatar(document.getElementById("channel-avatar-preview"), { display_name: "К", avatar_url: dataUrl });
+    renderChannelAvatarGrid();
+  });
 }
 
 async function checkChannelUsernameLive(value) {
@@ -10128,11 +10432,11 @@ async function handleChannelEditAvatarUpload(e) {
   const file = e.target.files && e.target.files[0];
   e.target.value = "";
   if (!file) return;
-  const dataUrl = await resizeImage(file, 200);
-  if (!dataUrl) return;
-  channelEditAvatarUrl = dataUrl;
-  paintAvatar(document.getElementById("channel-edit-avatar-preview"), { display_name: "К", avatar_url: dataUrl });
-  renderChannelEditAvatarGrid();
+  openAvatarCropper(file, (dataUrl) => {
+    channelEditAvatarUrl = dataUrl;
+    paintAvatar(document.getElementById("channel-edit-avatar-preview"), { display_name: "К", avatar_url: dataUrl });
+    renderChannelAvatarGrid();
+  });
 }
 
 function renderChannelEditReactions() {

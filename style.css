@@ -4229,6 +4229,56 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 }
 
 /* ====================================================== */
+/* КРОП АВАТАРА                                            */
+/* ====================================================== */
+
+.cropper-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  margin: 0 auto;
+  overflow: hidden;
+  background: #000;
+  border-radius: 12px;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.cropper-stage:active { cursor: grabbing; }
+
+.cropper-img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-origin: center center;
+  will-change: transform;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  max-width: none;
+  display: block;
+}
+
+/* Круглая маска — диаметр 90% от stage */
+.cropper-mask {
+  position: absolute;
+  top: 5%; left: 5%; right: 5%; bottom: 5%;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.58);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.cropper-zoom {
+  width: 100%;
+  margin-top: 14px;
+  accent-color: var(--accent);
+}
+
+/* ====================================================== */
 /* МЕНЮ САЙДБАРА (бургер + выезжающий список)             */
 /* ====================================================== */
 
