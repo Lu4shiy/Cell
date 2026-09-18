@@ -1918,12 +1918,7 @@ async function initApp() {
   tryRestoreE2eeSession();
   await loadRecentChats();
   // 🔴 СРАЗУ после первичной загрузки списка — догоняем «потерянные» чаты.
-  // Раньше здесь стоял setTimeout(…, 1000), из-за чего один из чатов
-  // появлялся в списке на 1–2 секунды позже остальных.
   try { await pollMemberships(); } catch (e) { /* silent */ }
-  // 🔴 ПРИНУДИТЕЛЬНАЯ ПЕРЕЗАГРУЗКА: чтобы «отстающий» чат появился мгновенно,
-  // а не через 1-2 секунды после срабатывания pollMemberships.
-  await loadRecentChats();
 
   // Отметить все входящие как доставленные
   try { await supabase.rpc("mark_all_delivered"); } catch (e) {}
@@ -2759,7 +2754,13 @@ function subscribeToProfiles() {
 async function loadRecentChats() {
   const listEl = document.getElementById("users-list");
   document.getElementById("section-title").textContent = "Чаты";
-  listEl.innerHTML = '<div class="empty">Загрузка...</div>';
+  // 🔴 Показываем «Загрузка...» только если список ещё пуст (первичная
+  // загрузка). При повторных вызовах оставляем текущий список — иначе
+  // при обновлении данных пользователь видит мигание «Загрузка → чаты».
+  const hasChatItems = !!listEl.querySelector(".user-item");
+  if (!hasChatItems) {
+    listEl.innerHTML = '<div class="empty">Загрузка...</div>';
+  }
 
   const { data: myChats, error: e1 } = await supabase.from("chat_members").select("chat_id, custom_name").eq("user_id", currentUser.id);
   if (e1 || !myChats || myChats.length === 0) {

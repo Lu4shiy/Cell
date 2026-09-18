@@ -1324,6 +1324,10 @@ input:focus {
   animation: fadeIn 0.15s ease-out;
   cursor: zoom-out;
   touch-action: none; /* перехватываем все жесты, чтобы не скроллился body */
+  /* 🔴 Обрезаем увеличенное фото по краям экрана. Это позволяет убрать
+     overflow: hidden с .media-viewer-body, чтобы фото вместе с рамкой
+     (тень + закругление) росло целиком. */
+  overflow: hidden;
 }
 .media-viewer-body img,
 .media-viewer-body video {
@@ -1337,8 +1341,11 @@ input:focus {
   align-items: center;
   justify-content: center;
   cursor: default;
-  overflow: hidden;
-  touch-action: none; /* Отключаем системный зум */
+  touch-action: none;
+  /* 🔴 overflow: hidden УБРАН. Иначе при zoom фото обрезается по границам
+     своего исходного (немаштабированного) бокса — тень и закругление
+     остаются «внутри рамки». Обрезка по краям экрана делается на
+     .media-viewer (см. выше). */
 }
 
 .media-viewer-content {
