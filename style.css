@@ -696,15 +696,8 @@ input:focus {
 
 .msg-text { display: block; white-space: pre-wrap; word-wrap: break-word; }
 
-/* Одиночный эмодзи без текста — рендерим крупно (~5× обычного размера) */
-.msg-text.emoji-only {
-  font-size: 72px;
-  line-height: 1.05;
-  padding: 2px 4px;
-  text-align: center;
-}
-/* Если внутри сообщения ровно один эмодзи и больше ничего —
-   убираем «пузырь»: фон прозрачный, отступы минимальные, закругления не видны. */
+/* Сообщение, состоящее ТОЛЬКО из эмодзи и пробелов — без «пузыря»:
+   прозрачный фон, без отступов и закруглений. */
 .msg:has(.msg-text.emoji-only) {
   background: transparent !important;
   box-shadow: none !important;
@@ -714,10 +707,19 @@ input:focus {
 .msg:has(.msg-text.emoji-only) .msg-time {
   color: var(--text-dim);
 }
-/* Время под эмодзи — на тёмном фоне плохо читается на своём акценте,
-   поэтому в «mine» тоже делаем приглушённый оттенок. */
 .msg.mine:has(.msg-text.emoji-only) .msg-time {
   color: var(--text-dim);
+}
+/* Исключение: если сообщение ВЫБРАНО — показываем контур, чтобы было видно выбор. */
+.msg.selected:has(.msg-text.emoji-only) {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 12px rgba(var(--accent-rgb), 0.35) !important;
+}
+/* Одиночный эмодзи — рендерим крупно (~5× обычного размера) */
+.msg-text.emoji-only.emoji-single {
+  font-size: 72px;
+  line-height: 1.05;
+  padding: 2px 4px;
+  text-align: center;
 }
 .msg-time { display: block; font-size: 11px; text-align: right; margin-top: 3px; }
 

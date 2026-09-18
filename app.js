@@ -1739,21 +1739,36 @@ function firstChar(str) {
   // .toUpperCase() на эмодзи ничего не сломает — это no-op для символов без регистра
   return first.toUpperCase();
 }
-// Возвращает true, если строка — ровно один эмодзи (без текста).
-function isSingleEmoji(text) {
-  if (!text) return false;
-  const trimmed = String(text).trim();
-  if (!trimmed) return false;
-  let graphemes;
+// Разбивает строку на графемы, выкидывая чисто-пробельные.
+function _nonSpaceGraphemes(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return [];
   if (graphemeSegmenter) {
-    graphemes = [...graphemeSegmenter.segment(trimmed)].map((s) => s.segment);
-  } else {
-    graphemes = [...trimmed];
+    return [...graphemeSegmenter.segment(trimmed)]
+      .map((s) => s.segment)
+      .filter((g) => !/^\s+$/.test(g));
   }
+  return [...trimmed].filter((c) => !/\s/.test(c));
+}
+
+// Возвращает true, если ВСЁ содержимое сообщения — эмодзи и пробелы
+// (без букв, цифр, спецсимволов). Такие сообщения рендерятся без «пузыря».
+function isOnlyEmoji(text) {
+  if (!text) return false;
+  const graphemes = _nonSpaceGraphemes(text);
+  if (graphemes.length === 0) return false;
+  return graphemes.every((g) => {
+    if (/^[\d#*]$/.test(g)) return false;
+    return /\p{Extended_Pictographic}/u.test(g) || /\p{Emoji_Presentation}/u.test(g);
+  });
+}
+
+// Возвращает true, если ровно ОДИН эмодзи (без текста и пробелов).
+// Такие сообщения рендерятся крупно.
+function isSingleEmoji(text) {
+  const graphemes = _nonSpaceGraphemes(text);
   if (graphemes.length !== 1) return false;
   const g = graphemes[0];
-  // Игнорируем ключевые символы 0-9, #, * — у них Emoji_Presentation = true,
-  // но это не «эмодзи» в обычном смысле.
   if (/^[\d#*]$/.test(g)) return false;
   return /\p{Extended_Pictographic}/u.test(g) || /\p{Emoji_Presentation}/u.test(g);
 }
@@ -4255,6 +4270,50 @@ async function loadMessages(chatId, mySeq) {
     }).catch(() => {});
   }
 
+  // 🔴 Оптимизация: предзагружаем пачкой всё, что нужно для рендера.
+  // Раньше на каждое сообщение делалось до 2-3 запросов (профиль для reply,
+  // signed URL для вложения) — на 100+ сообщениях это десятки секунд.
+  // Теперь — 1 запрос на все профили + 1 на все signed URL.
+
+  // 1) Профили авторов reply-сообщений
+  const replySenderIds = new Set();
+  visible.forEach((m) => {
+    if (m.reply_to_id && msgCache.has(m.reply_to_id)) {
+      const orig = msgCache.get(m.reply_to_id);
+      if (orig.sender_id && !profileCache.has(orig.sender_id)) {
+        replySenderIds.add(orig.sender_id);
+      }
+    }
+  });
+  if (replySenderIds.size) {
+    try {
+      const { data } = await supabase.from("profiles")
+        .select("id, username, display_name, avatar_url, accent_color, last_seen, gender, created_at, birthday, verified, bio")
+        .in("id", [...replySenderIds]);
+      (data || []).forEach((p) => profileCache.set(p.id, p));
+    } catch (e) { /* silent */ }
+  }
+
+  // 2) Batch signed URLs для незашифрованных вложений
+  const pathsToSign = [];
+  visible.forEach((m) => {
+    if (m.message_type === "attachment" && m.image_url && !(m.file_key_enc && m.file_iv)) {
+      const path = extractStoragePath(m.image_url);
+      if (path && !signedUrlCache.has(path)) pathsToSign.push(path);
+    }
+  });
+  if (pathsToSign.length) {
+    try {
+      const { data } = await supabase.storage.from("attachments").createSignedUrls(pathsToSign, 3600);
+      const now = Date.now();
+      (data || []).forEach((item, i) => {
+        if (item && item.signedUrl) {
+          signedUrlCache.set(pathsToSign[i], { url: item.signedUrl, expiresAt: now + 55 * 60 * 1000 });
+        }
+      });
+    } catch (e) { /* silent */ }
+  }
+
   // Рендерим все сообщения ПАРАЛЛЕЛЬНО и вставляем одним куском —
   // иначе пользователь видит, как сообщения «доезжают» по одному
   // (сначала старые, потом новые), и экран прыгает.
@@ -4483,7 +4542,9 @@ async function buildMsgHtml(msg) {
   }
   if (msg.reply_to_id && msgCache.has(msg.reply_to_id)) {
     const orig = msgCache.get(msg.reply_to_id);
-    const origProfile = await getProfile(orig.sender_id);
+    // 🔴 Без await: профиль уже предзагружен batch-запросом в loadMessages.
+    // Если его там нет — это либо наш профиль, либо редкий случай.
+    const origProfile = profileCache.get(orig.sender_id) || (orig.sender_id === currentUser.id ? myProfile : null);
     const origName = orig.sender_id === currentUser.id ? "Ты" : (origProfile ? origProfile.display_name : "?");
     const origPlain = orig.message_type === "attachment" ? "" : await getPlaintext(orig);
     const origPreview = orig.message_type === "attachment"
@@ -4502,8 +4563,14 @@ async function buildMsgHtml(msg) {
     }
   } else {
     const plain = await getPlaintext(msg);
-    const emojiOnly = isSingleEmoji(plain);
-    html += `<div class="msg-text${emojiOnly ? " emoji-only" : ""}">${replaceFlagsInHtml(applyFormatting(escapeHtml(plain)))}</div>`;
+    // 🔴 emoji-only — для ЛЮБОГО числа эмодзи и пробелов (убирает «пузырь»).
+    // emoji-single — только для одного эмодзи (делает крупный размер).
+    const onlyEmoji = isOnlyEmoji(plain);
+    const singleEmoji = onlyEmoji && isSingleEmoji(plain);
+    const cls = "msg-text"
+      + (onlyEmoji ? " emoji-only" : "")
+      + (singleEmoji ? " emoji-single" : "");
+    html += `<div class="${cls}">${replaceFlagsInHtml(applyFormatting(escapeHtml(plain)))}</div>`;
   }
   html += `<div class="msg-reactions" data-reactions-for="${msg.id}"></div>`;
 
@@ -6987,6 +7054,20 @@ function openMsgContextMenu(e, msgId) {
   if (x + rect.width > window.innerWidth - 8) x = window.innerWidth - rect.width - 8;
   if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
   menu.style.left = x + "px"; menu.style.top = y + "px";
+
+  // 🔴 Пока палец НЕ отпущен после long-press — никакие действия в меню
+  // не должны происходить. Отключаем pointer-events целиком, чтобы
+  // палец, оказавшийся над кнопкой, не «провалился» в неё при отпускании.
+  menu.style.pointerEvents = "none";
+  const releaseMenu = () => {
+    menu.style.pointerEvents = "";
+    document.removeEventListener("touchend", releaseMenu);
+    document.removeEventListener("touchcancel", releaseMenu);
+    document.removeEventListener("pointerup", releaseMenu);
+  };
+  document.addEventListener("touchend", releaseMenu, { once: true });
+  document.addEventListener("touchcancel", releaseMenu, { once: true });
+  document.addEventListener("pointerup", releaseMenu, { once: true });
 }
 
 function closeMsgContextMenu() {
@@ -10506,9 +10587,12 @@ function subscribeToChannelRequests() {
         }
       }
       if (!row) return;
-      // Обновляем бейдж на открытом профиле
-      if (channelProfileChannelId === row.chat_id) {
-        await updateChannelRequestsBadge(row.chat_id);
+      // Обновляем бейдж на открытом профиле.
+      // ⚠️ Для DELETE payload.old может не содержать chat_id, поэтому
+      // используем текущий открытый профиль как fallback. Иначе бейдж
+      // у админа не уменьшится при отзыве/удалении заявки.
+      if (channelProfileChannelId) {
+        await updateChannelRequestsBadge(channelProfileChannelId);
       }
 
       // 🔴 Обработка удаления МОЕЙ заявки (approve или reject).
