@@ -5796,6 +5796,10 @@ let mediaTouchStartX = 0;
 let mediaTouchStartY = 0;
 let mediaIsDragging = false;
 let mediaLastTap = 0;
+// 🔴 Флаг активного pinch-зума. Пока true — обработчики overlay (touchend/pointerup)
+// игнорируют события, иначе отпускание пальцев после pinch закрывает просмотрщик.
+let mediaPinchActive = false;
+let mediaPinchEndTimer = null;
 
 function applyMediaTransform() {
   const content = document.getElementById("media-viewer-content");
@@ -5838,6 +5842,11 @@ function setupMediaViewer() {
   // 2. Пинч-зум (2 пальца на мобильном)
   body.addEventListener("touchstart", (e) => {
     if (e.touches.length === 2) {
+      // Ставим флаг pinch и гасим событие — чтобы обработчики overlay
+      // (свайпы, тап-для-закрытия) его не видели.
+      mediaPinchActive = true;
+      if (mediaPinchEndTimer) { clearTimeout(mediaPinchEndTimer); mediaPinchEndTimer = null; }
+      e.stopPropagation();
       mediaTouchStartDist = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
@@ -5853,6 +5862,7 @@ function setupMediaViewer() {
   body.addEventListener("touchmove", (e) => {
     if (e.touches.length === 2) {
       e.preventDefault(); // Отключаем системный зум
+      e.stopPropagation();
       const dist = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
@@ -5863,6 +5873,7 @@ function setupMediaViewer() {
     } else if (e.touches.length === 1 && mediaIsDragging) {
       if (mediaScale > 1) {
         e.preventDefault();
+        e.stopPropagation();
         const dx = e.touches[0].clientX - mediaTouchStartX;
         const dy = e.touches[0].clientY - mediaTouchStartY;
         mediaTranslateX += dx;
@@ -5875,6 +5886,10 @@ function setupMediaViewer() {
   }, { passive: false });
 
   body.addEventListener("touchend", (e) => {
+    // Пока флаг pinch активен — гасим событие, чтобы overlay не закрыл просмотрщик.
+    if (mediaPinchActive) {
+      e.stopPropagation();
+    }
     if (e.touches.length < 2) {
       mediaTouchStartDist = 0;
     }
@@ -5882,6 +5897,15 @@ function setupMediaViewer() {
       mediaIsDragging = false;
       // Если масштаб вернулся к 1, сбрасываем смещение
       if (mediaScale <= 1.05) resetMediaTransform();
+      // Сбрасываем флаг с задержкой — чтобы «хвостовые» touchend/pointerup
+      // от того же жеста тоже были проигнорированы.
+      if (mediaPinchActive) {
+        if (mediaPinchEndTimer) clearTimeout(mediaPinchEndTimer);
+        mediaPinchEndTimer = setTimeout(() => {
+          mediaPinchActive = false;
+          mediaPinchEndTimer = null;
+        }, 350);
+      }
     }
   });
 
@@ -5940,6 +5964,8 @@ function setupMediaViewer() {
     tapStartAt = Date.now();
   });
   overlay.addEventListener("pointerup", (e) => {
+    // 🔴 Если активен pinch-зум — не закрываем просмотрщик по pointerup.
+    if (mediaPinchActive) return;
     // Тап — только если это не движение и мышь/палец не двигались
     if (Math.abs(e.clientX - tapStartX) > 8) return;
     if (Math.abs(e.clientY - tapStartY) > 8) return;
@@ -6004,6 +6030,9 @@ function setupMediaViewer() {
   }, { passive: true });
 
   overlay.addEventListener("touchend", (e) => {
+    // 🔴 Если активен pinch-зум — игнорируем touchend полностью,
+    // иначе отпускание пальцев после pinch закроет просмотрщик.
+    if (mediaPinchActive) return;
     if (e.changedTouches.length !== 1) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - touchStartX;
