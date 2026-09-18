@@ -5936,6 +5936,16 @@ function setupMediaViewer() {
       mediaScale = newScale;
       mediaTranslateX = midX - cx - mediaPinchStartPointX * newScale;
       mediaTranslateY = midY - cy - mediaPinchStartPointY * newScale;
+      // 🔴 Плавно гасим остаточное смещение при стремлении scale к 1.
+      // Иначе при отдалении фото «уползает» от центра (особенно по
+      // вертикали), потому что midpoint пальцев обычно не совпадает с
+      // центром экрана. При scale ≥ 1.4 коэффициент = 1 (anchor
+      // работает полностью), при scale = 1 смещение = 0.
+      if (newScale < 1.4) {
+        const t = Math.max(0, (newScale - 1) / 0.4);
+        mediaTranslateX *= t;
+        mediaTranslateY *= t;
+      }
       clampMediaTranslate();
       applyMediaTransform();
     } else if (e.touches.length === 1 && mediaIsDragging) {
