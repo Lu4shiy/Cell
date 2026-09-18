@@ -5819,14 +5819,21 @@ function setupMediaViewer() {
   if (!overlay || !body) return;
 
   // --- ЗУМ И ПАНОРАМИРОВАНИЕ ---
-  // 1. Ctrl + колесико (ПК)
-  body.addEventListener("wheel", (e) => {
-    if (!e.ctrlKey) return; // Только с зажатым Ctrl
+  // 1. Ctrl + колесико (ПК). Слушаем на window в capture-фазе:
+  //    — так ловим Ctrl+wheel в любой точке экрана, пока открыт просмотрщик
+  //      (и над фото, и над чёрным фоном вокруг);
+  //    — так гасим браузерный «pinch-zoom страницы» раньше, чем Chrome
+  //      успевает его обработать.
+  window.addEventListener("wheel", (e) => {
+    const overlayEl = document.getElementById("media-viewer");
+    if (!overlayEl || overlayEl.classList.contains("hidden")) return;
+    if (!e.ctrlKey) return;
     e.preventDefault();
+    e.stopPropagation();
     const delta = e.deltaY > 0 ? -0.15 : 0.15;
     mediaScale = Math.max(1, Math.min(5, mediaScale + delta));
     applyMediaTransform();
-  }, { passive: false });
+  }, { passive: false, capture: true });
 
   // 2. Пинч-зум (2 пальца на мобильном)
   body.addEventListener("touchstart", (e) => {
@@ -6122,15 +6129,19 @@ function mediaViewerNavigate(dir) {
 
 function closeMediaViewer() {
   const overlay = document.getElementById("media-viewer");
-  const body = document.getElementById("media-viewer-body");
-  if (!overlay || !body) return;
-  body.querySelectorAll("video").forEach((v) => {
+  const content = document.getElementById("media-viewer-content");
+  if (!overlay || !content) return;
+  content.querySelectorAll("video").forEach((v) => {
     try { v.pause(); } catch (e) {}
   });
-  body.innerHTML = "";
+  // 🔴 Чистим СОДЕРЖИМОЕ контейнера, а не сам контейнер — иначе
+  // #media-viewer-content удалится, и при следующем открытии
+  // renderMediaViewer не найдёт его и фото не отрисуется.
+  content.innerHTML = "";
   overlay.classList.add("hidden");
   mediaViewerList = [];
   mediaViewerIndex = -1;
+  resetMediaTransform();
 }
 
 function detectFileKind(file) {
