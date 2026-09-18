@@ -703,6 +703,22 @@ input:focus {
   padding: 2px 4px;
   text-align: center;
 }
+/* Если внутри сообщения ровно один эмодзи и больше ничего —
+   убираем «пузырь»: фон прозрачный, отступы минимальные, закругления не видны. */
+.msg:has(.msg-text.emoji-only) {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0;
+  border-radius: 0 !important;
+}
+.msg:has(.msg-text.emoji-only) .msg-time {
+  color: var(--text-dim);
+}
+/* Время под эмодзи — на тёмном фоне плохо читается на своём акценте,
+   поэтому в «mine» тоже делаем приглушённый оттенок. */
+.msg.mine:has(.msg-text.emoji-only) .msg-time {
+  color: var(--text-dim);
+}
 .msg-time { display: block; font-size: 11px; text-align: right; margin-top: 3px; }
 
 @keyframes msgIn {
@@ -1482,7 +1498,7 @@ input:focus {
   border-radius: 12px;
   padding: 6px;
   min-width: 230px;
-  z-index: 100;
+  z-index: 500;
   box-shadow: 0 10px 30px rgba(0,0,0,0.55);
 }
 .menu button {
@@ -3291,6 +3307,14 @@ button:not(:disabled):active { transform: scale(0.97); }
   }
   .msg {
     -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* Но текст внутри сообщения оставляем выделяемым только если пользователь
+     реально хочет копировать — через ПКМ/long-press меню (Копировать). */
+  .msg-text, .msg-system, .msg-text * {
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   /* На мобильном одна область занимает весь экран.

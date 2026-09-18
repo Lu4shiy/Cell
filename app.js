@@ -849,6 +849,7 @@ let channelCreateVisibility = "public";
 let channelEditVisibility = "public";
 let currentChannelHasRequest = false;
 let currentChannelRequestRejected = false;
+let currentChannelRequestId = null; // id активной заявки — для отзыва
 let channelRequestsChannel = null;
 // Возврат из профиля в окно подарка
 let profileFromGiftContext = null;     // { userId, ugId } — куда возвращаться
@@ -3106,11 +3107,15 @@ async function updateChannelComposerState() {
     if (currentChannelRequestRejected) {
       subBtn.textContent = "Заявка отклонена";
       subBtn.disabled = true;
+      subBtn.classList.remove("unsub");
     } else if (currentChannelHasRequest) {
-      subBtn.textContent = "Заявка отправлена";
-      subBtn.disabled = true;
+      // 🔴 Пока заявка висит — кнопка «Отозвать заявку», а не «Заявка отправлена».
+      subBtn.textContent = "Отозвать заявку";
+      subBtn.disabled = false;
+      subBtn.classList.add("unsub");
     } else {
       subBtn.textContent = "Подать заявку";
+      subBtn.classList.remove("unsub");
     }
   } else if (vis === "private") {
     subBtn.textContent = "Только по ссылке-приглашению";
@@ -3171,11 +3176,13 @@ async function openChannel(chatId) {
   // Проверим, есть ли у нас активная заявка на этот канал
   currentChannelHasRequest = false;
   currentChannelRequestRejected = false;
+  currentChannelRequestId = null;
   if (ch.visibility === "request" && !currentChannelIsSubscribed && !currentChannelIsAdmin) {
     const { data: req } = await supabase.from("channel_join_requests")
       .select("id").eq("chat_id", ch.id).eq("user_id", currentUser.id).maybeSingle();
     if (mySeq !== openSeq) return;
     currentChannelHasRequest = !!req;
+    currentChannelRequestId = req ? req.id : null;
   }
 
   // Подписки realtime — как можно раньше
@@ -6387,10 +6394,31 @@ function setupChatMenu() {
     }
   });
 
-  menuBtn.addEventListener("click", (e) => { e.stopPropagation(); menuEl.classList.toggle("hidden"); });
-  document.addEventListener("click", (e) => {
-    if (!menuEl.classList.contains("hidden") && !menuEl.contains(e.target)) menuEl.classList.add("hidden");
+  // Открытие/закрытие меню.
+  // Используем pointerdown в capture-фазе и гасим bubbling — раньше клик
+  // «проскакивал» до document-обработчика и меню сразу же закрывалось.
+  let chatMenuIgnoreOutside = false;
+
+  menuBtn.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    // Помечаем, что следующий клик по документу надо проглотить.
+    chatMenuIgnoreOutside = true;
+    setTimeout(() => { chatMenuIgnoreOutside = false; }, 0);
+    menuEl.classList.toggle("hidden");
+  }, true);
+
+  menuBtn.addEventListener("click", (e) => {
+    // Гасим click тоже, чтобы не было двойного toggle.
+    e.stopPropagation();
   });
+
+  document.addEventListener("pointerdown", (e) => {
+    if (chatMenuIgnoreOutside) return;
+    if (menuEl.classList.contains("hidden")) return;
+    if (menuEl.contains(e.target)) return;
+    if (e.target.closest("#chat-menu-btn")) return;
+    menuEl.classList.add("hidden");
+  }, true);
 
   menuEl.addEventListener("click", async (e) => {
     const action = e.target.dataset.action;
@@ -6545,19 +6573,34 @@ async function clearChatForMe() {
 async function clearChatForBoth() {
   if (!currentChatId) return;
   const chatId = currentChatId;
-  const { error } = await supabase.from("messages").delete().eq("chat_id", chatId);
+  // .select("id") — чтобы узнать, сколько строк реально удалилось.
+  // Без него Supabase с RLS вернёт error=null даже когда удаление запрещено.
+  const { data, error } = await supabase.from("messages").delete().eq("chat_id", chatId).select("id");
   if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  const deletedCount = (data || []).length;
+
   // Чистим локально сразу
   document.getElementById("messages").innerHTML = currentChannelObj
     ? '<div class="empty">В этом канале пока что нет сообщений.</div>'
     : '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
   msgCache.clear(); reactionsCache.clear();
-  // 🔴 Через полсекунды перезагружаем — если RLS или realtime оставили что-то,
-  // это гарантированно подчистит UI.
-  setTimeout(() => {
-    if (currentChatId === chatId) {
-      loadMessages(chatId, openSeq).catch(() => {});
-      loadReactionsForVisibleMessages().catch(() => {});
+
+  // Если удалилось меньше, чем было в кэше, — явно предупреждаем.
+  // (RLS может резать удаление части сообщений.)
+  setTimeout(async () => {
+    if (currentChatId !== chatId) return;
+    await loadMessages(chatId, openSeq);
+    await loadReactionsForVisibleMessages();
+    // Если после перезагрузки что-то осталось — сообщаем.
+    const box = document.getElementById("messages");
+    const left = box ? box.querySelectorAll(".msg, .msg-system").length : 0;
+    if (left > 0) {
+      await showAlertDialog(
+        "Очистка частичная",
+        `Удалено ${deletedCount} сообщений, но на сервере осталось ещё ${left}. ` +
+        `Скорее всего RLS-политика на messages не разрешает удалять все сообщения. ` +
+        `Пришли мне SQL-политики для messages — поправим.`
+      );
     }
   }, 600);
 }
@@ -6631,6 +6674,14 @@ async function copyMessageText(id) {
 function setupMessageMenu() {
   const menuEl = document.getElementById("msg-context-menu");
   menuEl.addEventListener("click", async (e) => {
+    // Пока палец после long-press ещё не отпущен (в течение 400 мс),
+    // клик по кнопкам игнорируем. Иначе палец, который держал сообщение,
+    // при отпускании случайно «проваливается» в первую кнопку меню.
+    if (Date.now() - msgMenuOpenedAt < 400) {
+      e.stopPropagation();
+      e.preventDefault();
+      return;
+    }
     const btn = e.target.closest("button");
     if (!btn) return;
     e.stopPropagation();
@@ -6719,8 +6770,11 @@ function setupMessageMenu() {
         fmtMenu.classList.remove("hidden");
         fmtMenu.style.left = "0px"; fmtMenu.style.top = "0px";
         const rect = fmtMenu.getBoundingClientRect();
+        // Клампим x и y в пределы экрана, чтобы меню не улетало вверх/вниз.
         if (x + rect.width > window.innerWidth - 8) x = window.innerWidth - rect.width - 8;
+        if (x < 8) x = 8;
         if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
+        if (y < 8) y = 8;
         fmtMenu.style.left = x + "px";
         fmtMenu.style.top = y + "px";
       };
@@ -6867,10 +6921,14 @@ function renderMsgReactionsBar(msgId) {
   }
 }
 
+// Пока палец не отпущен после long-press, клики по кнопкам меню должны игнорироваться.
+let msgMenuOpenedAt = 0;
+
 function openMsgContextMenu(e, msgId) {
   if (selectionMode) return;
   e.preventDefault(); e.stopPropagation();
   contextMsgId = msgId;
+  msgMenuOpenedAt = Date.now();
   contextReactionsExpanded = false;
   renderMsgReactionsBar(msgId);
   const msg = msgCache.get(msgId);
@@ -7202,13 +7260,25 @@ async function hideMessageForMe(msgId) {
 
 async function deleteMessageForBoth(msgId) {
   if (String(msgId).startsWith("tmp_")) return;
-  const { error } = await supabase.from("messages").delete().eq("id", msgId);
-  if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  // 🔴 .select() — критично: Supabase с RLS возвращает error=null даже когда
+  // политика не даёт удалить строку. Без select мы не увидим «0 удалено».
+  const { data, error } = await supabase.from("messages").delete().eq("id", msgId).select("id");
+  if (error) { await showAlertDialog("Ошибка удаления", error.message); return; }
+  if (!data || data.length === 0) {
+    await showAlertDialog(
+      "Не удалось удалить",
+      "Сервер не подтвердил удаление. Вероятно, RLS-политика на таблице messages " +
+      "не разрешает удалять это сообщение. Покажи мне SQL-политику для messages — " +
+      "я подскажу, как поправить."
+    );
+    return;
+  }
   msgCache.delete(msgId); reactionsCache.delete(msgId);
   subtractViewsForDeletedMessage(msgId);
   const el = document.querySelector(`[data-id="${msgId}"]`);
   if (el) el.remove();
   checkEmptyChat();
+  refreshMessageGroups();
 }
 
 // ======================================================
@@ -7280,9 +7350,11 @@ async function handleDeleteSelected() {
       if (el) el.remove();
     }
   } else if (choice === "both") {
-    const { error } = await supabase.from("messages").delete().in("id", ids);
+    const { data: del, error } = await supabase.from("messages").delete().in("id", ids).select("id");
     if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    const deletedIds = new Set((del || []).map((r) => r.id));
     ids.forEach((id) => {
+      if (!deletedIds.has(id)) return;
       msgCache.delete(id); reactionsCache.delete(id);
       subtractViewsForDeletedMessage(id);
       const el = document.querySelector(`[data-id="${id}"]`);
@@ -7310,10 +7382,8 @@ async function handleForwardOne(msgId) {
   const msg = msgCache.get(msgId);
   if (!msg) return;
   if (msg.message_type === "tokens" || msg.message_type === "gift") return;
-  if (msg.message_type === "attachment") {
-    await showAlertDialog("Пересылка", "Вложения пока нельзя пересылать.");
-    return;
-  }
+  // Вложения пересылаем как «ссылку на тот же файл в bucket».
+  // Копируем image_url, имя, размер, тип — БЕЗ повторной загрузки.
   await openForwardDialog([msg]);
 }
 
@@ -7494,6 +7564,33 @@ async function sendForward() {
         })();
 
     for (const m of forwardSourceMsgs) {
+      // 🔴 Вложения — пересылаем как «копию ссылки», без скачивания/перезагрузки.
+      if (m.message_type === "attachment" && m.image_url) {
+        const payload = {
+          chat_id: chatId, sender_id: currentUser.id,
+          message_type: "attachment",
+          image_url: m.image_url,
+          file_name: m.file_name,
+          file_size: m.file_size,
+          file_mime: m.file_mime,
+          file_kind: m.file_kind,
+          content: m.content || "",
+        };
+        if (!hideSender) {
+          const sourceChannel = m.chat_id ? channelCache.get(m.chat_id) : null;
+          if (sourceChannel) {
+            payload.forwarded_from_name = sourceChannel.name;
+            payload.forwarded_from_username = sourceChannel.username;
+          } else {
+            const s = senderMap.get(m.sender_id) || { display_name: "?", username: "?" };
+            payload.forwarded_from_name = s.display_name;
+            payload.forwarded_from_username = s.username;
+          }
+        }
+        payloads.push(payload);
+        continue;
+      }
+
       // Источник — plaintext (расшифровываем на лету)
       const sourcePlain = m.plaintextOverride !== undefined
         ? m.plaintextOverride
@@ -7516,8 +7613,6 @@ async function sendForward() {
         content: outContent, encrypted: outEncrypted,
       };
       if (!hideSender) {
-        // 🔴 Если исходное сообщение — из канала, в «Переслано от»
-        // должно быть ИМЯ КАНАЛА, а не автора поста.
         const sourceChannel = m.chat_id ? channelCache.get(m.chat_id) : null;
         if (sourceChannel) {
           payload.forwarded_from_name = sourceChannel.name;
@@ -7532,11 +7627,39 @@ async function sendForward() {
     }
   }
 
+  // Запоминаем цель: если переслали ровно в один чат — откроем его.
+  const singleTarget = forwardSelectedChats.size === 1
+    ? [...forwardSelectedChats][0]
+    : null;
+
   const { error } = await supabase.from("messages").insert(payloads);
   if (error) { await showAlertDialog("Ошибка", error.message); return; }
 
   document.getElementById("forward-overlay").classList.add("hidden");
   if (selectionMode) exitSelectionMode();
+
+  // Если переслали ровно в один чат — сразу переходим в него.
+  if (singleTarget) {
+    // Небольшая задержка, чтобы insert успел дойти до realtime-подписки
+    // и превью в списке обновилось.
+    setTimeout(async () => {
+      // Это канал?
+      if (channelCache.has(singleTarget)) {
+        openChannel(singleTarget).catch(() => {});
+        return;
+      }
+      // DM — ищем пользователя по chat_id.
+      const itemEl = document.querySelector(`.user-item[data-chat-id="${singleTarget}"][data-chat-type="dm"]`);
+      const userId = itemEl && itemEl.dataset.userId;
+      if (userId) {
+        const u = profileCache.get(userId);
+        if (u) { openChatWith(u).catch(() => {}); return; }
+      }
+      // Фолбэк: если элемент не найден, но это канал — попробуем через channels.
+      const { data: ch } = await supabase.from("channels").select("id").eq("id", singleTarget).maybeSingle();
+      if (ch) openChannel(ch.id).catch(() => {});
+    }, 120);
+  }
 }
 
 // ======================================================
@@ -8917,9 +9040,19 @@ function setupChannelCreate() {
           await loadReactionsForVisibleMessages();
         }
       } else if (vis === "request") {
-        const { error } = await supabase.rpc("submit_join_request", { p_chat_id: chId });
-        if (error) { await showAlertDialog("Ошибка", error.message); return; }
-        currentChannelHasRequest = true;
+        // 🔴 Если заявка уже висит — это отзыв, а не подача.
+        if (currentChannelHasRequest) {
+          const { error } = await supabase.from("channel_join_requests")
+            .delete().eq("chat_id", chId).eq("user_id", currentUser.id);
+          if (error) { await showAlertDialog("Ошибка", error.message); return; }
+          currentChannelHasRequest = false;
+          currentChannelRequestId = null;
+        } else {
+          const { data: newReqId, error } = await supabase.rpc("submit_join_request", { p_chat_id: chId });
+          if (error) { await showAlertDialog("Ошибка", error.message); return; }
+          currentChannelHasRequest = true;
+          currentChannelRequestId = newReqId || null;
+        }
       } else if (vis === "private") {
         await showAlertDialog("Приватный канал", "В этот канал можно попасть только по ссылке-приглашению.");
         return;
@@ -10360,17 +10493,22 @@ function subscribeToChannelRequests() {
   channelRequestsChannel = supabase.channel("channel-requests-changes")
     .on("postgres_changes", { event: "*", schema: "public", table: "channel_join_requests" }, async (payload) => {
       const row = payload.new || payload.old;
+      // Сразу обновляем список заявок у админа (в т.ч. при DELETE без chat_id —
+      // тогда используем текущий открытый канал).
+      if (currentChannelObj) {
+        const rowChatId = row && row.chat_id;
+        const isOurChannel = !rowChatId || rowChatId === currentChannelObj.id;
+        if (isOurChannel) {
+          const overlay = document.getElementById("channel-requests-overlay");
+          if (overlay && !overlay.classList.contains("hidden")) {
+            await openChannelRequestsDialog();
+          }
+        }
+      }
       if (!row) return;
       // Обновляем бейдж на открытом профиле
       if (channelProfileChannelId === row.chat_id) {
         await updateChannelRequestsBadge(row.chat_id);
-      }
-      // Если открыт список заявок — перерисовать
-      if (currentChannelObj && currentChannelObj.id === row.chat_id) {
-        const overlay = document.getElementById("channel-requests-overlay");
-        if (overlay && !overlay.classList.contains("hidden")) {
-          await openChannelRequestsDialog();
-        }
       }
 
       // 🔴 Обработка удаления МОЕЙ заявки (approve или reject).
