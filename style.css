@@ -1321,6 +1321,11 @@ input:focus {
            calc(40px + env(safe-area-inset-bottom, 0)) calc(40px + env(safe-area-inset-left, 0));
   animation: fadeIn 0.15s ease-out;
   cursor: zoom-out;
+  touch-action: none; /* перехватываем все жесты, чтобы не скроллился body */
+}
+.media-viewer-body img,
+.media-viewer-body video {
+  will-change: transform, opacity;
 }
 
 .media-viewer-body {

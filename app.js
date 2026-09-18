@@ -1917,6 +1917,10 @@ async function initApp() {
   // в этой сессии или на доверенном устройстве.
   tryRestoreE2eeSession();
   await loadRecentChats();
+  // 🔴 СРАЗУ после первичной загрузки списка — догоняем «потерянные» чаты.
+  // Раньше здесь стоял setTimeout(…, 1000), из-за чего один из чатов
+  // появлялся в списке на 1–2 секунды позже остальных.
+  try { await pollMemberships(); } catch (e) { /* silent */ }
 
   // Отметить все входящие как доставленные
   try { await supabase.rpc("mark_all_delivered"); } catch (e) {}
@@ -1984,9 +1988,8 @@ async function initApp() {
   });
 
   // Страховочный опрос членств — на случай, если realtime не доставил событие
-  // (например, при одобрении заявки владельцем канала)
+  // (например, при одобрении заявки владельцем канала).
   setInterval(pollMemberships, 4000);
-  setTimeout(pollMemberships, 1000);
 }
 
 // Опрашивает список моих chat_members и подтягивает всё, чего нет в UI
@@ -2313,6 +2316,21 @@ async function openProfilePanel() {
   if (!myProfile) return;
   document.getElementById("profile-overlay").classList.remove("hidden");
   paintAvatar(document.getElementById("profile-avatar-preview"), myProfile);
+
+  // 🔴 Тап по своему аватару → просмотр фото (если это data URL).
+  const myAv = document.getElementById("profile-avatar-preview");
+  if (myAv) {
+    myAv.onclick = null;
+    if (myProfile && typeof myProfile.avatar_url === "string" && myProfile.avatar_url.startsWith("data:")) {
+      myAv.style.cursor = "zoom-in";
+      myAv.onclick = () => {
+        openMediaViewer(myProfile.avatar_url, "image", [{ url: myProfile.avatar_url, kind: "image", msgId: null }], 0);
+      };
+    } else {
+      myAv.style.cursor = "";
+    }
+  }
+
   renderAvatarGrid();
   document.getElementById("profile-displayname").value = myProfile.display_name || "";
   document.getElementById("profile-birthday").value = myProfile.birthday || "";
@@ -2459,6 +2477,21 @@ async function openUserProfileDialog(userOverride) {
   const p = freshProfile || user;
   profileCache.set(user.id, { ...profileCache.get(user.id), ...p });
   paintAvatar(document.getElementById("user-profile-avatar"), p);
+
+  // 🔴 Тап по аватарке → просмотр фото (если это загруженная картинка).
+  // Цветные аватары (color:N) не открываем — там нечего смотреть.
+  const avatarEl = document.getElementById("user-profile-avatar");
+  if (avatarEl) {
+    avatarEl.onclick = null;
+    if (p && typeof p.avatar_url === "string" && p.avatar_url.startsWith("data:")) {
+      avatarEl.style.cursor = "zoom-in";
+      avatarEl.onclick = () => {
+        openMediaViewer(p.avatar_url, "image", [{ url: p.avatar_url, kind: "image", msgId: null }], 0);
+      };
+    } else {
+      avatarEl.style.cursor = "";
+    }
+  }
   document.getElementById("user-profile-name").innerHTML = escapeHtml(p.display_name || "—") + verifiedBadge(p);
   const statusEl = document.getElementById("user-profile-status");
   statusEl.textContent = formatLastSeen(p);
@@ -5762,9 +5795,28 @@ function setupMediaViewer() {
     e.stopPropagation();
     closeMediaViewer();
   });
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) closeMediaViewer();
+
+  // Тап по свободной зоне (не по картинке/видео) — закрыть.
+  // Используем pointerdown/up с проверкой маленького смещения, чтобы
+  // не конфликтовать со свайпами.
+  let tapStartX = 0, tapStartY = 0, tapStartAt = 0;
+  overlay.addEventListener("pointerdown", (e) => {
+    tapStartX = e.clientX;
+    tapStartY = e.clientY;
+    tapStartAt = Date.now();
   });
+  overlay.addEventListener("pointerup", (e) => {
+    // Тап — только если это не движение и мышь/палец не двигались
+    if (Math.abs(e.clientX - tapStartX) > 8) return;
+    if (Math.abs(e.clientY - tapStartY) > 8) return;
+    if (Date.now() - tapStartAt > 500) return;
+    // Клик по кнопкам — не трогаем (у них свои обработчики с stopPropagation)
+    if (e.target.closest("button")) return;
+    // Клик по содержимому (картинка/видео) — не трогаем
+    if (e.target.closest("#media-viewer-body img, #media-viewer-body video")) return;
+    closeMediaViewer();
+  });
+
   if (prevBtn) prevBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     mediaViewerNavigate(-1);
@@ -5773,6 +5825,81 @@ function setupMediaViewer() {
     e.stopPropagation();
     mediaViewerNavigate(1);
   });
+
+  // 🔴 Свайпы: вертикальный — закрыть, горизонтальный — переключить.
+  // Работает только на тач-устройствах (pointer: coarse), на ПК
+  // остаются стрелки и Esc.
+  let touchStartX = 0, touchStartY = 0, touchStartAt = 0;
+  let swipeMoved = false;
+
+  overlay.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    touchStartAt = Date.now();
+    swipeMoved = false;
+    // Снимаем возможный остаточный transform с прошлого жеста
+    const media = body.querySelector("img, video");
+    if (media) {
+      media.style.transition = "none";
+      media.style.transform = "";
+      media.style.opacity = "";
+    }
+  }, { passive: true });
+
+  overlay.addEventListener("touchmove", (e) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) swipeMoved = true;
+
+    const media = body.querySelector("img, video");
+    if (!media) return;
+
+    // Вертикальный свайп — двигаем и гасим прозрачность (уезжает)
+    if (Math.abs(dy) > Math.abs(dx)) {
+      media.style.transform = `translateY(${dy}px) scale(${Math.max(0.7, 1 - Math.abs(dy) / 800)})`;
+      media.style.opacity = String(Math.max(0.2, 1 - Math.abs(dy) / 400));
+    } else {
+      // Горизонтальный — лёгкий сдвиг без «прыжка»
+      media.style.transform = `translateX(${dx * 0.35}px)`;
+      media.style.opacity = "";
+    }
+  }, { passive: true });
+
+  overlay.addEventListener("touchend", (e) => {
+    if (e.changedTouches.length !== 1) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
+    const dt = Date.now() - touchStartAt;
+    const media = body.querySelector("img, video");
+    if (media) {
+      media.style.transition = "transform 0.22s ease, opacity 0.22s ease";
+      media.style.transform = "";
+      media.style.opacity = "";
+    }
+
+    // Быстрый тап — не реагируем (пойдёт через pointerup-handler).
+    if (!swipeMoved && dt < 300) return;
+
+    const ABS_X = 50;
+    const ABS_Y = 100;
+
+    // Свайп вниз/вверх → закрыть
+    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > ABS_Y) {
+      closeMediaViewer();
+      return;
+    }
+
+    // Свайп влево/вправо → переключить
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > ABS_X) {
+      if (dx < 0) mediaViewerNavigate(1);
+      else mediaViewerNavigate(-1);
+    }
+  }, { passive: true });
 
   document.addEventListener("keydown", (e) => {
     if (overlay.classList.contains("hidden")) return;
@@ -6917,14 +7044,26 @@ function setupMessageMenu() {
         fmtMenu.classList.remove("hidden");
         fmtMenu.style.left = "0px"; fmtMenu.style.top = "0px";
         const rect = fmtMenu.getBoundingClientRect();
-        // Клампим x и y в пределы экрана, чтобы меню не улетало вверх/вниз.
-        if (x + rect.width > window.innerWidth - 8) x = window.innerWidth - rect.width - 8;
-        if (x < 8) x = 8;
-        if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
-        if (y < 8) y = 8;
+
+        // 🔴 visualViewport — единственный способ узнать реальную видимую
+        // область на мобильных. window.innerHeight не уменьшается, когда
+        // открыта клавиатура, — поэтому меню улетало под неё.
+        const vv = window.visualViewport;
+        const viewW = vv ? vv.width : window.innerWidth;
+        const viewH = vv ? vv.height : window.innerHeight;
+        const offsetTop = vv ? vv.offsetTop : 0;
+        const offsetLeft = vv ? vv.offsetLeft : 0;
+
+        if (x + rect.width > offsetLeft + viewW - 8) x = offsetLeft + viewW - rect.width - 8;
+        if (x < offsetLeft + 8) x = offsetLeft + 8;
+        if (y + rect.height > offsetTop + viewH - 8) y = offsetTop + viewH - rect.height - 8;
+        if (y < offsetTop + 8) y = offsetTop + 8;
         fmtMenu.style.left = x + "px";
         fmtMenu.style.top = y + "px";
-        blockUntilTouchRelease(fmtMenu);
+        // 🔴 Ограничиваем высоту меню, чтобы оно скроллилось,
+        // если не влезает целиком.
+        fmtMenu.style.maxHeight = Math.max(140, viewH - 24) + "px";
+        fmtMenu.style.overflowY = "auto";
       };
 
       inputEl.addEventListener("contextmenu", (e) => {
@@ -6973,6 +7112,23 @@ function setupMessageMenu() {
         fmtMenu.classList.add("hidden");
       });
       document.addEventListener("click", () => fmtMenu.classList.add("hidden"));
+
+      // 🔴 При изменении visualViewport (открытие/закрытие клавиатуры)
+      // перепозиционируем меню, если оно открыто.
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", () => {
+          if (fmtMenu.classList.contains("hidden")) return;
+          const rect = fmtMenu.getBoundingClientRect();
+          const vv = window.visualViewport;
+          const viewH = vv.height;
+          const offsetTop = vv.offsetTop;
+          if (rect.bottom > offsetTop + viewH - 8) {
+            const newTop = Math.max(offsetTop + 8, offsetTop + viewH - rect.height - 8);
+            fmtMenu.style.top = newTop + "px";
+          }
+          fmtMenu.style.maxHeight = Math.max(140, viewH - 24) + "px";
+        });
+      }
     }
   }
 
