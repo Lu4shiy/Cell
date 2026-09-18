@@ -728,7 +728,11 @@ input:focus {
 .msg.mine .msg-time { color: var(--bubble-time-mine); }
 
 .msg-edited { font-size: 10px; margin-left: 6px; opacity: 0.75; }
-.msg.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Выделение — по контуру пузыря (следует за border-radius).
+   outline использовать нельзя: он рисует прямоугольник поверх закруглений. */
+.msg.selected {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 12px rgba(var(--accent-rgb), 0.35);
+}
 
 .msg-fwd-link {
   font-size: 12px;
@@ -803,7 +807,9 @@ input:focus {
 .msg-system .msg-system-text b { color: var(--text); }
 
 .msg-system.gift-msg { max-width: 90%; padding: 10px 14px; }
-.msg-system.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
+.msg-system.selected {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 12px rgba(var(--accent-rgb), 0.35);
+}
 
 .msg-system .gift-card-inline {
   position: relative;
@@ -3324,6 +3330,9 @@ button:not(:disabled):active { transform: scale(0.97); }
   /* На мобильном клавиатура сама даёт эмодзи — кнопка не нужна */
   .emoji-btn { display: none !important; }
   .message-input { padding: 10px 14px 10px 16px; font-size: 15px; }
+  /* Отключаем нативное контекстное меню при long-press на поле ввода —
+     вместо него открываем своё меню форматирования (см. app.js). */
+  .message-input { -webkit-touch-callout: none; }
 
   /* Авторизация */
   .auth-card { padding: 28px 22px 24px; }

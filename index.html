@@ -46,8 +46,8 @@
       </form>
 
       <form id="register-form" class="form hidden" novalidate>
-        <input type="text" id="reg-username" placeholder="Юзернейм (например, ivan)" required>
-        <input type="text" id="reg-displayname" placeholder="Имя (например, Иван)" required>
+        <input type="text" id="reg-username" placeholder="Юзернейм" required>
+        <input type="text" id="reg-displayname" placeholder="Имя" required>
         <input type="email" id="reg-email" placeholder="Email" required>
         <input type="password" id="reg-password" placeholder="Пароль (мин. 10, A-Z, a-z, 0-9)" required minlength="10">
         <button type="submit" class="btn-primary">Создать аккаунт</button>
@@ -1004,6 +1004,9 @@
             // Само по себе это НЕ перезагружает страницу — просто проверяет,
             // не появилась ли новая версия sw.js.
             const checkUpdate = () => reg.update().catch(() => {});
+            // 🔴 Вызываем СРАЗУ — чтобы новая версия обнаруживалась при загрузке,
+            // а не через час. Без этого плашка появлялась только после F5.
+            checkUpdate();
             setInterval(checkUpdate, 60 * 60 * 1000);
             document.addEventListener('visibilitychange', () => {
               if (document.visibilityState === 'visible') checkUpdate();

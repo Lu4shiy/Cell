@@ -848,6 +848,7 @@ let pinBarFrozenUntil = 0;
 let channelCreateVisibility = "public";
 let channelEditVisibility = "public";
 let currentChannelHasRequest = false;
+let currentChannelRequestRejected = false;
 let channelRequestsChannel = null;
 // Возврат из профиля в окно подарка
 let profileFromGiftContext = null;     // { userId, ugId } — куда возвращаться
@@ -2221,7 +2222,16 @@ function setupProfilePanel() {
     updateGenderButtons(); markProfileDirty();
   });
   document.getElementById("profile-birthday").addEventListener("input", (e) => {
-    draftProfile.birthday = e.target.value.trim() || null; markProfileDirty();
+    // 🔴 Автоформат ДД.ММ или ДД.ММ.ГГГГ.
+    // Пользователь вводит только цифры — точки ставятся сами.
+    const digits = e.target.value.replace(/\D/g, "").slice(0, 8);
+    let formatted = "";
+    if (digits.length > 0) formatted = digits.slice(0, 2);
+    if (digits.length > 2) formatted += "." + digits.slice(2, 4);
+    if (digits.length > 4) formatted += "." + digits.slice(4);
+    if (formatted !== e.target.value) e.target.value = formatted;
+    draftProfile.birthday = formatted.trim() || null;
+    markProfileDirty();
   });
   document.getElementById("profile-bio").addEventListener("input", (e) => {
     draftProfile.bio = e.target.value; markProfileDirty();
@@ -3093,7 +3103,10 @@ async function updateChannelComposerState() {
 
   const vis = currentChannelObj.visibility || "public";
   if (vis === "request") {
-    if (currentChannelHasRequest) {
+    if (currentChannelRequestRejected) {
+      subBtn.textContent = "Заявка отклонена";
+      subBtn.disabled = true;
+    } else if (currentChannelHasRequest) {
       subBtn.textContent = "Заявка отправлена";
       subBtn.disabled = true;
     } else {
@@ -3157,6 +3170,7 @@ async function openChannel(chatId) {
 
   // Проверим, есть ли у нас активная заявка на этот канал
   currentChannelHasRequest = false;
+  currentChannelRequestRejected = false;
   if (ch.visibility === "request" && !currentChannelIsSubscribed && !currentChannelIsAdmin) {
     const { data: req } = await supabase.from("channel_join_requests")
       .select("id").eq("chat_id", ch.id).eq("user_id", currentUser.id).maybeSingle();
@@ -5260,12 +5274,25 @@ async function updateMessageInUI(msg) {
 }
 
 async function openChatByUsername(username) {
+  if (!username) return;
+  // Сначала профиль
   const { data } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified").eq("username", username).single();
-  if (!data) return;
-  if (data.id === currentUser.id) return;
-  document.getElementById("search-input").value = "";
-  await openChatWith(data);
+    .select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified")
+    .eq("username", username).maybeSingle();
+  if (data) {
+    if (data.id === currentUser.id) return;
+    document.getElementById("search-input").value = "";
+    await openChatWith(data);
+    return;
+  }
+  // 🔴 Не нашли — ищем канал. Нужно, чтобы клик по «Переслано от Football News»
+  // открывал канал, а не молчал.
+  const { data: ch } = await supabase.from("channels")
+    .select("id").eq("username", username).maybeSingle();
+  if (ch) {
+    document.getElementById("search-input").value = "";
+    await openChannel(ch.id);
+  }
 }
 
 function scrollToBottom() {
@@ -6195,10 +6222,22 @@ function subscribeToChat(chatId) {
         else updateMessageStatusInUI(m);
       })
     .on("postgres_changes",
-      { event: "DELETE", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
+      // 🔴 Без filter: при REPLICA IDENTITY DEFAULT payload.old содержит только id,
+      // и filter по chat_id не даёт серверу отсеять — событие не доходит. Поэтому
+      // ловим ВСЕ удаления и фильтруем сами по msgCache.
+      { event: "DELETE", schema: "public", table: "messages" },
       (payload) => {
         const id = payload.old && payload.old.id;
         if (!id) return;
+        const cached = msgCache.get(id);
+        // Не наше сообщение — просто пробуем снять DOM (мог остаться от preview)
+        if (!cached) {
+          const el0 = document.querySelector(`[data-id="${id}"]`);
+          if (el0) el0.remove();
+          return;
+        }
+        // Относится к другому чату — игнор
+        if (cached.chat_id && cached.chat_id !== currentChatId) return;
         msgCache.delete(id); reactionsCache.delete(id);
         subtractViewsForDeletedMessage(id);
         const pinIdx = currentPinnedList.findIndex((p) => p.message_id === id);
@@ -6211,6 +6250,7 @@ function subscribeToChat(chatId) {
         const el = document.querySelector(`[data-id="${id}"]`);
         if (el) el.remove();
         checkEmptyChat();
+        refreshMessageGroups();
       })
     .subscribe();
 }
@@ -6504,10 +6544,22 @@ async function clearChatForMe() {
 
 async function clearChatForBoth() {
   if (!currentChatId) return;
-  const { error } = await supabase.from("messages").delete().eq("chat_id", currentChatId);
+  const chatId = currentChatId;
+  const { error } = await supabase.from("messages").delete().eq("chat_id", chatId);
   if (error) { await showAlertDialog("Ошибка", error.message); return; }
-  document.getElementById("messages").innerHTML = '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
+  // Чистим локально сразу
+  document.getElementById("messages").innerHTML = currentChannelObj
+    ? '<div class="empty">В этом канале пока что нет сообщений.</div>'
+    : '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
   msgCache.clear(); reactionsCache.clear();
+  // 🔴 Через полсекунды перезагружаем — если RLS или realtime оставили что-то,
+  // это гарантированно подчистит UI.
+  setTimeout(() => {
+    if (currentChatId === chatId) {
+      loadMessages(chatId, openSeq).catch(() => {});
+      loadReactionsForVisibleMessages().catch(() => {});
+    }
+  }, 600);
 }
 
 async function hideChatFromList() {
@@ -6518,6 +6570,9 @@ async function hideChatFromList() {
   });
   if (error) { await showAlertDialog("Ошибка", error.message); return; }
   closeCurrentChat();
+  // 🔴 На мобильном нужно явно вернуться к списку чатов — иначе
+  // пользователь остаётся в пустой области «выберите чат».
+  exitMobileChat();
   removeChatFromList(chatId);
 }
 
@@ -6527,6 +6582,8 @@ async function deleteChatForBoth() {
   const { error } = await supabase.from("chats").delete().eq("id", chatId);
   if (error) { await showAlertDialog("Ошибка", error.message); return; }
   closeCurrentChat();
+  // 🔴 То же самое — возвращаемся к списку чатов.
+  exitMobileChat();
   removeChatFromList(chatId);
 }
 
@@ -6655,19 +6712,58 @@ function setupMessageMenu() {
     // ПКМ → меню форматирования
     const fmtMenu = document.getElementById("format-context-menu");
     if (fmtMenu) {
-      inputEl.addEventListener("contextmenu", (e) => {
+      // Общий хелпер: показать меню форматирования в точке (x, y)
+      const showFmtMenu = (x, y) => {
         const sel = window.getSelection();
         if (!sel || sel.isCollapsed) return;
-        e.preventDefault();
         fmtMenu.classList.remove("hidden");
         fmtMenu.style.left = "0px"; fmtMenu.style.top = "0px";
         const rect = fmtMenu.getBoundingClientRect();
-        let x = e.clientX, y = e.clientY;
         if (x + rect.width > window.innerWidth - 8) x = window.innerWidth - rect.width - 8;
         if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
         fmtMenu.style.left = x + "px";
         fmtMenu.style.top = y + "px";
+      };
+
+      inputEl.addEventListener("contextmenu", (e) => {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed) return;
+        e.preventDefault();
+        showFmtMenu(e.clientX, e.clientY);
       });
+
+      // 🔴 Long-press для мобильных: удерживание пальца на выделенном
+      // фрагменте открывает то же меню форматирования (жирный/курсив/...).
+      // Без этого на телефоне доступно только системное меню браузера.
+      let fmtLpTimer = null, fmtLpX = 0, fmtLpY = 0, fmtLpFired = false;
+      inputEl.addEventListener("touchstart", (e) => {
+        if (e.touches.length !== 1) return;
+        const t = e.touches[0];
+        fmtLpX = t.clientX; fmtLpY = t.clientY; fmtLpFired = false;
+        fmtLpTimer = setTimeout(() => {
+          fmtLpFired = true;
+          lastLongPressAt = Date.now();
+          try { if (navigator.vibrate) navigator.vibrate(15); } catch (ex) {}
+          showFmtMenu(fmtLpX, fmtLpY);
+        }, 500);
+      }, { passive: true });
+      inputEl.addEventListener("touchmove", (e) => {
+        if (!fmtLpTimer) return;
+        const t = e.touches[0];
+        if (!t) return;
+        if (Math.abs(t.clientX - fmtLpX) > 10 || Math.abs(t.clientY - fmtLpY) > 10) {
+          clearTimeout(fmtLpTimer); fmtLpTimer = null;
+        }
+      }, { passive: true });
+      inputEl.addEventListener("touchend", (e) => {
+        if (fmtLpTimer) { clearTimeout(fmtLpTimer); fmtLpTimer = null; }
+        if (fmtLpFired) {
+          e.preventDefault();
+          e.stopPropagation();
+          fmtLpFired = false;
+        }
+      });
+
       fmtMenu.addEventListener("click", (e) => {
         const btn = e.target.closest("button"); if (!btn) return;
         e.stopPropagation();
@@ -7420,9 +7516,17 @@ async function sendForward() {
         content: outContent, encrypted: outEncrypted,
       };
       if (!hideSender) {
-        const s = senderMap.get(m.sender_id) || { display_name: "?", username: "?" };
-        payload.forwarded_from_name = s.display_name;
-        payload.forwarded_from_username = s.username;
+        // 🔴 Если исходное сообщение — из канала, в «Переслано от»
+        // должно быть ИМЯ КАНАЛА, а не автора поста.
+        const sourceChannel = m.chat_id ? channelCache.get(m.chat_id) : null;
+        if (sourceChannel) {
+          payload.forwarded_from_name = sourceChannel.name;
+          payload.forwarded_from_username = sourceChannel.username;
+        } else {
+          const s = senderMap.get(m.sender_id) || { display_name: "?", username: "?" };
+          payload.forwarded_from_name = s.display_name;
+          payload.forwarded_from_username = s.username;
+        }
       }
       payloads.push(payload);
     }
@@ -10267,6 +10371,34 @@ function subscribeToChannelRequests() {
         if (overlay && !overlay.classList.contains("hidden")) {
           await openChannelRequestsDialog();
         }
+      }
+
+      // 🔴 Обработка удаления МОЕЙ заявки (approve или reject).
+      // Так как при REPLICA IDENTITY DEFAULT payload.old не содержит
+      // chat_id/user_id, перепроверяем состояние текущего открытого канала.
+      if (payload.eventType === "DELETE" && currentChannelObj &&
+          currentChannelObj.visibility === "request" && currentChannelHasRequest) {
+        const channelId = currentChannelObj.id;
+        setTimeout(async () => {
+          if (!currentChannelObj || currentChannelObj.id !== channelId) return;
+          // Наша заявка ещё висит?
+          const { data: myReq } = await supabase.from("channel_join_requests")
+            .select("id").eq("chat_id", channelId).eq("user_id", currentUser.id).maybeSingle();
+          if (myReq) return; // заявка всё ещё наша — ждём
+          // Заявка исчезла: approve или reject?
+          const { data: mem } = await supabase.from("chat_members")
+            .select("chat_id").eq("chat_id", channelId).eq("user_id", currentUser.id).maybeSingle();
+          if (mem) {
+            // Approve — обновится через realtime chat_members INSERT
+            currentChannelHasRequest = false;
+            currentChannelIsSubscribed = true;
+          } else {
+            // Reject — показываем «Заявка отклонена»
+            currentChannelHasRequest = false;
+            currentChannelRequestRejected = true;
+            await updateChannelComposerState();
+          }
+        }, 900);
       }
     })
     .subscribe();
