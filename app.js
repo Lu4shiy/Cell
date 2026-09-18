@@ -5790,16 +5790,46 @@ let mediaViewerIndex = -1;
 let mediaScale = 1;
 let mediaTranslateX = 0;
 let mediaTranslateY = 0;
-let mediaTouchStartDist = 0;
-let mediaTouchStartScale = 1;
-let mediaTouchStartX = 0;
-let mediaTouchStartY = 0;
 let mediaIsDragging = false;
 let mediaLastTap = 0;
+
+// Панорамирование одним пальцем
+let mediaDragStartX = 0;
+let mediaDragStartY = 0;
+let mediaDragStartTranslateX = 0;
+let mediaDragStartTranslateY = 0;
+
+// Пинч-зум
+let mediaPinchStartDist = 0;
+let mediaPinchStartScale = 1;
+let mediaPinchStartMidX = 0;
+let mediaPinchStartMidY = 0;
+let mediaPinchStartPointX = 0;   // точка контента под midpoint (в координатах контента)
+let mediaPinchStartPointY = 0;
+
 // 🔴 Флаг активного pinch-зума. Пока true — обработчики overlay (touchend/pointerup)
 // игнорируют события, иначе отпускание пальцев после pinch закрывает просмотрщик.
 let mediaPinchActive = false;
 let mediaPinchEndTimer = null;
+
+// Ограничивает смещение так, чтобы фото не улетало за экран
+function clampMediaTranslate() {
+  const content = document.getElementById("media-viewer-content");
+  const body = document.getElementById("media-viewer-body");
+  if (!content || !body) return;
+  const media = content.querySelector("img, video");
+  if (!media) return;
+  // offsetWidth/Height — размеры БЕЗ учёта transform, то есть натуральные.
+  const W = media.offsetWidth || 0;
+  const H = media.offsetHeight || 0;
+  if (!W || !H) return;
+  const vw = body.clientWidth;
+  const vh = body.clientHeight;
+  const maxTX = Math.max(0, (W * mediaScale - vw) / 2);
+  const maxTY = Math.max(0, (H * mediaScale - vh) / 2);
+  mediaTranslateX = Math.max(-maxTX, Math.min(maxTX, mediaTranslateX));
+  mediaTranslateY = Math.max(-maxTY, Math.min(maxTY, mediaTranslateY));
+}
 
 function applyMediaTransform() {
   const content = document.getElementById("media-viewer-content");
@@ -5811,7 +5841,18 @@ function resetMediaTransform() {
   mediaScale = 1;
   mediaTranslateX = 0;
   mediaTranslateY = 0;
-  applyMediaTransform();
+  const content = document.getElementById("media-viewer-content");
+  if (content) {
+    // Плавный возврат — только для сброса, не для активного жеста.
+    content.style.transition = "transform 0.22s ease-out";
+    applyMediaTransform();
+    clearTimeout(content._resetTimer);
+    content._resetTimer = setTimeout(() => {
+      if (content) content.style.transition = "";
+    }, 240);
+  } else {
+    applyMediaTransform();
+  }
 }
 
 function setupMediaViewer() {
@@ -5839,66 +5880,105 @@ function setupMediaViewer() {
     applyMediaTransform();
   }, { passive: false, capture: true });
 
-  // 2. Пинч-зум (2 пальца на мобильном)
+  // 2. Пинч-зум и панорамирование (тач)
   body.addEventListener("touchstart", (e) => {
+    const content = document.getElementById("media-viewer-content");
     if (e.touches.length === 2) {
-      // Ставим флаг pinch и гасим событие — чтобы обработчики overlay
-      // (свайпы, тап-для-закрытия) его не видели.
+      // Pinch start — запоминаем всё, что нужно для anchor-зума.
       mediaPinchActive = true;
       if (mediaPinchEndTimer) { clearTimeout(mediaPinchEndTimer); mediaPinchEndTimer = null; }
       e.stopPropagation();
-      mediaTouchStartDist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      mediaTouchStartScale = mediaScale;
+      // Отключаем CSS-переход, пока идёт активный жест — иначе лаг и «прыжки».
+      if (content) content.style.transition = "none";
+
+      const bodyRect = body.getBoundingClientRect();
+      const cx = bodyRect.left + bodyRect.width / 2;
+      const cy = bodyRect.top + bodyRect.height / 2;
+
+      const t0 = e.touches[0], t1 = e.touches[1];
+      mediaPinchStartDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY) || 1;
+      mediaPinchStartScale = mediaScale;
+      mediaPinchStartMidX = (t0.clientX + t1.clientX) / 2;
+      mediaPinchStartMidY = (t0.clientY + t1.clientY) / 2;
+      // Точка контента, которая сейчас под midpoint (в координатах контента
+      // относительно его центра). Её мы удержим на месте при зуме.
+      mediaPinchStartPointX =
+        (mediaPinchStartMidX - cx - mediaTranslateX) / mediaScale;
+      mediaPinchStartPointY =
+        (mediaPinchStartMidY - cy - mediaTranslateY) / mediaScale;
     } else if (e.touches.length === 1) {
-      mediaTouchStartX = e.touches[0].clientX;
-      mediaTouchStartY = e.touches[0].clientY;
+      // Pan start
+      if (content) content.style.transition = "none";
+      mediaDragStartX = e.touches[0].clientX;
+      mediaDragStartY = e.touches[0].clientY;
+      mediaDragStartTranslateX = mediaTranslateX;
+      mediaDragStartTranslateY = mediaTranslateY;
       mediaIsDragging = true;
     }
   }, { passive: true });
 
   body.addEventListener("touchmove", (e) => {
     if (e.touches.length === 2) {
-      e.preventDefault(); // Отключаем системный зум
+      e.preventDefault();
       e.stopPropagation();
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      const ratio = dist / mediaTouchStartDist;
-      mediaScale = Math.max(1, Math.min(5, mediaTouchStartScale * ratio));
+      const bodyRect = body.getBoundingClientRect();
+      const cx = bodyRect.left + bodyRect.width / 2;
+      const cy = bodyRect.top + bodyRect.height / 2;
+
+      const t0 = e.touches[0], t1 = e.touches[1];
+      const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      const ratio = dist / mediaPinchStartDist;
+      const newScale = Math.max(1, Math.min(5, mediaPinchStartScale * ratio));
+      const midX = (t0.clientX + t1.clientX) / 2;
+      const midY = (t0.clientY + t1.clientY) / 2;
+
+      // 🔴 Anchor-зум: точка под пальцами остаётся под пальцами.
+      mediaScale = newScale;
+      mediaTranslateX = midX - cx - mediaPinchStartPointX * newScale;
+      mediaTranslateY = midY - cy - mediaPinchStartPointY * newScale;
+      clampMediaTranslate();
       applyMediaTransform();
     } else if (e.touches.length === 1 && mediaIsDragging) {
       if (mediaScale > 1) {
         e.preventDefault();
         e.stopPropagation();
-        const dx = e.touches[0].clientX - mediaTouchStartX;
-        const dy = e.touches[0].clientY - mediaTouchStartY;
-        mediaTranslateX += dx;
-        mediaTranslateY += dy;
-        mediaTouchStartX = e.touches[0].clientX;
-        mediaTouchStartY = e.touches[0].clientY;
+        mediaTranslateX = mediaDragStartTranslateX + (e.touches[0].clientX - mediaDragStartX);
+        mediaTranslateY = mediaDragStartTranslateY + (e.touches[0].clientY - mediaDragStartY);
+        clampMediaTranslate();
         applyMediaTransform();
       }
     }
   }, { passive: false });
 
   body.addEventListener("touchend", (e) => {
-    // Пока флаг pinch активен — гасим событие, чтобы overlay не закрыл просмотрщик.
-    if (mediaPinchActive) {
-      e.stopPropagation();
+    if (mediaPinchActive) e.stopPropagation();
+
+    if (e.touches.length === 1) {
+      // Переход «2 пальца → 1 палец»: пересобираем стартовые точки, иначе
+      // фото «прыгает» на старую позицию.
+      mediaDragStartX = e.touches[0].clientX;
+      mediaDragStartY = e.touches[0].clientY;
+      mediaDragStartTranslateX = mediaTranslateX;
+      mediaDragStartTranslateY = mediaTranslateY;
+      mediaIsDragging = true;
     }
-    if (e.touches.length < 2) {
-      mediaTouchStartDist = 0;
-    }
+
     if (e.touches.length === 0) {
       mediaIsDragging = false;
-      // Если масштаб вернулся к 1, сбрасываем смещение
-      if (mediaScale <= 1.05) resetMediaTransform();
-      // Сбрасываем флаг с задержкой — чтобы «хвостовые» touchend/pointerup
-      // от того же жеста тоже были проигнорированы.
+      const content = document.getElementById("media-viewer-content");
+      if (content) content.style.transition = "transform 0.1s ease-out";
+
+      // Если вернулись к масштабу 1 — плавно центрируем.
+      if (mediaScale <= 1.05) {
+        resetMediaTransform();
+      } else {
+        // Иначе — мягко подтягиваем в допустимые границы.
+        clampMediaTranslate();
+        applyMediaTransform();
+      }
+
+      // Снимаем флаг pinch с задержкой, чтобы «хвостовые» touchend/pointerup
+      // того же жеста тоже были проигнорированы.
       if (mediaPinchActive) {
         if (mediaPinchEndTimer) clearTimeout(mediaPinchEndTimer);
         mediaPinchEndTimer = setTimeout(() => {
@@ -5912,25 +5992,30 @@ function setupMediaViewer() {
   // 3. Перетаскивание мышью (ПК) при увеличении
   body.addEventListener("mousedown", (e) => {
     if (mediaScale <= 1) return;
+    const content = document.getElementById("media-viewer-content");
+    if (content) content.style.transition = "none";
     mediaIsDragging = true;
-    mediaTouchStartX = e.clientX;
-    mediaTouchStartY = e.clientY;
+    mediaDragStartX = e.clientX;
+    mediaDragStartY = e.clientY;
+    mediaDragStartTranslateX = mediaTranslateX;
+    mediaDragStartTranslateY = mediaTranslateY;
     e.preventDefault();
   });
 
   window.addEventListener("mousemove", (e) => {
     if (!mediaIsDragging || mediaScale <= 1) return;
-    const dx = e.clientX - mediaTouchStartX;
-    const dy = e.clientY - mediaTouchStartY;
-    mediaTranslateX += dx;
-    mediaTranslateY += dy;
-    mediaTouchStartX = e.clientX;
-    mediaTouchStartY = e.clientY;
+    mediaTranslateX = mediaDragStartTranslateX + (e.clientX - mediaDragStartX);
+    mediaTranslateY = mediaDragStartTranslateY + (e.clientY - mediaDragStartY);
+    clampMediaTranslate();
     applyMediaTransform();
   });
 
   window.addEventListener("mouseup", () => {
-    mediaIsDragging = false;
+    if (mediaIsDragging) {
+      mediaIsDragging = false;
+      const content = document.getElementById("media-viewer-content");
+      if (content) content.style.transition = "transform 0.1s ease-out";
+    }
   });
 
   // 4. Двойной тап/клик — сброс зума
