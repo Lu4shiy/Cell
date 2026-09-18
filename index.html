@@ -1018,6 +1018,15 @@
 
         if (closeBtn) closeBtn.addEventListener('click', hideUpdateBanner);
 
+        // 🔴 Cache-busting перезагрузка: добавляем ?_r=<timestamp> —
+        // браузер считает это новым URL и не берёт index.html из HTTP-кэша.
+        // Вместе с fetch(cache:"reload") в sw.js это даёт аналог Ctrl+Shift+R.
+        function hardReload() {
+          const url = new URL(window.location.href);
+          url.searchParams.set('_r', Date.now());
+          window.location.replace(url.toString());
+        }
+
         if (reloadBtn) {
           reloadBtn.addEventListener('click', () => {
             reloadTriggered = true;
@@ -1026,18 +1035,17 @@
               .then((reg) => {
                 if (reg && reg.waiting) {
                   // Просим новый SW активироваться.
-                  // Ответный controllerchange перезагрузит страницу (см. ниже).
                   reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-                  // 🔴 Fallback: если через 3 секунды controllerchange не
-                  // сработал (iOS PWA иногда молчит) — перезагружаем вручную.
+                  // 🔴 Fallback: если через 2.5 сек controllerchange не сработал
+                  // (iOS PWA иногда молчит) — делаем cache-busting перезагрузку.
                   setTimeout(() => {
-                    if (reloadTriggered) window.location.reload();
-                  }, 3000);
+                    if (reloadTriggered) hardReload();
+                  }, 2500);
                 } else {
-                  window.location.reload();
+                  hardReload();
                 }
               })
-              .catch(() => window.location.reload());
+              .catch(() => hardReload());
           });
         }
 
@@ -1047,7 +1055,10 @@
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           if (!reloadTriggered) return;
           reloadTriggered = false;
-          window.location.reload();
+          // 🔴 Cache-busting — см. hardReload() выше.
+          const url = new URL(window.location.href);
+          url.searchParams.set('_r', Date.now());
+          window.location.replace(url.toString());
         });
 
       navigator.serviceWorker

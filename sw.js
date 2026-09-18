@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-v34";
+const CACHE_VERSION = "cell-v35";
 
 const CACHE_FILES = [
   "./",
@@ -33,13 +33,19 @@ const CACHE_FILES = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) => {
-      // addAll упадёт целиком, если хотя бы один файл недоступен.
-      // Поэтому кэшируем по одному — если что-то не загрузится, остальное всё равно закэшируется.
+      // 🔴 ВАЖНО: fetch(url, { cache: "reload" }) — обходим HTTP-кэш GitHub Pages.
+      // Без этого браузер отдаёт SW старую версию файлов (у GH Pages max-age=600),
+      // и после обновления приложение показывает старый код.
       return Promise.all(
         CACHE_FILES.map((url) =>
-          cache.add(url).catch((err) => {
-            console.warn("[SW] Не удалось закэшировать:", url, err);
-          })
+          fetch(url, { cache: "reload" })
+            .then((res) => {
+              if (!res || !res.ok) throw new Error("HTTP " + (res && res.status));
+              return cache.put(url, res);
+            })
+            .catch((err) => {
+              console.warn("[SW] Не удалось закэшировать:", url, err);
+            })
         )
       );
     })
