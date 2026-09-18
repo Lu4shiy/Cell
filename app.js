@@ -1921,6 +1921,9 @@ async function initApp() {
   // Раньше здесь стоял setTimeout(…, 1000), из-за чего один из чатов
   // появлялся в списке на 1–2 секунды позже остальных.
   try { await pollMemberships(); } catch (e) { /* silent */ }
+  // 🔴 ПРИНУДИТЕЛЬНАЯ ПЕРЕЗАГРУЗКА: чтобы «отстающий» чат появился мгновенно,
+  // а не через 1-2 секунды после срабатывания pollMemberships.
+  await loadRecentChats();
 
   // Отметить все входящие как доставленные
   try { await supabase.rpc("mark_all_delivered"); } catch (e) {}
@@ -5782,6 +5785,29 @@ function setupAboutDialog() {
 
 let mediaViewerList = [];   // [{ url, kind, msgId }]
 let mediaViewerIndex = -1;
+// Состояние зума и панорамирования
+let mediaScale = 1;
+let mediaTranslateX = 0;
+let mediaTranslateY = 0;
+let mediaTouchStartDist = 0;
+let mediaTouchStartScale = 1;
+let mediaTouchStartX = 0;
+let mediaTouchStartY = 0;
+let mediaIsDragging = false;
+let mediaLastTap = 0;
+
+function applyMediaTransform() {
+  const content = document.getElementById("media-viewer-content");
+  if (!content) return;
+  content.style.transform = `translate(${mediaTranslateX}px, ${mediaTranslateY}px) scale(${mediaScale})`;
+}
+
+function resetMediaTransform() {
+  mediaScale = 1;
+  mediaTranslateX = 0;
+  mediaTranslateY = 0;
+  applyMediaTransform();
+}
 
 function setupMediaViewer() {
   const overlay = document.getElementById("media-viewer");
@@ -5790,6 +5816,106 @@ function setupMediaViewer() {
   const prevBtn = document.getElementById("media-viewer-prev");
   const nextBtn = document.getElementById("media-viewer-next");
   if (!overlay || !body) return;
+
+  // --- ЗУМ И ПАНОРАМИРОВАНИЕ ---
+  // 1. Ctrl + колесико (ПК)
+  body.addEventListener("wheel", (e) => {
+    if (!e.ctrlKey) return; // Только с зажатым Ctrl
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.15 : 0.15;
+    mediaScale = Math.max(1, Math.min(5, mediaScale + delta));
+    applyMediaTransform();
+  }, { passive: false });
+
+  // 2. Пинч-зум (2 пальца на мобильном)
+  body.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 2) {
+      mediaTouchStartDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      mediaTouchStartScale = mediaScale;
+    } else if (e.touches.length === 1) {
+      mediaTouchStartX = e.touches[0].clientX;
+      mediaTouchStartY = e.touches[0].clientY;
+      mediaIsDragging = true;
+    }
+  }, { passive: true });
+
+  body.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault(); // Отключаем системный зум
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const ratio = dist / mediaTouchStartDist;
+      mediaScale = Math.max(1, Math.min(5, mediaTouchStartScale * ratio));
+      applyMediaTransform();
+    } else if (e.touches.length === 1 && mediaIsDragging) {
+      if (mediaScale > 1) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - mediaTouchStartX;
+        const dy = e.touches[0].clientY - mediaTouchStartY;
+        mediaTranslateX += dx;
+        mediaTranslateY += dy;
+        mediaTouchStartX = e.touches[0].clientX;
+        mediaTouchStartY = e.touches[0].clientY;
+        applyMediaTransform();
+      }
+    }
+  }, { passive: false });
+
+  body.addEventListener("touchend", (e) => {
+    if (e.touches.length < 2) {
+      mediaTouchStartDist = 0;
+    }
+    if (e.touches.length === 0) {
+      mediaIsDragging = false;
+      // Если масштаб вернулся к 1, сбрасываем смещение
+      if (mediaScale <= 1.05) resetMediaTransform();
+    }
+  });
+
+  // 3. Перетаскивание мышью (ПК) при увеличении
+  body.addEventListener("mousedown", (e) => {
+    if (mediaScale <= 1) return;
+    mediaIsDragging = true;
+    mediaTouchStartX = e.clientX;
+    mediaTouchStartY = e.clientY;
+    e.preventDefault();
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!mediaIsDragging || mediaScale <= 1) return;
+    const dx = e.clientX - mediaTouchStartX;
+    const dy = e.clientY - mediaTouchStartY;
+    mediaTranslateX += dx;
+    mediaTranslateY += dy;
+    mediaTouchStartX = e.clientX;
+    mediaTouchStartY = e.clientY;
+    applyMediaTransform();
+  });
+
+  window.addEventListener("mouseup", () => {
+    mediaIsDragging = false;
+  });
+
+  // 4. Двойной тап/клик — сброс зума
+  body.addEventListener("click", (e) => {
+    const now = Date.now();
+    if (now - mediaLastTap < 300) {
+      if (mediaScale > 1) {
+        resetMediaTransform();
+      } else {
+        mediaScale = 2.5;
+        applyMediaTransform();
+      }
+      mediaLastTap = 0;
+      return;
+    }
+    mediaLastTap = now;
+  });
 
   closeBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -5948,14 +6074,16 @@ function openMediaViewer(url, kind, mediaList, startIndex) {
 
 function renderMediaViewer() {
   const body = document.getElementById("media-viewer-body");
+  const content = document.getElementById("media-viewer-content");
   const prevBtn = document.getElementById("media-viewer-prev");
   const nextBtn = document.getElementById("media-viewer-next");
-  if (!body) return;
+  if (!body || !content) return;
 
   document.querySelectorAll("#media-viewer video").forEach((v) => {
     try { v.pause(); } catch (e) {}
   });
-  body.innerHTML = "";
+  content.innerHTML = "";
+  resetMediaTransform();
 
   const cur = mediaViewerList[mediaViewerIndex];
   if (!cur) { closeMediaViewer(); return; }
@@ -5967,17 +6095,17 @@ function renderMediaViewer() {
     v.autoplay = true;
     v.playsInline = true;
     v.onerror = () => {
-      body.innerHTML = '<div style="color:#fff;font-size:16px;text-align:center;padding:20px;">❌ Не удалось загрузить видео.<br><span style="font-size:13px;opacity:0.7;">Возможно, ссылка протухла. Переоткрой вложение.</span></div>';
+      content.innerHTML = '<div style="color:#fff;font-size:16px;text-align:center;padding:20px;">❌ Не удалось загрузить видео.<br><span style="font-size:13px;opacity:0.7;">Возможно, ссылка протухла. Переоткрой вложение.</span></div>';
     };
-    body.appendChild(v);
+    content.appendChild(v);
   } else {
     const img = document.createElement("img");
     img.src = cur.url;
     img.alt = "";
     img.onerror = () => {
-      body.innerHTML = '<div style="color:#fff;font-size:16px;text-align:center;padding:20px;">❌ Не удалось загрузить изображение.<br><span style="font-size:13px;opacity:0.7;">Возможно, ссылка протухла. Переоткрой вложение.</span></div>';
+      content.innerHTML = '<div style="color:#fff;font-size:16px;text-align:center;padding:20px;">❌ Не удалось загрузить изображение.<br><span style="font-size:13px;opacity:0.7;">Возможно, ссылка протухла. Переоткрой вложение.</span></div>';
     };
-    body.appendChild(img);
+    content.appendChild(img);
   }
 
   if (prevBtn) prevBtn.classList.toggle("hidden", mediaViewerIndex <= 0);
