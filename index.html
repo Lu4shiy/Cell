@@ -729,32 +729,20 @@
     <div class="dialog dialog-settings">
       <div class="dialog-title">Настройки</div>
 
-      <div class="profile-section" id="settings-grandma-section">
-        <div class="profile-label">Режим «Бабушка»</div>
-        <div class="username-hint" style="margin-bottom:10px;">
-          Упрощает интерфейс: убирает 2FA, шифрование, выход из аккаунта и лишние пункты меню.
-          Отключить можно долгим нажатием на аватар в боковом меню (1.5 сек).
-        </div>
-        <button type="button" class="dialog-btn" id="grandma-toggle-btn" style="width:100%;">
-          Включить режим «Бабушка»
-        </button>
-      </div>
-
       <div class="profile-section">
         <div class="profile-label">Цвет приложения</div>
         <div class="accent-grid" id="accent-grid"></div>
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Двухфакторная аутентификация</div>
-        <div id="mfa-status-row" style="font-size:13px;color:var(--text-sub);margin-bottom:10px;"></div>
-        <button type="button" class="dialog-btn" id="mfa-manage-btn" style="width:100%;">Управлять 2FA</button>
-      </div>
-
-      <div class="profile-section">
-        <div class="profile-label">Шифрование</div>
-        <div id="e2ee-status-row" style="font-size:13px;color:var(--text-sub);margin-bottom:10px;"></div>
-        <button type="button" class="dialog-btn" id="e2ee-manage-btn" style="width:100%;">Управлять шифрованием</button>
+        <div class="profile-label">Режим списка чатов</div>
+        <div class="visibility-toggle" id="settings-scroll-mode">
+          <button type="button" data-mode="classic">Обычный</button>
+          <button type="button" data-mode="wheel">Современный</button>
+        </div>
+        <div class="username-hint">
+          Обычный — привычный список. Современный — колесо с центрированием и плавным переходом.
+        </div>
       </div>
 
       <div class="profile-section">
@@ -773,15 +761,27 @@
         <div class="app-icon-grid" id="app-icon-grid"></div>
       </div>
 
+      <div class="profile-section" id="settings-grandma-section">
+        <div class="profile-label">Режим «Бабушка»</div>
+        <div class="username-hint" style="margin-bottom:10px;">
+          Упрощает интерфейс: убирает 2FA, шифрование, выход из аккаунта и лишние пункты меню.
+          Отключить можно долгим нажатием на аватар в боковом меню (1.5 сек).
+        </div>
+        <button type="button" class="dialog-btn" id="grandma-toggle-btn" style="width:100%;">
+          Включить режим «Бабушка»
+        </button>
+      </div>
+
       <div class="profile-section">
-        <div class="profile-label">Режим списка чатов</div>
-        <div class="visibility-toggle" id="settings-scroll-mode">
-          <button type="button" data-mode="classic">Обычный</button>
-          <button type="button" data-mode="wheel">Современный</button>
-        </div>
-        <div class="username-hint">
-          Обычный — привычный список. Современный — колесо с центрированием и плавным переходом.
-        </div>
+        <div class="profile-label">Двухфакторная аутентификация</div>
+        <div id="mfa-status-row" style="font-size:13px;color:var(--text-sub);margin-bottom:10px;"></div>
+        <button type="button" class="dialog-btn" id="mfa-manage-btn" style="width:100%;">Управлять 2FA</button>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Шифрование</div>
+        <div id="e2ee-status-row" style="font-size:13px;color:var(--text-sub);margin-bottom:10px;"></div>
+        <button type="button" class="dialog-btn" id="e2ee-manage-btn" style="width:100%;">Управлять шифрованием</button>
       </div>
 
       <div class="dialog-actions">

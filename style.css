@@ -3327,26 +3327,27 @@ button:not(:disabled):active { transform: scale(0.97); }
     padding-top: calc(12px + env(safe-area-inset-top, 0));
   }
 
-  /* Отключаем «встроенное» долгое нажатие Safari (Copy / Look up / Share),
-     чтобы не конфликтовало с нашим long-press. На .msg оставляем выделение
-     текста рабочим — там это нужно для копирования. */
-  .user-item,
-  .msg-system,
-  .gift-tile {
+  /* 🔴 Полностью отключаем выделение текста, «встроенное» долгое нажатие
+     Safari (Copy / Look up / Share) и подсветку тапа на всём интерфейсе.
+     Выделение разрешено ТОЛЬКО в полях ввода и contenteditable. */
+  body, body * {
+    -webkit-user-select: none;
+    user-select: none;
     -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
-  .msg {
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
-  }
-  /* Но текст внутри сообщения оставляем выделяемым только если пользователь
-     реально хочет копировать — через ПКМ/long-press меню (Копировать). */
-  .msg-text, .msg-system, .msg-text * {
-    -webkit-user-select: none;
-    user-select: none;
+
+  input,
+  textarea,
+  [contenteditable="true"],
+  [contenteditable="plaintext-only"],
+  .message-input,
+  .attach-caption,
+  .profile-bio-input,
+  #input-field {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+    -webkit-touch-callout: default !important;
   }
 
   /* На мобильном одна область занимает весь экран.
