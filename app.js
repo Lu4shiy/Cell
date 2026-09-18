@@ -181,6 +181,11 @@ function showVerifiedTooltip(badge) {
 // РЕЖИМ СПИСКА ЧАТОВ — объявлено ДО initApp, иначе TDZ
 // ======================================================
 const SCROLL_MODE_KEY = "cell_scroll_mode";
+const GRANDMA_MODE_KEY = "cell_grandma_mode";
+
+function isGrandmaMode() {
+  try { return localStorage.getItem(GRANDMA_MODE_KEY) === "1"; } catch (e) { return false; }
+}
 let scrollMode = "classic"; // "classic" | "wheel"
 try {
   const savedMode = localStorage.getItem(SCROLL_MODE_KEY);
@@ -277,7 +282,19 @@ loginForm.addEventListener("submit", async (e) => {
   showApp(data.user);
 });
 
-document.getElementById("logout-btn").addEventListener("click", async () => { await supabase.auth.signOut(); showAuth(); });
+document.getElementById("logout-btn").addEventListener("click", async () => {
+  // 🔴 В режиме «Бабушка» выход заблокирован — кнопка обычно скрыта,
+  // но на всякий случай блокируем и здесь.
+  if (isGrandmaMode()) {
+    await showAlertDialog(
+      "Выход заблокирован",
+      "Режим «Бабушка» включён. Сначала отключите его долгим нажатием на аватар в боковом меню."
+    );
+    return;
+  }
+  await supabase.auth.signOut();
+  showAuth();
+});
 
 // ═══════════════════════════════════════════════════════
 // 2FA (TOTP через Supabase MFA)
@@ -1841,7 +1858,10 @@ function showApp(user) {
   // Чистим ВСЁ от предыдущего аккаунта, если был
   resetAppState();
   currentUser = user;
-  resetInactivityTimer();
+  // В режиме «Бабушка» авто-выход по неактивности не работает —
+  // иначе через час простоя бабушку выкинет на экран входа, где
+  // она не сможет ввести пароль.
+  if (!isGrandmaMode()) resetInactivityTimer();
   document.getElementById("auth-screen").classList.add("hidden");
   document.getElementById("app-screen").classList.remove("hidden");
   initApp().catch((err) => {
@@ -1909,6 +1929,7 @@ async function initApp() {
   subscribeToChannelRequests();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
   setupAvatarCropper();
+  setupGrandmaEscapeHatch();
   setupBirthdayClose(); setupTokensDialog(); setupChannelCreate(); setupChannelEdit();
   supabase.from("profiles").select("id").limit(1).then(() => {});
   subscribeToBlocks(); subscribeToGlobalChanges(); subscribeToProfiles();
@@ -1917,6 +1938,8 @@ async function initApp() {
   // Пробуем автоматически разблокировать E2EE, если ключ был сохранён
   // в этой сессии или на доверенном устройстве.
   tryRestoreE2eeSession();
+  // Применяем режим «Бабушка» (если он включён) — прячем лишнее.
+  applyGrandmaModeUI();
   await loadRecentChats();
   // 🔴 СРАЗУ после первичной загрузки списка — догоняем «потерянные» чаты.
   try { await pollMemberships(); } catch (e) { /* silent */ }
@@ -11428,6 +11451,161 @@ function subscribeToChannelRequests() {
 }
 
 // ======================================================
+// РЕЖИМ «БАБУШКА»
+// ======================================================
+
+// Находит секцию в настройках по точному тексту её .profile-label
+function findSettingsSectionByLabel(text) {
+  const labels = document.querySelectorAll("#settings-overlay .profile-label");
+  for (const l of labels) {
+    if (l.textContent.trim() === text) {
+      return l.closest(".profile-section");
+    }
+  }
+  return null;
+}
+
+// Применяет/снимает видимость элементов интерфейса в зависимости от режима
+function applyGrandmaModeUI() {
+  const on = isGrandmaMode();
+
+  // 1. Кнопки в боковом меню
+  const logoutBtn = document.getElementById("logout-btn");
+  if (logoutBtn) logoutBtn.classList.toggle("hidden", on);
+  const createChannelBtn = document.getElementById("create-channel-btn");
+  if (createChannelBtn) createChannelBtn.classList.toggle("hidden", on);
+
+  // 2. Секции настроек
+  const sectionsToHide = [
+    "Двухфакторная аутентификация",
+    "Шифрование",
+    "Быстрая реакция",
+    "Иконка приложения",
+    "Режим списка чатов",
+  ];
+  sectionsToHide.forEach((label) => {
+    const sec = findSettingsSectionByLabel(label);
+    if (sec) sec.classList.toggle("hidden", on);
+  });
+
+  // 3. Сама секция «Режим Бабушка» — когда режим включён, прячем её
+  //    (отключение — только через долгое нажатие на аватар).
+  const grandmaSection = document.getElementById("settings-grandma-section");
+  if (grandmaSection) grandmaSection.classList.toggle("hidden", on);
+
+  // 4. Кнопка-переключатель (если режим всё-таки виден — обновим текст)
+  const btn = document.getElementById("grandma-toggle-btn");
+  if (btn) btn.textContent = on ? "Отключить режим «Бабушка»" : "Включить режим «Бабушка»";
+}
+
+async function enableGrandmaMode() {
+  const ok = await showConfirmDialog(
+    "Включить режим «Бабушка»",
+    "Будут скрыты: выход из аккаунта, 2FA, шифрование, режим списка чатов, " +
+    "создание каналов, а также секция быстрых реакций и иконки приложения.\n\n" +
+    "Отключить можно будет долгим нажатием (1.5 сек) на аватар в боковом меню.",
+    "Включить"
+  );
+  if (!ok) return;
+
+  try { localStorage.setItem(GRANDMA_MODE_KEY, "1"); } catch (e) {}
+  applyGrandmaModeUI();
+  await showAlertDialog(
+    "Режим включён",
+    "Интерфейс упрощён. Чтобы отключить — удерживайте палец на своём аватаре в левом верхнем углу 1.5 секунды."
+  );
+}
+
+async function disableGrandmaMode() {
+  const ok = await showConfirmDialog(
+    "Отключить режим «Бабушка»",
+    "Вернуть полный интерфейс: выход из аккаунта, 2FA, шифрование и другие настройки?",
+    "Отключить"
+  );
+  if (!ok) return;
+
+  try { localStorage.removeItem(GRANDMA_MODE_KEY); } catch (e) {}
+  applyGrandmaModeUI();
+  resetInactivityTimer();
+  await showAlertDialog("Режим отключён", "Полный интерфейс восстановлен.");
+}
+
+// Навешивает 5-тап и long-press на аватар в сайдбаре —
+// только для отключения режима Бабушка.
+function setupGrandmaEscapeHatch() {
+  const avatar = document.getElementById("me-avatar");
+  const infoBtn = document.getElementById("me-info-btn");
+  if (!avatar || !infoBtn) return;
+
+  // Long-press (1.5 сек) на аватар — отключение режима.
+  let lpTimer = null;
+  let lpFired = false;
+  let startX = 0, startY = 0;
+
+  avatar.addEventListener("touchstart", (e) => {
+    if (!isGrandmaMode()) return;
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    startX = t.clientX; startY = t.clientY;
+    lpFired = false;
+    lpTimer = setTimeout(() => {
+      lpFired = true;
+      try { if (navigator.vibrate) navigator.vibrate(20); } catch (ex) {}
+      disableGrandmaMode();
+    }, 1500);
+  }, { passive: true });
+
+  avatar.addEventListener("touchmove", (e) => {
+    if (!lpTimer) return;
+    const t = e.touches[0];
+    if (!t) return;
+    if (Math.abs(t.clientX - startX) > 10 || Math.abs(t.clientY - startY) > 10) {
+      clearTimeout(lpTimer); lpTimer = null;
+    }
+  }, { passive: true });
+
+  avatar.addEventListener("touchend", (e) => {
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    if (lpFired) {
+      e.preventDefault();
+      e.stopPropagation();
+      lpFired = false;
+    }
+  });
+
+  // Mouse long-press (для ПК, если пользователь зашёл через PWA на компьютере)
+  avatar.addEventListener("mousedown", (e) => {
+    if (!isGrandmaMode()) return;
+    lpFired = false;
+    lpTimer = setTimeout(() => {
+      lpFired = true;
+      disableGrandmaMode();
+    }, 1500);
+    e.preventDefault();
+  });
+  avatar.addEventListener("mouseup", (e) => {
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    if (lpFired) {
+      e.stopPropagation();
+      lpFired = false;
+    }
+  });
+  avatar.addEventListener("mouseleave", () => {
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+  });
+
+  // Клик по me-info (открывает профиль) — если только что сработал long-press,
+  // не открываем профиль.
+  infoBtn.addEventListener("click", (e) => {
+    if (lpFired) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+  }, true);
+}
+
+// ======================================================
 // ВЫБОР ИКОНКИ ПРИЛОЖЕНИЯ (только PWA)
 // ======================================================
 
@@ -11529,6 +11707,15 @@ function setupSettings() {
   const mfaSetupClose = document.getElementById("mfa-setup-close");
   if (mfaSetupClose) mfaSetupClose.addEventListener("click", closeMfaSetup);
 
+  // Кнопка «Режим Бабушка»
+  const grandmaBtn = document.getElementById("grandma-toggle-btn");
+  if (grandmaBtn) {
+    grandmaBtn.addEventListener("click", () => {
+      if (isGrandmaMode()) disableGrandmaMode();
+      else enableGrandmaMode();
+    });
+  }
+
   // Сетка быстрой реакции
   const quickGrid = document.getElementById("quick-reaction-grid");
   if (quickGrid) {
@@ -11568,6 +11755,8 @@ function setupSettings() {
     updateAccentButtons();
     await refreshMfaStatus();
     await refreshE2eeStatus();
+    // Пересобираем видимость на случай, если режим Бабушка включён.
+    applyGrandmaModeUI();
     overlay.classList.remove("hidden");
   });
   if (closeBtn) closeBtn.addEventListener("click", () => overlay.classList.add("hidden"));
