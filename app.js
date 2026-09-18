@@ -11492,11 +11492,19 @@ function renderAppIconGrid() {
       if (k === current) return;
       current = k;
       applyAppIcon(k);
-      await showAlertDialog(
-        "Иконка изменена",
-        "Чтобы увидеть новую иконку, полностью закрой приложение и запусти снова.\n\n" +
-        "Если иконка не обновилась — удали PWA с домашнего экрана и добавь заново."
-      );
+      if (isStandalonePWA) {
+        await showAlertDialog(
+          "Иконка изменена",
+          "Чтобы увидеть новую иконку, полностью закрой приложение и запусти снова.\n\n" +
+          "Если иконка не обновилась — удали PWA и установи заново."
+        );
+      } else {
+        await showAlertDialog(
+          "Иконка выбрана",
+          "Теперь установи Cell как приложение: значок установки в адресной строке браузера.\n\n" +
+          "Выбранная иконка применится при установке."
+        );
+      }
     });
   });
 }
@@ -11575,13 +11583,14 @@ function setupSettings() {
     if (section) section.style.display = "none";
   }
 
-  // Секция «Иконка приложения» — только в PWA и только не на iOS.
-  // iOS Safari не позволяет менять иконку после установки на домашний экран.
+  // Секция «Иконка приложения». Скрываем только на iOS — Safari не даёт
+  // менять иконку после установки на домашний экран. Везде остальное —
+  // показываем, чтобы пользователь мог ВЫБРАТЬ иконку ДО установки PWA.
   const iconSection = document.getElementById("settings-app-icon-section");
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
                 (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   if (iconSection) {
-    if (!isStandalonePWA || isIOS) {
+    if (isIOS) {
       iconSection.style.display = "none";
     } else {
       renderAppIconGrid();
