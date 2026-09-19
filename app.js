@@ -203,16 +203,62 @@ const LANG_KEY = "cell_lang";
 
 const I18N = {
   ru: {
+    // ---- Настройки ----
     "settings.title": "Настройки",
     "settings.close": "Закрыть",
     "settings.language.label": "Язык",
     "settings.language.hint": "Язык интерфейса. Ники, названия каналов и подписи подарков не переводятся.",
+
+    // ---- Экран входа ----
+    "auth.tagline": "Собираемся по кусочкам",
+    "auth.tab.login": "Вход",
+    "auth.tab.register": "Регистрация",
+    "auth.field.email": "Email",
+    "auth.field.password": "Пароль",
+    "auth.field.password.strict": "Пароль (мин. 10, A-Z, a-z, 0-9)",
+    "auth.field.username": "Юзернейм",
+    "auth.field.displayname": "Имя",
+    "auth.login.submit": "Войти",
+    "auth.register.submit": "Создать аккаунт",
+    "auth.err.prefix": "Ошибка",
+    "auth.err.username.required": "Введите юзернейм",
+    "auth.err.username.format": "Юзернейм: 3-32 символа, a-z, 0-9, _ и -",
+    "auth.err.displayname.required": "Введите имя",
+    "auth.err.email.required": "Введите email",
+    "auth.err.password.short": "Пароль минимум 10 символов",
+    "auth.err.password.complex": "Пароль должен содержать заглавную, строчную букву и цифру",
+    "auth.err.register.loading": "Регистрирую...",
+    "auth.err.register.checkEmail": "Проверь почту и подтверди email.",
+    "auth.err.login.tooManyAttempts": "Слишком много попыток. Подожди 5 минут.",
   },
   en: {
+    // ---- Settings ----
     "settings.title": "Settings",
     "settings.close": "Close",
     "settings.language.label": "Language",
     "settings.language.hint": "Interface language. Nicknames, channel names and gift captions are not translated.",
+
+    // ---- Auth screen ----
+    "auth.tagline": "Gathering piece by piece",
+    "auth.tab.login": "Log in",
+    "auth.tab.register": "Sign up",
+    "auth.field.email": "Email",
+    "auth.field.password": "Password",
+    "auth.field.password.strict": "Password (min. 10, A-Z, a-z, 0-9)",
+    "auth.field.username": "Username",
+    "auth.field.displayname": "Name",
+    "auth.login.submit": "Log in",
+    "auth.register.submit": "Create account",
+    "auth.err.prefix": "Error",
+    "auth.err.username.required": "Enter a username",
+    "auth.err.username.format": "Username: 3–32 characters, a-z, 0-9, _ and -",
+    "auth.err.displayname.required": "Enter a name",
+    "auth.err.email.required": "Enter an email",
+    "auth.err.password.short": "Password must be at least 10 characters",
+    "auth.err.password.complex": "Password must contain an uppercase letter, a lowercase letter and a digit",
+    "auth.err.register.loading": "Signing up...",
+    "auth.err.register.checkEmail": "Check your email and confirm the address.",
+    "auth.err.login.tooManyAttempts": "Too many attempts. Wait 5 minutes.",
   },
 };
 
@@ -306,25 +352,25 @@ registerForm.addEventListener("submit", async (e) => {
   const displayName = document.getElementById("reg-displayname").value.trim();
   const email = document.getElementById("reg-email").value.trim();
   const password = document.getElementById("reg-password").value;
-  if (!username) { errEl.textContent = "Введите юзернейм"; return; }
-  if (!/^[a-zA-Z0-9_-]{3,32}$/.test(username)) { errEl.textContent = "Юзернейм: 3-32 символа, a-z, 0-9, _ и -"; return; }
-  if (!displayName) { errEl.textContent = "Введите имя"; return; }
-  if (!email) { errEl.textContent = "Введите email"; return; }
+  if (!username) { errEl.textContent = t("auth.err.username.required"); return; }
+  if (!/^[a-zA-Z0-9_-]{3,32}$/.test(username)) { errEl.textContent = t("auth.err.username.format"); return; }
+  if (!displayName) { errEl.textContent = t("auth.err.displayname.required"); return; }
+  if (!email) { errEl.textContent = t("auth.err.email.required"); return; }
   if (!password || password.length < 10) {
-    errEl.textContent = "Пароль минимум 10 символов";
+    errEl.textContent = t("auth.err.password.short");
     return;
   }
   if (!/[A-ZА-Я]/.test(password) || !/[a-zа-я]/.test(password) || !/\d/.test(password)) {
-    errEl.textContent = "Пароль должен содержать заглавную, строчную букву и цифру";
+    errEl.textContent = t("auth.err.password.complex");
     return;
   }
-  errEl.style.color = "var(--accent)"; errEl.textContent = "Регистрирую...";
+  errEl.style.color = "var(--accent)"; errEl.textContent = t("auth.err.register.loading");
   try {
     const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { username, display_name: displayName } } });
-    if (error) { errEl.style.color = ""; errEl.textContent = error.message || "Ошибка"; return; }
+    if (error) { errEl.style.color = ""; errEl.textContent = error.message || t("auth.err.prefix"); return; }
     if (data.session) showApp(data.session.user);
-    else { errEl.style.color = "var(--accent)"; errEl.textContent = "Проверь почту и подтверди email."; }
-  } catch (ex) { errEl.style.color = ""; errEl.textContent = "Ошибка: " + (ex.message || ex); }
+    else { errEl.style.color = "var(--accent)"; errEl.textContent = t("auth.err.register.checkEmail"); }
+  } catch (ex) { errEl.style.color = ""; errEl.textContent = t("auth.err.prefix") + ": " + (ex.message || ex); }
 });
 
 loginForm.addEventListener("submit", async (e) => {
@@ -332,7 +378,7 @@ loginForm.addEventListener("submit", async (e) => {
   const errEl = document.getElementById("login-error"); errEl.textContent = "";
 
   if (isLoginLocked()) {
-    errEl.textContent = "Слишком много попыток. Подожди 5 минут.";
+    errEl.textContent = t("auth.err.login.tooManyAttempts");
     return;
   }
 

@@ -55,26 +55,26 @@
         </svg>
       </div>
       <h1 class="logo">Cell</h1>
-      <p class="tagline">Собираемся по кусочкам</p>
+      <p class="tagline" data-i18n="auth.tagline">Собираемся по кусочкам</p>
 
       <div class="tabs">
-        <button class="tab active" data-tab="login">Вход</button>
-        <button class="tab" data-tab="register">Регистрация</button>
+        <button class="tab active" data-tab="login" data-i18n="auth.tab.login">Вход</button>
+        <button class="tab" data-tab="register" data-i18n="auth.tab.register">Регистрация</button>
       </div>
 
       <form id="login-form" class="form" novalidate>
-        <input type="email" id="login-email" placeholder="Email" required>
-        <input type="password" id="login-password" placeholder="Пароль" required>
-        <button type="submit" class="btn-primary">Войти</button>
+        <input type="email" id="login-email" placeholder="Email" data-i18n-placeholder="auth.field.email" required>
+        <input type="password" id="login-password" placeholder="Пароль" data-i18n-placeholder="auth.field.password" required>
+        <button type="submit" class="btn-primary" data-i18n="auth.login.submit">Войти</button>
         <p class="error" id="login-error"></p>
       </form>
 
       <form id="register-form" class="form hidden" novalidate>
-        <input type="text" id="reg-username" placeholder="Юзернейм" required>
-        <input type="text" id="reg-displayname" placeholder="Имя" required>
-        <input type="email" id="reg-email" placeholder="Email" required>
-        <input type="password" id="reg-password" placeholder="Пароль (мин. 10, A-Z, a-z, 0-9)" required minlength="10">
-        <button type="submit" class="btn-primary">Создать аккаунт</button>
+        <input type="text" id="reg-username" placeholder="Юзернейм" data-i18n-placeholder="auth.field.username" required>
+        <input type="text" id="reg-displayname" placeholder="Имя" data-i18n-placeholder="auth.field.displayname" required>
+        <input type="email" id="reg-email" placeholder="Email" data-i18n-placeholder="auth.field.email" required>
+        <input type="password" id="reg-password" placeholder="Пароль (мин. 10, A-Z, a-z, 0-9)" data-i18n-placeholder="auth.field.password.strict" required minlength="10">
+        <button type="submit" class="btn-primary" data-i18n="auth.register.submit">Создать аккаунт</button>
         <p class="error" id="register-error"></p>
       </form>
     </div>
