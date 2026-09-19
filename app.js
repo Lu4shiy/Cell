@@ -443,6 +443,57 @@ const I18N = {
     "lastSeen.hourWord.few": "часа",
     "lastSeen.hourWord.many": "часов",
 
+    // ---- Подарки: общее ----
+    "gifts.rarity.common": "Обычный",
+    "gifts.rarity.rare": "Редкий",
+    "gifts.rarity.epic": "Эпический",
+    "gifts.title.mine": "Мои подарки",
+    "gifts.title.user": "Подарки: {name}",
+    "gifts.title.detail": "Подарок",
+    "gifts.title.catalog": "Каталог подарков",
+    "gifts.title.send": "Подарить подарок",
+    "gifts.empty.mine": "У вас пока нет подарков.",
+    "gifts.empty.other": "У этого пользователя нет подарков.",
+    "gifts.empty.catalog": "Каталог пуст",
+    "gifts.empty.contacts": "У вас пока нет контактов",
+    "gifts.buy.button": "Купить подарок",
+    "gifts.buy.buttonFor": "Купить подарок для {name}",
+    "gifts.soldOut": "Распродано",
+    "gifts.lowBalance": "мало",
+    "gifts.detail.owner": "Владелец",
+    "gifts.detail.rarity": "Редкость",
+    "gifts.detail.background": "Фон",
+    "gifts.detail.pattern": "Паттерн",
+    "gifts.detail.quantity": "Количество",
+    "gifts.detail.value": "Ценность",
+    "gifts.detail.caption": "Подпись",
+    "gifts.detail.limit": "лимит {n}",
+    "gifts.detail.recipient": "Подарок для {name}",
+    "gifts.detail.notOwner": "Подарок принадлежит другому пользователю",
+    "gifts.action.addToProfile": "Добавить в профиль",
+    "gifts.action.hideFromProfile": "Скрыть из профиля",
+    "gifts.action.gift": "Подарить",
+    "gifts.action.sell": "Продать за {price}",
+    "gifts.action.pin": "Закрепить",
+    "gifts.action.unpin": "Открепить",
+    "gifts.action.toProfile": "Добавить в профиль",
+    "gifts.action.fromProfile": "Убрать из профиля",
+    "gifts.purchase.title.self": "Купить подарок себе",
+    "gifts.purchase.title.other": "Купить подарок для {name}",
+    "gifts.purchase.caption": "Подпись (необязательно)",
+    "gifts.purchase.withName.self": "С моим именем",
+    "gifts.purchase.withName.other": "С тем именем",
+    "gifts.purchase.cost": "Стоимость: {price}",
+    "gifts.purchase.buy": "Купить",
+    "gifts.purchase.buying": "Покупаю...",
+    "gifts.send.subtitle": "Выбери получателя из своих контактов",
+    "gifts.send.confirm": "Подарить",
+    "gifts.sell.title": "Продать подарок",
+    "gifts.sell.text": "Продать за {price} Nectar (комиссия 15%)?",
+    "gifts.sell.confirm": "Продать",
+    "gifts.notFound": "Не найдено",
+    "gifts.error": "Ошибка",
+
     // ---- Пустые состояния ----
     "empty.noChats": "У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.",
     "empty.noChatsShort": "У вас пока нет чатов.",
@@ -703,6 +754,57 @@ const I18N = {
     "lastSeen.hourWord.few": "hours",
     "lastSeen.hourWord.many": "hours",
 
+    // ---- Gifts: general ----
+    "gifts.rarity.common": "Common",
+    "gifts.rarity.rare": "Rare",
+    "gifts.rarity.epic": "Epic",
+    "gifts.title.mine": "My gifts",
+    "gifts.title.user": "Gifts: {name}",
+    "gifts.title.detail": "Gift",
+    "gifts.title.catalog": "Gift catalog",
+    "gifts.title.send": "Give a gift",
+    "gifts.empty.mine": "You have no gifts yet.",
+    "gifts.empty.other": "This user has no gifts.",
+    "gifts.empty.catalog": "Catalog is empty",
+    "gifts.empty.contacts": "You have no contacts yet",
+    "gifts.buy.button": "Buy a gift",
+    "gifts.buy.buttonFor": "Buy a gift for {name}",
+    "gifts.soldOut": "Sold out",
+    "gifts.lowBalance": "low",
+    "gifts.detail.owner": "Owner",
+    "gifts.detail.rarity": "Rarity",
+    "gifts.detail.background": "Background",
+    "gifts.detail.pattern": "Pattern",
+    "gifts.detail.quantity": "Quantity",
+    "gifts.detail.value": "Value",
+    "gifts.detail.caption": "Caption",
+    "gifts.detail.limit": "limit {n}",
+    "gifts.detail.recipient": "Gift for {name}",
+    "gifts.detail.notOwner": "This gift belongs to another user",
+    "gifts.action.addToProfile": "Add to profile",
+    "gifts.action.hideFromProfile": "Hide from profile",
+    "gifts.action.gift": "Give",
+    "gifts.action.sell": "Sell for {price}",
+    "gifts.action.pin": "Pin",
+    "gifts.action.unpin": "Unpin",
+    "gifts.action.toProfile": "Add to profile",
+    "gifts.action.fromProfile": "Remove from profile",
+    "gifts.purchase.title.self": "Buy a gift for yourself",
+    "gifts.purchase.title.other": "Buy a gift for {name}",
+    "gifts.purchase.caption": "Caption (optional)",
+    "gifts.purchase.withName.self": "With my name",
+    "gifts.purchase.withName.other": "With that name",
+    "gifts.purchase.cost": "Cost: {price}",
+    "gifts.purchase.buy": "Buy",
+    "gifts.purchase.buying": "Buying...",
+    "gifts.send.subtitle": "Pick a recipient from your contacts",
+    "gifts.send.confirm": "Give",
+    "gifts.sell.title": "Sell gift",
+    "gifts.sell.text": "Sell for {price} Nectar (15% fee)?",
+    "gifts.sell.confirm": "Sell",
+    "gifts.notFound": "Not found",
+    "gifts.error": "Error",
+
     // ---- Empty states ----
     "empty.noChats": "No chats yet.<br>Type @username above to find someone.",
     "empty.noChatsShort": "No chats yet.",
@@ -797,6 +899,20 @@ function setLanguage(lang) {
   if (settingsOverlay && !settingsOverlay.classList.contains("hidden")) {
     if (typeof refreshMfaStatus === "function") refreshMfaStatus();
     if (typeof refreshE2eeStatus === "function") refreshE2eeStatus();
+  }
+  // Если открыто окно подарков — перерисуем текущий экран под новый язык.
+  const giftsOverlay = document.getElementById("gifts-overlay");
+  if (giftsOverlay && !giftsOverlay.classList.contains("hidden")) {
+    const title = document.getElementById("gifts-title");
+    const backBtn = document.getElementById("gifts-back");
+    if (backBtn && !backBtn.classList.contains("hidden")) {
+      // Мы на каком-то дочернем экране (детали/каталог) — вернёмся к списку.
+      // Это безопаснее, чем пытаться угадать, где мы были.
+      if (typeof renderGiftsMain === "function") renderGiftsMain(currentUser.id);
+    } else {
+      // На главном экране — просто перерисуем его.
+      if (typeof renderGiftsMain === "function") renderGiftsMain(currentUser.id);
+    }
   }
 }
 
@@ -9755,9 +9871,9 @@ async function refreshBalance() {
 }
 
 function giftRarityLabel(r) {
-  if (r === "common") return "Обычный";
-  if (r === "rare") return "Редкий";
-  if (r === "epic") return "Эпический";
+  if (r === "common") return t("gifts.rarity.common");
+  if (r === "rare") return t("gifts.rarity.rare");
+  if (r === "epic") return t("gifts.rarity.epic");
   return r;
 }
 
@@ -10061,10 +10177,10 @@ async function renderGiftsMain(userId) {
 
   const isMe = userId === currentUser.id;
   if (isMe) {
-    title.textContent = "Мои подарки";
+    title.textContent = t("gifts.title.mine");
   } else {
     const p = profileCache.get(userId);
-    title.textContent = "Подарки " + (p ? p.display_name : "");
+    title.textContent = tFmt("gifts.title.user", { name: p ? p.display_name : "" });
   }
 
   let giftsQuery = supabase.from("user_gifts").select("*").eq("owner_id", userId);
@@ -10082,12 +10198,15 @@ async function renderGiftsMain(userId) {
   const catalogMap = new Map(catalog.map((g) => [g.id, g]));
 
   let html = "";
-  html += `<button class="gift-card-button" style="width:100%;padding:12px;margin-bottom:12px;" id="open-catalog-btn"><span class="cell-icon cell-icon-sm" data-icon="shop" style="vertical-align:-3px;margin-right:6px;"></span>Купить подарок${!isMe ? " для " + escapeHtml((profileCache.get(userId) || {}).display_name || "") : ""}</button>`;
+  const buyLabel = isMe
+    ? t("gifts.buy.button")
+    : tFmt("gifts.buy.buttonFor", { name: (profileCache.get(userId) || {}).display_name || "" });
+  html += `<button class="gift-card-button" style="width:100%;padding:12px;margin-bottom:12px;" id="open-catalog-btn"><span class="cell-icon cell-icon-sm" data-icon="shop" style="vertical-align:-3px;margin-right:6px;"></span>${escapeHtml(buyLabel)}</button>`;
 
   if (!gifts.length) {
     html += isMe
-      ? `<div class="empty">У вас пока нет подарков.</div>`
-      : `<div class="empty">У этого пользователя нет подарков.</div>`;
+      ? `<div class="empty">${escapeHtml(t("gifts.empty.mine"))}</div>`
+      : `<div class="empty">${escapeHtml(t("gifts.empty.other"))}</div>`;
   } else {
     html += `<div class="gifts-grid">`;
     gifts.forEach((ug) => {
@@ -10157,9 +10276,9 @@ function openGiftTileContextMenu(ev, ugId, isPinned, inProfile) {
   const menu = document.getElementById("gift-context-menu");
   if (!menu) return;
   const pinBtn = menu.querySelector('button[data-action="pin"]');
-  if (pinBtn) pinBtn.textContent = isPinned ? "Открепить" : "Закрепить";
+  if (pinBtn) pinBtn.textContent = isPinned ? t("gifts.action.unpin") : t("gifts.action.pin");
   const visBtn = menu.querySelector('button[data-action="visibility"]');
-  if (visBtn) visBtn.textContent = inProfile ? "Убрать из профиля" : "Добавить в профиль";
+  if (visBtn) visBtn.textContent = inProfile ? t("gifts.action.fromProfile") : t("gifts.action.toProfile");
   menu.dataset.ugId = ugId;
   menu.classList.remove("hidden");
   menu.style.left = "0px";
@@ -10179,14 +10298,14 @@ async function renderCatalog(recipientId) {
   const backBtn = document.getElementById("gifts-back");
   backBtn.classList.remove("hidden");
   backBtn.onclick = () => renderGiftsMain(recipientId);
-  title.textContent = "Каталог подарков";
-  content.innerHTML = '<div class="empty">Загрузка...</div>';
+  title.textContent = t("gifts.title.catalog");
+  content.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
 
   await refreshBalance();
   const balance = (myProfile && myProfile.imagi_tokens) || 0;
 
   const catalog = await loadGiftCatalog();
-  if (!catalog.length) { content.innerHTML = '<div class="empty">Каталог пуст</div>'; return; }
+  if (!catalog.length) { content.innerHTML = '<div class="empty">' + escapeHtml(t("gifts.empty.catalog")) + '</div>'; return; }
 
   // Считаем ВСЕ выпущенные подарки (даже если владелец продал — серийник уже существует и «слот» занят).
   // Считаем ВСЕ выпущенные подарки через SECURITY DEFINER RPC — обходит RLS,
@@ -10202,8 +10321,8 @@ async function renderCatalog(recipientId) {
     const disabled = soldOut || !canAfford;
     const supplyText = g.max_supply !== null ? `${soldCount} / ${g.max_supply}` : `${soldCount}`;
     let btnText;
-    if (soldOut) btnText = "Распродано";
-    else if (!canAfford) btnText = `${NECTAR_HTML} ${g.price} · мало`;
+    if (soldOut) btnText = escapeHtml(t("gifts.soldOut"));
+    else if (!canAfford) btnText = `${NECTAR_HTML} ${g.price} · ${escapeHtml(t("gifts.lowBalance"))}`;
     else btnText = `${NECTAR_HTML} ${g.price}`;
     return `
       <div class="gift-card" data-cat-id="${g.id}">
@@ -10242,24 +10361,27 @@ function openGiftPurchase(gift, recipientId) {
 
   const isSelf = recipientId === currentUser.id;
   const recipient = profileCache.get(recipientId);
-  const recipientName = isSelf ? "себе" : (recipient ? recipient.display_name : "пользователю");
+  const recipientName = recipient ? recipient.display_name : "";
 
-  titleEl.textContent = "Купить подарок " + recipientName;
+  titleEl.textContent = isSelf
+    ? t("gifts.purchase.title.self")
+    : tFmt("gifts.purchase.title.other", { name: recipientName });
   infoEl.innerHTML = `${renderGiftModel(gift.emoji, 20)} <span style="vertical-align:middle;">${escapeHtml(gift.name)} — ${giftRarityLabel(gift.rarity)}${gift.collection ? " · " + escapeHtml(gift.collection) : ""}</span>`;
-  costEl.innerHTML = `Стоимость: ${NECTAR_HTML} <b>${gift.price}</b>`;
+  costEl.innerHTML = tFmt("gifts.purchase.cost", { price: `${NECTAR_HTML} <b>${gift.price}</b>` });
   captionInput.value = "";
+  captionInput.placeholder = t("gifts.purchase.caption");
   const captionCounter = document.getElementById("gift-caption-counter");
   if (captionCounter) captionCounter.textContent = "0 / 25";
   captionInput.oninput = () => {
     if (captionCounter) captionCounter.textContent = `${captionInput.value.length} / 25`;
   };
   if (withNameCb) withNameCb.checked = false;
-  if (withNameLabel) withNameLabel.textContent = isSelf ? "С моим именем" : "С тем именем";
+  if (withNameLabel) withNameLabel.textContent = isSelf ? t("gifts.purchase.withName.self") : t("gifts.purchase.withName.other");
   overlay.classList.remove("hidden");
 
   confirmBtn.onclick = async () => {
     confirmBtn.disabled = true;
-    confirmBtn.textContent = "Покупаю...";
+    confirmBtn.textContent = t("gifts.purchase.buying");
     const caption = captionInput.value.trim() || null;
     const withName = !!(withNameCb && withNameCb.checked);
 
@@ -10269,8 +10391,8 @@ function openGiftPurchase(gift, recipientId) {
 
     if (error) {
       confirmBtn.disabled = false;
-      confirmBtn.textContent = "Купить";
-      await showAlertDialog("Ошибка", error.message);
+      confirmBtn.textContent = t("gifts.purchase.buy");
+      await showAlertDialog(t("gifts.error"), error.message);
       return;
     }
 
@@ -10320,7 +10442,7 @@ function openGiftPurchase(gift, recipientId) {
     }
 
     confirmBtn.disabled = false;
-    confirmBtn.textContent = "Купить";
+    confirmBtn.textContent = t("gifts.purchase.buy");
     overlay.classList.add("hidden");
     await refreshBalance();
     if (recipientId === currentUser.id) await refreshMyGiftsCount();
@@ -10352,11 +10474,11 @@ async function renderGiftDetail(ownerId, ug) {
   const backBtn = document.getElementById("gifts-back");
   backBtn.classList.remove("hidden");
   backBtn.onclick = () => renderGiftsMain(ownerId);
-  title.textContent = "Подарок";
+  title.textContent = t("gifts.title.detail");
 
   const catalog = await loadGiftCatalog();
   const cat = catalog.find((c) => c.id === ug.gift_id);
-  if (!cat) { content.innerHTML = '<div class="empty">Не найдено</div>'; return; }
+  if (!cat) { content.innerHTML = '<div class="empty">' + escapeHtml(t("gifts.notFound")) + '</div>'; return; }
 
   const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
   const isOwner = ug.owner_id === currentUser.id;
@@ -10376,7 +10498,7 @@ async function renderGiftDetail(ownerId, ug) {
   const patternChanceHtml = patternChance !== null ? `<span class="gir-badge">${patternChance}%</span>` : "";
   const patternRow = ug.pattern_id
     ? `<div class="gift-info-row">
-        <span class="gir-label">Паттерн</span>
+        <span class="gir-label">${escapeHtml(t("gifts.detail.pattern"))}</span>
         <span class="gir-value">${escapeHtml(ug.pattern_id)}${patternChanceHtml}</span>
       </div>`
     : "";
@@ -10387,19 +10509,21 @@ async function renderGiftDetail(ownerId, ug) {
   // Количество
   const maxSupply = (cat.max_supply !== null && cat.max_supply !== undefined) ? cat.max_supply : null;
   const qtyValue = maxSupply !== null
-    ? `#${ug.serial_number} · лимит ${maxSupply}`
+    ? `#${ug.serial_number} · ${tFmt("gifts.detail.limit", { n: maxSupply })}`
     : `#${ug.serial_number}`;
 
   // Подпись
   const captionHtml = ug.caption
-    ? `<div class="gift-info-row"><span class="gir-label">Подпись</span><span class="gir-value">${escapeHtml(ug.caption)}</span></div>`
+    ? `<div class="gift-info-row"><span class="gir-label">${escapeHtml(t("gifts.detail.caption"))}</span><span class="gir-value">${escapeHtml(ug.caption)}</span></div>`
     : "";
 
   // Подарок для кого
   const recipientHtml = ug.recipient_name
-    ? `<div class="gift-recipient-caption">Подарок для ${ug.recipient_id
-        ? `<a href="#" class="gift-recipient-link" data-uid="${ug.recipient_id}">${escapeHtml(ug.recipient_name)}</a>`
-        : escapeHtml(ug.recipient_name)}</div>`
+    ? `<div class="gift-recipient-caption">${tFmt("gifts.detail.recipient", {
+        name: ug.recipient_id
+          ? `<a href="#" class="gift-recipient-link" data-uid="${ug.recipient_id}">${escapeHtml(ug.recipient_name)}</a>`
+          : escapeHtml(ug.recipient_name)
+      })}</div>`
     : "";
 
   content.innerHTML = `
@@ -10417,25 +10541,25 @@ async function renderGiftDetail(ownerId, ug) {
       <div class="gift-info-table">
         ${captionHtml}
         <div class="gift-info-row">
-          <span class="gir-label">Владелец</span>
+          <span class="gir-label">${escapeHtml(t("gifts.detail.owner"))}</span>
           <span class="gir-value"><a href="#" class="gift-recipient-link" data-uid="${ug.owner_id}">${escapeHtml(ownerName)}</a></span>
         </div>
         <div class="gift-info-row">
-          <span class="gir-label">Редкость</span>
+          <span class="gir-label">${escapeHtml(t("gifts.detail.rarity"))}</span>
           <span class="gir-value">${giftRarityLabel(cat.rarity)}</span>
         </div>
         ${ug.background_name ? `
         <div class="gift-info-row">
-          <span class="gir-label">Фон</span>
+          <span class="gir-label">${escapeHtml(t("gifts.detail.background"))}</span>
           <span class="gir-value">${escapeHtml(ug.background_name)}${bgChanceHtml}</span>
         </div>` : ""}
         ${patternRow}
         <div class="gift-info-row">
-          <span class="gir-label">Количество</span>
+          <span class="gir-label">${escapeHtml(t("gifts.detail.quantity"))}</span>
           <span class="gir-value">${qtyValue}</span>
         </div>
         <div class="gift-info-row">
-          <span class="gir-label">Ценность</span>
+          <span class="gir-label">${escapeHtml(t("gifts.detail.value"))}</span>
           <span class="gir-value">${NECTAR_HTML} ${cat.price}</span>
         </div>
       </div>
@@ -10443,12 +10567,12 @@ async function renderGiftDetail(ownerId, ug) {
       <div class="gift-detail-actions">
         ${isOwner ? `
           <button class="dialog-btn ${isInProfile ? "dialog-cancel" : "dialog-primary"}" id="gift-toggle-visible">
-            ${isInProfile ? "Скрыть из профиля" : "Добавить в профиль"}
+            ${escapeHtml(isInProfile ? t("gifts.action.hideFromProfile") : t("gifts.action.addToProfile"))}
           </button>
-          <button class="dialog-btn" id="gift-send"><span class="cell-icon cell-icon-sm" data-icon="gift" style="vertical-align:-3px;margin-right:6px;"></span>Подарить</button>
-          <button class="dialog-btn" id="gift-sell"><span class="cell-icon cell-icon-sm" data-icon="dollarBag" style="vertical-align:-3px;margin-right:6px;"></span>Продать за ${NECTAR_HTML} ${Math.floor(cat.price * 0.85)}</button>
+          <button class="dialog-btn" id="gift-send"><span class="cell-icon cell-icon-sm" data-icon="gift" style="vertical-align:-3px;margin-right:6px;"></span>${escapeHtml(t("gifts.action.gift"))}</button>
+          <button class="dialog-btn" id="gift-sell"><span class="cell-icon cell-icon-sm" data-icon="dollarBag" style="vertical-align:-3px;margin-right:6px;"></span>${tFmt("gifts.action.sell", { price: `${NECTAR_HTML} ${Math.floor(cat.price * 0.85)}` })}</button>
         ` : `
-          <div class="dialog-text" style="text-align:center;">Подарок принадлежит другому пользователю</div>
+          <div class="dialog-text" style="text-align:center;">${escapeHtml(t("gifts.detail.notOwner"))}</div>
         `}
       </div>
     </div>`;
@@ -10478,11 +10602,14 @@ async function renderGiftDetail(ownerId, ug) {
     document.getElementById("gift-send").addEventListener("click", () => openGiftSend(ug));
 
     document.getElementById("gift-sell").addEventListener("click", async () => {
-      const ok = await showConfirmDialog("Продать подарок",
-        `Продать за ${Math.floor(cat.price * 0.85)} Nectar (комиссия 15%)?`, "Продать");
+      const ok = await showConfirmDialog(
+        t("gifts.sell.title"),
+        tFmt("gifts.sell.text", { price: Math.floor(cat.price * 0.85) }),
+        t("gifts.sell.confirm")
+      );
       if (!ok) return;
       const { error } = await supabase.rpc("sell_gift", { p_user_gift_id: ug.id });
-      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      if (error) { await showAlertDialog(t("gifts.error"), error.message); return; }
       await refreshBalance();
       await refreshMyGiftsCount();
       renderGiftsMain(ownerId);
@@ -10500,16 +10627,16 @@ async function openGiftSend(ug) {
   const overlay = document.getElementById("gift-send-overlay");
   const listEl = document.getElementById("gift-send-list");
   overlay.classList.remove("hidden");
-  listEl.innerHTML = '<div class="empty">Загрузка...</div>';
+  listEl.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
 
   const { data: myChats } = await supabase.from("chat_members").select("chat_id").eq("user_id", currentUser.id);
   const chatIds = (myChats || []).map((c) => c.chat_id);
-  if (!chatIds.length) { listEl.innerHTML = '<div class="empty">У вас пока нет контактов</div>'; return; }
+  if (!chatIds.length) { listEl.innerHTML = '<div class="empty">' + escapeHtml(t("gifts.empty.contacts")) + '</div>'; return; }
 
   const { data: others } = await supabase.from("chat_members")
     .select("chat_id, user_id").in("chat_id", chatIds).neq("user_id", currentUser.id);
   const userIds = [...new Set((others || []).map((o) => o.user_id))];
-  if (!userIds.length) { listEl.innerHTML = '<div class="empty">У вас пока нет контактов</div>'; return; }
+  if (!userIds.length) { listEl.innerHTML = '<div class="empty">' + escapeHtml(t("gifts.empty.contacts")) + '</div>'; return; }
 
   const { data: profiles } = await supabase.from("profiles")
     .select("id, username, display_name, avatar_url").in("id", userIds);
