@@ -657,6 +657,125 @@ const I18N = {
     "alert.noChatYet": "Сначала напишите сообщение собеседнику — тогда создастся чат",
     "alert.createChatFail": "Не удалось создать чат",
 
+    // ---- ПКМ-меню сообщения ----
+    "msgCtx.reply": "Ответить",
+    "msgCtx.pin": "Закрепить",
+    "msgCtx.unpin": "Открепить",
+    "msgCtx.copy": "Копировать",
+    "msgCtx.edit": "Изменить",
+    "msgCtx.fwd": "Переслать",
+    "msgCtx.del": "Удалить",
+    "msgCtx.sel": "Выбрать",
+    "msgCtx.expand": "Ещё реакции",
+
+    // ---- Меню форматирования ----
+    "fmt.bold": "Жирный",
+    "fmt.underline": "Подчёркнутый",
+    "fmt.italic": "Курсив",
+    "fmt.strike": "Зачёркнутый",
+    "fmt.quote": "Цитата",
+    "fmt.mono": "Моноширный",
+    "fmt.spoiler": "Скрытый",
+
+    // ---- Reply bar ----
+    "replyBar.answer": "Ответ",
+    "replyBar.edit": "Редактирование",
+
+    // ---- Закреплённые ----
+    "pins.title": "Закреплённые сообщения",
+    "pins.one": "Закреплённое сообщение",
+    "pins.multi": "Закреплённое сообщение · {i} из {total}",
+    "pins.scope.shared": "Общий",
+    "pins.scope.personal": "Личный",
+    "pins.unpin": "Открепить",
+    "pins.unpinChannel": "Открепить это сообщение в канале?",
+    "pins.unpinShared": "Открепить это сообщение у обоих?",
+    "pins.unpinMine": "Открепить это сообщение у себя?",
+    "pins.unpinOne": "Открепить сообщение {label}?",
+    "pins.none": "Пока нет закреплённых сообщений.",
+    "pins.you": "Вы",
+    "pins.gift": "🎁 Подарок",
+    "pins.tokens": "🧩 ImagiTokens",
+    "pins.noText": "(без текста)",
+    "pins.choose": "Открепление",
+    "pins.chooseText": "Что снять?",
+    "pins.chooseUnpinMe": "У меня",
+    "pins.chooseUnpinBoth": "У обоих",
+    "pins.chooseAction": "Открепить",
+    "pins.pinTitle": "Закрепление",
+    "pins.pinText": "Как закрепить?",
+    "pins.pinMe": "У меня",
+    "pins.pinBoth": "У обоих",
+    "pins.pinAction": "Закрепить",
+    "pins.unpinLabelBoth": "у обоих",
+    "pins.unpinLabelMine": "у себя",
+
+    // ---- Удаление / очистка ----
+    "delete.one.title": "Удалить сообщение",
+    "delete.one.text": "У кого удалить?",
+    "delete.me": "У меня",
+    "delete.both": "У обоих",
+    "delete.action": "Удалить",
+    "delete.selected.title": "Удалить сообщения",
+    "delete.selected.text": "Будет удалено: {n}",
+    "delete.failed.title": "Не удалось удалить",
+    "delete.failed.text": "Сервер не подтвердил удаление. Возможно, RLS-политика не разрешает удалять это сообщение.",
+    "delete.clear.title": "Очистить чат",
+    "delete.clear.text": "Выбери, что очистить:",
+    "delete.clear.me": "Только у меня",
+    "delete.clear.both": "У обоих",
+    "delete.clear.action": "Очистить",
+    "delete.chat.title": "Удалить чат",
+    "delete.chat.text": "Что удалить?",
+    "delete.chat.me": "У меня (вернётся при новом сообщении)",
+    "delete.chat.both": "У обоих (безвозвратно)",
+    "delete.chat.action": "Удалить",
+    "delete.limit.title": "Лимит",
+    "delete.limit.text": "Максимум 100 сообщений",
+
+    // ---- О приложении ----
+    "about.title": "О приложении",
+    "about.section.about": "О приложении",
+    "about.text.about": "Cell — семейный мессенджер. Каждый чат — это ячейка, а вместе они собираются в улей твоих близких. Здесь нет публичного шума: только ты, твоя семья и те, кому ты доверяешь.",
+    "about.section.features": "Возможности",
+    "about.text.features": "Личные чаты и каналы, вложения и подарки, закрепы и поиск, реакции и пересылка — всё, чтобы быть на связи.",
+    "about.section.credits": "Благодарности",
+    "about.section.version": "Версия",
+    "about.close": "Закрыть",
+    "about.credits.before": "Часть иконок взята с сайтов",
+    "about.credits.and": "и",
+    "about.credits.after": "Спасибо авторам за бесплатные наборы.",
+
+    // ---- Командная палитра ----
+    "cmd.placeholder": "Поиск чатов, каналов, людей или команда >",
+    "cmd.foot.select": "выбор",
+    "cmd.foot.open": "открыть",
+    "cmd.empty": "Ничего не найдено",
+    "cmd.kind.cmd": "cmd",
+    "cmd.kind.channel": "канал",
+    "cmd.kind.chat": "чат",
+    "cmd.kind.profile": "профиль",
+    "cmd.cmd.create-channel": "Создать канал",
+    "cmd.cmd.create-channel.sub": "Открывает диалог создания канала",
+    "cmd.cmd.profile": "Профиль",
+    "cmd.cmd.profile.sub": "Свой профиль",
+    "cmd.cmd.gifts": "Подарки",
+    "cmd.cmd.gifts.sub": "Открыть мои подарки",
+    "cmd.cmd.channel-edit": "Настройки канала",
+    "cmd.cmd.channel-edit.sub": "Только для владельца/админа открытого канала",
+    "cmd.cmd.about": "О приложении",
+    "cmd.cmd.about.sub": "Cell · credits",
+
+    // ---- Emoji picker ----
+    "emoji.recent.empty": "Здесь появятся недавно использованные эмодзи",
+
+    // ---- Nectar ----
+    "tokens.title": "Отправить Nectar",
+    "tokens.to": "Кому: {name}",
+    "tokens.balance": "У вас: {balance}",
+    "tokens.amountPlaceholder": "Сумма",
+    "tokens.send": "Отправить",
+
     // ---- Системные сообщения ----
     "msg.gift.youSent": "Вы отправили подарок за {price} {icon}",
     "msg.gift.sent.male": "{name} отправил вам подарок за {price} {icon}",
@@ -685,6 +804,96 @@ const I18N = {
     "block.confirm.title": "Блокировка",
     "block.confirm.text": "Заблокировать @{username}?",
     "block.confirm.action": "Заблокировать",
+    "block.failed": "Не удалось",
+
+    // ---- Финальные мелочи ----
+    "grandma.logoutBlocked.title": "Выход заблокирован",
+    "grandma.logoutBlocked.text": "Режим «Бабушка» включён. Сначала отключите его долгим нажатием на аватар в боковом меню.",
+    "inactivity.expired": "Сессия истекла из-за неактивности. Войди заново.",
+    "date.today": "Сегодня",
+    "date.yesterday": "Вчера",
+    "e2ee.msg.locked": "🔒 Зашифровано — разблокируйте в настройках",
+    "e2ee.msg.noChannelKey": "🔒 Нет ключа канала",
+    "e2ee.msg.decryptFailed": "🔒 Не удалось расшифровать",
+    "e2ee.msg.noSharedKey": "🔒 Нет ключа для расшифровки",
+    "attach.encryptedLoading": "🔒 Загрузка...",
+    "attach.encryptedLoadingFile": "🔒 Загрузка файла...",
+    "attach.encryptedBlocked": "🔒 Файл зашифрован.<br>Разблокируйте в настройках, чтобы просмотреть.",
+    "attach.loadingShort": "⏳ Загрузка…",
+    "media.loadVideoFailed": "❌ Не удалось загрузить видео.",
+    "media.loadVideoFailedHint": "Возможно, ссылка протухла. Переоткрой вложение.",
+    "media.loadImageFailed": "❌ Не удалось загрузить изображение.",
+    "media.loadImageFailedHint": "Возможно, ссылка протухла. Переоткрой вложение.",
+
+    // ---- 2FA ----
+    "mfa.title": "Двухфакторная аутентификация",
+    "mfa.challenge.text": "Открой приложение-аутентификатор и введи 6-значный код.",
+    "mfa.challenge.submit": "Подтвердить",
+    "mfa.challenge.exit": "Выйти",
+    "mfa.err.6digits": "Введи 6 цифр",
+    "mfa.err.noFactor": "Нет активного TOTP-фактора",
+    "mfa.err.wrongCode": "Неверный код",
+    "mfa.err.confirmFailed": "Не удалось подтвердить 2FA. Попробуй ещё раз через 30 секунд.",
+    "mfa.err.noUser": "Не удалось получить данные пользователя",
+    "mfa.err.verifyFailed": "Ошибка проверки кода",
+    "mfa.setup.enabledText": "Двухфакторная аутентификация <b>включена</b>. При входе потребуется 6-значный код из приложения.",
+    "mfa.setup.disableBtn": "Отключить 2FA",
+    "mfa.setup.disableTitle": "Отключить 2FA",
+    "mfa.setup.disableText": "Это сильно снизит безопасность аккаунта. Продолжить?",
+    "mfa.setup.disableAction": "Отключить",
+    "mfa.setup.errorPrefix": "Ошибка: {msg}",
+    "mfa.setup.steps": "1. Открой <b>Google Authenticator</b>, <b>Authy</b> или <b>1Password</b>.<br>2. Отсканируй QR-код.<br>3. Введи 6-значный код из приложения ниже.",
+    "mfa.setup.manual": "Если QR не сканируется, введи код вручную:",
+    "mfa.setup.activate": "Активировать 2FA",
+    "mfa.setup.factorNotActive": "Фактор не активировался. Попробуй ещё раз.",
+    "mfa.setup.doneTitle": "Готово",
+    "mfa.setup.doneText": "Двухфакторная аутентификация включена!",
+
+    // ---- E2EE: мастер ----
+    "e2ee.title.init": "Включить шифрование",
+    "e2ee.title.unlock": "Разблокировать шифрование",
+    "e2ee.title.enabled": "Шифрование включено",
+    "e2ee.setup.enabledText": "🔒 Все новые личные сообщения шифруются на твоём устройстве. Сервер видит только шифротекст.",
+    "e2ee.setup.showSafety": "🔑 Показать safety number",
+    "e2ee.setup.lockNow": "🔒 Заблокировать сейчас",
+    "e2ee.setup.disableBtn": "Отключить шифрование",
+    "e2ee.setup.noChatTitle": "Нет чата",
+    "e2ee.setup.noChatText": "Открой чат с собеседником и нажми ещё раз.",
+    "e2ee.setup.lockTitle": "Заблокировать сейчас",
+    "e2ee.setup.lockText": "Приватный ключ будет забыт. Для чтения зашифрованных сообщений потребуется снова ввести пароль.",
+    "e2ee.setup.lockAction": "Заблокировать",
+    "e2ee.setup.unlockText": "Приватный ключ хранится в зашифрованном виде. Чтобы читать зашифрованные сообщения, введи свой пароль.",
+    "e2ee.setup.unlockPassword": "Пароль",
+    "e2ee.setup.trustDevice": "Доверять этому устройству — не спрашивать пароль при следующем входе",
+    "e2ee.setup.unlockBtn": "Разблокировать",
+    "e2ee.setup.unlockDone": "Ключ разблокирован.",
+    "e2ee.setup.unlockErr": "Неверный пароль или повреждённый ключ",
+    "e2ee.setup.initText": "Cell сгенерирует пару ключей на твоём устройстве. Приватный ключ будет зашифрован твоим паролем и сохранён на сервере в зашифрованном виде.<br><br><b>Важно:</b> мы не сможем восстановить его, если ты забудешь пароль. Дополнительно будут сгенерированы <b>12 слов восстановления</b> — их надо сохранить.",
+    "e2ee.setup.initBtn": "Сгенерировать ключи",
+    "e2ee.setup.initLoading": "Генерирую...",
+    "e2ee.setup.pwTooShort": "Пароль слишком короткий (мин. 8)",
+    "e2ee.setup.recoveryTitle": "⚠️ Код восстановления",
+    "e2ee.setup.recoveryText": "Сохрани эти 12 слов в надёжном месте (менеджер паролей или бумага). Если забудешь пароль — <b>только с их помощью</b> сможешь восстановить доступ к зашифрованным сообщениям. Мы не сможем тебе помочь.",
+    "e2ee.setup.recoveryConfirm": "Я сохранил код и понимаю, что без него не восстановлю доступ",
+    "e2ee.setup.recoveryContinue": "Продолжить",
+    "e2ee.setup.recoveryBack": "Отмена",
+    "e2ee.setup.enabledDone": "Шифрование включено.",
+    "e2ee.disable.title": "Отключить шифрование",
+    "e2ee.disable.text": "Все НОВЫЕ сообщения будут храниться в открытом виде. Уже зашифрованные останутся зашифрованными. Продолжить?",
+    "e2ee.disable.action": "Отключить",
+    "e2ee.safety.lockedTitle": "Заблокировано",
+    "e2ee.safety.lockedText": "Разблокируй шифрование в настройках.",
+    "e2ee.safety.noKeyTitle": "Нет ключа",
+    "e2ee.safety.noKeyText": "У собеседника не включено шифрование.",
+    "e2ee.safety.title": "Safety number",
+    "e2ee.safety.text": "Сверь этот код с @{username} лично или вслух. Если совпадает — вас не подслушивают.\n\n{groups}",
+    "e2ee.err.noSavedKeys": "Нет сохранённых ключей",
+
+    // ---- Загрузка файлов: ошибки ----
+    "attach.err.readTitle": "Ошибка чтения файла",
+    "attach.err.uploadTitle": "Ошибка загрузки",
+    "attach.err.notSent": "Не отправлено",
+    "attach.err.network": "Ошибка сети",
   },
   en: {
     // ---- Settings ----
@@ -1141,6 +1350,125 @@ const I18N = {
     "alert.noChatYet": "First send a message to this person — the chat will be created",
     "alert.createChatFail": "Failed to create chat",
 
+    // ---- Message context menu ----
+    "msgCtx.reply": "Reply",
+    "msgCtx.pin": "Pin",
+    "msgCtx.unpin": "Unpin",
+    "msgCtx.copy": "Copy",
+    "msgCtx.edit": "Edit",
+    "msgCtx.fwd": "Forward",
+    "msgCtx.del": "Delete",
+    "msgCtx.sel": "Select",
+    "msgCtx.expand": "More reactions",
+
+    // ---- Format menu ----
+    "fmt.bold": "Bold",
+    "fmt.underline": "Underline",
+    "fmt.italic": "Italic",
+    "fmt.strike": "Strikethrough",
+    "fmt.quote": "Quote",
+    "fmt.mono": "Monospace",
+    "fmt.spoiler": "Spoiler",
+
+    // ---- Reply bar ----
+    "replyBar.answer": "Reply",
+    "replyBar.edit": "Editing",
+
+    // ---- Pinned ----
+    "pins.title": "Pinned messages",
+    "pins.one": "Pinned message",
+    "pins.multi": "Pinned message · {i} of {total}",
+    "pins.scope.shared": "Shared",
+    "pins.scope.personal": "Personal",
+    "pins.unpin": "Unpin",
+    "pins.unpinChannel": "Unpin this message in the channel?",
+    "pins.unpinShared": "Unpin this message for both?",
+    "pins.unpinMine": "Unpin this message for yourself?",
+    "pins.unpinOne": "Unpin message {label}?",
+    "pins.none": "No pinned messages yet.",
+    "pins.you": "You",
+    "pins.gift": "🎁 Gift",
+    "pins.tokens": "🧩 ImagiTokens",
+    "pins.noText": "(no text)",
+    "pins.choose": "Unpin",
+    "pins.chooseText": "What to unpin?",
+    "pins.chooseUnpinMe": "For me",
+    "pins.chooseUnpinBoth": "For both",
+    "pins.chooseAction": "Unpin",
+    "pins.pinTitle": "Pin",
+    "pins.pinText": "How to pin?",
+    "pins.pinMe": "For me",
+    "pins.pinBoth": "For both",
+    "pins.pinAction": "Pin",
+    "pins.unpinLabelBoth": "for both",
+    "pins.unpinLabelMine": "for yourself",
+
+    // ---- Delete / clear ----
+    "delete.one.title": "Delete message",
+    "delete.one.text": "Delete for whom?",
+    "delete.me": "For me",
+    "delete.both": "For both",
+    "delete.action": "Delete",
+    "delete.selected.title": "Delete messages",
+    "delete.selected.text": "Will be deleted: {n}",
+    "delete.failed.title": "Failed to delete",
+    "delete.failed.text": "The server did not confirm deletion. RLS policy probably does not allow deleting this message.",
+    "delete.clear.title": "Clear chat",
+    "delete.clear.text": "What to clear?",
+    "delete.clear.me": "Only for me",
+    "delete.clear.both": "For both",
+    "delete.clear.action": "Clear",
+    "delete.chat.title": "Delete chat",
+    "delete.chat.text": "What to delete?",
+    "delete.chat.me": "For me (returns on new message)",
+    "delete.chat.both": "For both (permanent)",
+    "delete.chat.action": "Delete",
+    "delete.limit.title": "Limit",
+    "delete.limit.text": "Maximum 100 messages",
+
+    // ---- About ----
+    "about.title": "About",
+    "about.section.about": "About the app",
+    "about.text.about": "Cell is a family messenger. Each chat is a cell, and together they assemble into the hive of your close ones. No public noise here: only you, your family and those you trust.",
+    "about.section.features": "Features",
+    "about.text.features": "Private chats and channels, attachments and gifts, pins and search, reactions and forwarding — everything to stay in touch.",
+    "about.section.credits": "Credits",
+    "about.section.version": "Version",
+    "about.close": "Close",
+    "about.credits.before": "Some icons are taken from",
+    "about.credits.and": "and",
+    "about.credits.after": "Thanks to the authors for the free sets.",
+
+    // ---- Command palette ----
+    "cmd.placeholder": "Search chats, channels, people or a command >",
+    "cmd.foot.select": "select",
+    "cmd.foot.open": "open",
+    "cmd.empty": "Nothing found",
+    "cmd.kind.cmd": "cmd",
+    "cmd.kind.channel": "channel",
+    "cmd.kind.chat": "chat",
+    "cmd.kind.profile": "profile",
+    "cmd.cmd.create-channel": "Create channel",
+    "cmd.cmd.create-channel.sub": "Opens the channel creation dialog",
+    "cmd.cmd.profile": "Profile",
+    "cmd.cmd.profile.sub": "Your profile",
+    "cmd.cmd.gifts": "Gifts",
+    "cmd.cmd.gifts.sub": "Open my gifts",
+    "cmd.cmd.channel-edit": "Channel settings",
+    "cmd.cmd.channel-edit.sub": "Only for the owner/admin of an open channel",
+    "cmd.cmd.about": "About",
+    "cmd.cmd.about.sub": "Cell · credits",
+
+    // ---- Emoji picker ----
+    "emoji.recent.empty": "Recently used emojis will appear here",
+
+    // ---- Nectar ----
+    "tokens.title": "Send Nectar",
+    "tokens.to": "To: {name}",
+    "tokens.balance": "You have: {balance}",
+    "tokens.amountPlaceholder": "Amount",
+    "tokens.send": "Send",
+
     // ---- System messages ----
     "msg.gift.youSent": "You sent a gift worth {price} {icon}",
     "msg.gift.sent.male": "{name} sent you a gift worth {price} {icon}",
@@ -1169,6 +1497,96 @@ const I18N = {
     "block.confirm.title": "Block",
     "block.confirm.text": "Block @{username}?",
     "block.confirm.action": "Block",
+    "block.failed": "Failed",
+
+    // ---- Final bits ----
+    "grandma.logoutBlocked.title": "Sign-out blocked",
+    "grandma.logoutBlocked.text": "Grandma mode is on. First disable it by long-pressing the avatar in the sidebar.",
+    "inactivity.expired": "Session expired due to inactivity. Please log in again.",
+    "date.today": "Today",
+    "date.yesterday": "Yesterday",
+    "e2ee.msg.locked": "🔒 Encrypted — unlock in settings",
+    "e2ee.msg.noChannelKey": "🔒 No channel key",
+    "e2ee.msg.decryptFailed": "🔒 Failed to decrypt",
+    "e2ee.msg.noSharedKey": "🔒 No key to decrypt",
+    "attach.encryptedLoading": "🔒 Loading...",
+    "attach.encryptedLoadingFile": "🔒 Loading file...",
+    "attach.encryptedBlocked": "🔒 File is encrypted.<br>Unlock in settings to view.",
+    "attach.loadingShort": "⏳ Loading…",
+    "media.loadVideoFailed": "❌ Failed to load video.",
+    "media.loadVideoFailedHint": "The link may have expired. Re-open the attachment.",
+    "media.loadImageFailed": "❌ Failed to load image.",
+    "media.loadImageFailedHint": "The link may have expired. Re-open the attachment.",
+
+    // ---- 2FA ----
+    "mfa.title": "Two-factor authentication",
+    "mfa.challenge.text": "Open your authenticator app and enter the 6-digit code.",
+    "mfa.challenge.submit": "Confirm",
+    "mfa.challenge.exit": "Exit",
+    "mfa.err.6digits": "Enter 6 digits",
+    "mfa.err.noFactor": "No active TOTP factor",
+    "mfa.err.wrongCode": "Wrong code",
+    "mfa.err.confirmFailed": "Could not confirm 2FA. Try again in 30 seconds.",
+    "mfa.err.noUser": "Failed to get user data",
+    "mfa.err.verifyFailed": "Code verification error",
+    "mfa.setup.enabledText": "Two-factor authentication is <b>enabled</b>. You'll need a 6-digit code from the app to sign in.",
+    "mfa.setup.disableBtn": "Disable 2FA",
+    "mfa.setup.disableTitle": "Disable 2FA",
+    "mfa.setup.disableText": "This will greatly reduce account security. Continue?",
+    "mfa.setup.disableAction": "Disable",
+    "mfa.setup.errorPrefix": "Error: {msg}",
+    "mfa.setup.steps": "1. Open <b>Google Authenticator</b>, <b>Authy</b> or <b>1Password</b>.<br>2. Scan the QR code.<br>3. Enter the 6-digit code below.",
+    "mfa.setup.manual": "If you can't scan the QR, enter the code manually:",
+    "mfa.setup.activate": "Activate 2FA",
+    "mfa.setup.factorNotActive": "The factor was not activated. Try again.",
+    "mfa.setup.doneTitle": "Done",
+    "mfa.setup.doneText": "Two-factor authentication is enabled!",
+
+    // ---- E2EE: wizard ----
+    "e2ee.title.init": "Enable encryption",
+    "e2ee.title.unlock": "Unlock encryption",
+    "e2ee.title.enabled": "Encryption enabled",
+    "e2ee.setup.enabledText": "🔒 All new direct messages are encrypted on your device. The server sees only ciphertext.",
+    "e2ee.setup.showSafety": "🔑 Show safety number",
+    "e2ee.setup.lockNow": "🔒 Lock now",
+    "e2ee.setup.disableBtn": "Disable encryption",
+    "e2ee.setup.noChatTitle": "No chat",
+    "e2ee.setup.noChatText": "Open a chat with someone and tap again.",
+    "e2ee.setup.lockTitle": "Lock now",
+    "e2ee.setup.lockText": "The private key will be forgotten. To read encrypted messages again, you'll need to enter your password.",
+    "e2ee.setup.lockAction": "Lock",
+    "e2ee.setup.unlockText": "Your private key is stored encrypted. Enter your password to read encrypted messages.",
+    "e2ee.setup.unlockPassword": "Password",
+    "e2ee.setup.trustDevice": "Trust this device — don't ask for the password next time",
+    "e2ee.setup.unlockBtn": "Unlock",
+    "e2ee.setup.unlockDone": "Key unlocked.",
+    "e2ee.setup.unlockErr": "Wrong password or corrupted key",
+    "e2ee.setup.initText": "Cell will generate a key pair on your device. The private key will be encrypted with your password and stored on the server encrypted.<br><br><b>Important:</b> we cannot recover it if you forget the password. Additionally, <b>12 recovery words</b> will be generated — save them.",
+    "e2ee.setup.initBtn": "Generate keys",
+    "e2ee.setup.initLoading": "Generating...",
+    "e2ee.setup.pwTooShort": "Password is too short (min. 8)",
+    "e2ee.setup.recoveryTitle": "⚠️ Recovery code",
+    "e2ee.setup.recoveryText": "Save these 12 words in a safe place (password manager or paper). If you forget your password — <b>only with them</b> will you be able to recover access to encrypted messages. We won't be able to help you.",
+    "e2ee.setup.recoveryConfirm": "I saved the code and understand I can't recover access without it",
+    "e2ee.setup.recoveryContinue": "Continue",
+    "e2ee.setup.recoveryBack": "Cancel",
+    "e2ee.setup.enabledDone": "Encryption is on.",
+    "e2ee.disable.title": "Disable encryption",
+    "e2ee.disable.text": "All NEW messages will be stored in plain text. Already encrypted ones will remain encrypted. Continue?",
+    "e2ee.disable.action": "Disable",
+    "e2ee.safety.lockedTitle": "Locked",
+    "e2ee.safety.lockedText": "Unlock encryption in settings.",
+    "e2ee.safety.noKeyTitle": "No key",
+    "e2ee.safety.noKeyText": "This user has encryption disabled.",
+    "e2ee.safety.title": "Safety number",
+    "e2ee.safety.text": "Verify this code with @{username} in person or out loud. If it matches — no one is eavesdropping.\n\n{groups}",
+    "e2ee.err.noSavedKeys": "No saved keys",
+
+    // ---- File upload: errors ----
+    "attach.err.readTitle": "File read error",
+    "attach.err.uploadTitle": "Upload error",
+    "attach.err.notSent": "Not sent",
+    "attach.err.network": "Network error",
   },
 };
 
@@ -1293,6 +1711,16 @@ function setLanguage(lang) {
   if (attachOverlay && !attachOverlay.classList.contains("hidden")) {
     if (typeof renderAttachPreview === "function") renderAttachPreview();
   }
+  // Если открыто ПКМ-меню сообщения — обновим метку pin/unpin.
+  const msgMenu = document.getElementById("msg-context-menu");
+  if (msgMenu && !msgMenu.classList.contains("hidden") && typeof contextMsgId !== "undefined" && contextMsgId) {
+    if (typeof updatePinMenuLabel === "function") updatePinMenuLabel(contextMsgId);
+  }
+  // Заголовок окна закрепов перерисуем, если открыто.
+  const pinsOverlay = document.getElementById("pinned-list-overlay");
+  if (pinsOverlay && !pinsOverlay.classList.contains("hidden")) {
+    if (typeof openPinnedListDialog === "function") openPinnedListDialog();
+  }
 }
 
 // Применяет переводы к статическому HTML:
@@ -1309,7 +1737,12 @@ function applyLanguage() {
     // data-i18n там может перетереть актуальное значение. Оно обновится
     // через явный вызов loadRecentChats/performSearch.
     if (el.id === "section-title") return;
-    if (key) el.textContent = t(key);
+    if (!key) return;
+    const str = t(key);
+    // Если в строке есть HTML-теги (<b>, <br>) — вставляем через innerHTML,
+    // иначе — безопасный textContent.
+    if (/<[a-z][^>]*>/i.test(str)) el.innerHTML = str;
+    else el.textContent = str;
   });
   document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
     const key = el.getAttribute("data-i18n-placeholder");
@@ -1432,8 +1865,8 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
   // но на всякий случай блокируем и здесь.
   if (isGrandmaMode()) {
     await showAlertDialog(
-      "Выход заблокирован",
-      "Режим «Бабушка» включён. Сначала отключите его долгим нажатием на аватар в боковом меню."
+      t("grandma.logoutBlocked.title"),
+      t("grandma.logoutBlocked.text")
     );
     return;
   }
@@ -1461,7 +1894,7 @@ function setupMfaUI() {
     const errEl = document.getElementById("mfa-challenge-error");
     errEl.textContent = "";
     if (code.length !== 6) {
-      errEl.textContent = "Введи 6 цифр";
+      errEl.textContent = t("mfa.err.6digits");
       return;
     }
 
@@ -1469,7 +1902,7 @@ function setupMfaUI() {
       const { data: factors, error: listErr } = await supabase.auth.mfa.listFactors();
       if (listErr) { errEl.textContent = listErr.message; return; }
       const totp = factors && factors.totp && factors.totp.find(f => f.status === "verified");
-      if (!totp) { errEl.textContent = "Нет активного TOTP-фактора"; return; }
+      if (!totp) { errEl.textContent = t("mfa.err.noFactor"); return; }
 
       const { data: chal, error: chalErr } = await supabase.auth.mfa.challenge({ factorId: totp.id });
       if (chalErr) { errEl.textContent = chalErr.message; return; }
@@ -1480,7 +1913,7 @@ function setupMfaUI() {
         code,
       });
       if (verifyErr) {
-        errEl.textContent = verifyErr.message || "Неверный код";
+        errEl.textContent = verifyErr.message || t("mfa.err.wrongCode");
         codeInput.value = "";
         return;
       }
@@ -1496,7 +1929,7 @@ function setupMfaUI() {
       }
 
       if (!aal2Ok) {
-        errEl.textContent = "Не удалось подтвердить 2FA. Попробуй ещё раз через 30 секунд.";
+        errEl.textContent = t("mfa.err.confirmFailed");
         codeInput.value = "";
         return;
       }
@@ -1504,12 +1937,12 @@ function setupMfaUI() {
       document.getElementById("mfa-challenge-overlay").classList.add("hidden");
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        errEl.textContent = "Не удалось получить данные пользователя";
+        errEl.textContent = t("mfa.err.noUser");
         return;
       }
       showApp(user);
     } catch (e) {
-      errEl.textContent = e.message || "Ошибка проверки кода";
+      errEl.textContent = e.message || t("mfa.err.verifyFailed");
     }
   }
 
@@ -1565,22 +1998,21 @@ async function openMfaSetup() {
       // Уже включена — показываем кнопку отключения
       body.innerHTML = `
         <div class="dialog-text">
-          Двухфакторная аутентификация <b>включена</b>.
-          При входе потребуется 6-значный код из приложения.
+          ${t("mfa.setup.enabledText")}
         </div>
         <button class="dialog-btn" id="mfa-disable-btn"
                 style="width:100%;background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger);">
-          Отключить 2FA
+          ${escapeHtml(t("mfa.setup.disableBtn"))}
         </button>`;
       document.getElementById("mfa-disable-btn").addEventListener("click", async () => {
         const ok = await showConfirmDialog(
-          "Отключить 2FA",
-          "Это сильно снизит безопасность аккаунта. Продолжить?",
-          "Отключить"
+          t("mfa.setup.disableTitle"),
+          t("mfa.setup.disableText"),
+          t("mfa.setup.disableAction")
         );
         if (!ok) return;
         const { error } = await supabase.auth.mfa.unenroll({ factorId: totp.id });
-        if (error) { await showAlertDialog("Ошибка", error.message); return; }
+        if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
         await refreshMfaStatus();
         closeMfaSetup();
       });
@@ -1594,7 +2026,7 @@ async function openMfaSetup() {
       friendlyName,
     });
     if (error) {
-      body.innerHTML = `<div class="dialog-text" style="color:var(--danger);">Ошибка: ${escapeHtml(error.message)}</div>`;
+      body.innerHTML = `<div class="dialog-text" style="color:var(--danger);">${escapeHtml(tFmt("mfa.setup.errorPrefix", { msg: error.message }))}</div>`;
       return;
     }
 
@@ -1604,15 +2036,13 @@ async function openMfaSetup() {
 
     body.innerHTML = `
       <div class="dialog-text">
-        1. Открой <b>Google Authenticator</b>, <b>Authy</b> или <b>1Password</b>.<br>
-        2. Отсканируй QR-код.<br>
-        3. Введи 6-значный код из приложения ниже.
+        ${t("mfa.setup.steps")}
       </div>
       <div style="background:#fff;padding:12px;border-radius:12px;width:fit-content;margin:0 auto 12px;">
         ${qrSvg}
       </div>
       <div class="dialog-text" style="text-align:center;font-size:12px;">
-        Если QR не сканируется, введи код вручную:<br>
+        ${escapeHtml(t("mfa.setup.manual"))}<br>
         <code style="font-size:13px;user-select:all;word-break:break-all;">${escapeHtml(secret)}</code>
       </div>
       <input type="text" id="mfa-setup-code" inputmode="numeric" maxlength="6"
@@ -1623,7 +2053,7 @@ async function openMfaSetup() {
                     text-align:center;outline:none;margin:10px 0;">
       <p class="error" id="mfa-setup-error" style="margin-bottom:10px;"></p>
       <button class="dialog-btn dialog-primary" id="mfa-setup-verify" style="width:100%;">
-        Активировать 2FA
+        ${escapeHtml(t("mfa.setup.activate"))}
       </button>`;
 
     const setupCode = document.getElementById("mfa-setup-code");
@@ -1636,7 +2066,7 @@ async function openMfaSetup() {
       const code = setupCode.value.trim();
       const err = document.getElementById("mfa-setup-error");
       err.textContent = "";
-      if (code.length !== 6) { err.textContent = "Введи 6 цифр"; return; }
+      if (code.length !== 6) { err.textContent = t("mfa.err.6digits"); return; }
 
       const { data: chal, error: chalErr } = await supabase.auth.mfa.challenge({ factorId });
       if (chalErr) { err.textContent = chalErr.message; return; }
@@ -1644,7 +2074,7 @@ async function openMfaSetup() {
       const { error: verErr } = await supabase.auth.mfa.verify({
         factorId, challengeId: chal.id, code,
       });
-      if (verErr) { err.textContent = verErr.message || "Неверный код"; return; }
+      if (verErr) { err.textContent = verErr.message || t("mfa.err.wrongCode"); return; }
 
       // Дополнительная проверка: фактор должен стать «verified».
       // Без неё бывает, что SDK думает «всё ок», но при следующем входе
@@ -1653,7 +2083,7 @@ async function openMfaSetup() {
       const verified = factorsAfter && factorsAfter.totp &&
         factorsAfter.totp.find(f => f.id === factorId && f.status === "verified");
       if (!verified) {
-        err.textContent = "Фактор не активировался. Попробуй ещё раз.";
+        err.textContent = t("mfa.setup.factorNotActive");
         return;
       }
 
@@ -1662,10 +2092,10 @@ async function openMfaSetup() {
 
       await refreshMfaStatus();
       closeMfaSetup();
-      await showAlertDialog("Готово", "Двухфакторная аутентификация включена!");
+      await showAlertDialog(t("mfa.setup.doneTitle"), t("mfa.setup.doneText"));
     });
   } catch (e) {
-    body.innerHTML = `<div class="dialog-text" style="color:var(--danger);">Ошибка: ${escapeHtml(e.message || String(e))}</div>`;
+    body.innerHTML = `<div class="dialog-text" style="color:var(--danger);">${escapeHtml(tFmt("mfa.setup.errorPrefix", { msg: e.message || String(e) }))}</div>`;
   }
 }
 
@@ -1854,7 +2284,7 @@ function resetInactivityTimer() {
   inactivityTimer = setTimeout(async () => {
     try { await supabase.auth.signOut(); } catch (e) {}
     showAuth();
-    alert("Сессия истекла из-за неактивности. Войди заново.");
+    alert(t("inactivity.expired"));
   }, INACTIVITY_MS);
 }
 
@@ -2134,7 +2564,7 @@ async function unlockE2eeWithPassword(password, opts = {}) {
       .select("*").eq("user_id", currentUser.id).maybeSingle();
     myE2eeSecret = data || null;
   }
-  if (!myE2eeSecret) throw new Error("Нет сохранённых ключей");
+  if (!myE2eeSecret) throw new Error(t("e2ee.err.noSavedKeys"));
 
   const { kek } = await Crypto.deriveKEK(password, myE2eeSecret.private_key_salt);
   const privJwk = await Crypto.unwrapPrivateKey(
@@ -2194,31 +2624,30 @@ async function openE2eeSetup() {
   const enabled = myProfile && myProfile.e2ee_enabled;
 
   if (enabled && cryptoUnlocked) {
-    title.textContent = "Шифрование включено";
+    title.textContent = t("e2ee.title.enabled");
     body.innerHTML = `
       <div class="dialog-text">
-        🔒 Все новые личные сообщения шифруются на твоём устройстве.
-        Сервер видит только шифротекст.
+        ${escapeHtml(t("e2ee.setup.enabledText"))}
       </div>
       <button class="dialog-btn dialog-primary" id="e2ee-show-safety" style="width:100%;">
-        🔑 Показать safety number
+        ${escapeHtml(t("e2ee.setup.showSafety"))}
       </button>
       <button class="dialog-btn" id="e2ee-lock-now" style="width:100%;margin-top:8px;">
-        🔒 Заблокировать сейчас
+        ${escapeHtml(t("e2ee.setup.lockNow"))}
       </button>
       <button class="dialog-btn" id="e2ee-disable" style="width:100%;margin-top:8px;
               background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger);">
-        Отключить шифрование
+        ${escapeHtml(t("e2ee.setup.disableBtn"))}
       </button>`;
     document.getElementById("e2ee-show-safety").addEventListener("click", () => {
       if (currentOtherUser) openSafetyNumberDialog(currentOtherUser);
-      else showAlertDialog("Нет чата", "Открой чат с собеседником и нажми ещё раз.");
+      else showAlertDialog(t("e2ee.setup.noChatTitle"), t("e2ee.setup.noChatText"));
     });
     document.getElementById("e2ee-lock-now").addEventListener("click", async () => {
       const ok = await showConfirmDialog(
-        "Заблокировать сейчас",
-        "Приватный ключ будет забыт. Для чтения зашифрованных сообщений потребуется снова ввести пароль.",
-        "Заблокировать"
+        t("e2ee.setup.lockTitle"),
+        t("e2ee.setup.lockText"),
+        t("e2ee.setup.lockAction")
       );
       if (!ok) return;
       lockE2ee();
@@ -2240,23 +2669,22 @@ async function openE2eeSetup() {
   }
 
   if (enabled && !cryptoUnlocked) {
-    title.textContent = "Разблокировать шифрование";
+    title.textContent = t("e2ee.title.unlock");
     body.innerHTML = `
       <div class="dialog-text">
-        Приватный ключ хранится в зашифрованном виде. Чтобы читать
-        зашифрованные сообщения, введи свой пароль.
+        ${escapeHtml(t("e2ee.setup.unlockText"))}
       </div>
-      <input type="password" id="e2ee-unlock-pw" placeholder="Пароль"
+      <input type="password" id="e2ee-unlock-pw" placeholder="${escapeHtml(t("e2ee.setup.unlockPassword"))}"
              style="width:100%;padding:14px;background:var(--bg-input);
                     border:1px solid var(--border);border-radius:12px;
                     color:var(--text);font-size:15px;outline:none;margin-bottom:10px;">
       <label class="toggle-row" style="padding:6px 0 12px;">
         <input type="checkbox" id="e2ee-unlock-trust">
-        <span>Доверять этому устройству — не спрашивать пароль при следующем входе</span>
+        <span>${escapeHtml(t("e2ee.setup.trustDevice"))}</span>
       </label>
       <p class="error" id="e2ee-unlock-err" style="margin-bottom:10px;"></p>
       <button class="dialog-btn dialog-primary" id="e2ee-unlock-btn" style="width:100%;">
-        Разблокировать
+        ${escapeHtml(t("e2ee.setup.unlockBtn"))}
       </button>`;
     document.getElementById("e2ee-unlock-btn").addEventListener("click", async () => {
       const pw = document.getElementById("e2ee-unlock-pw").value;
@@ -2266,41 +2694,37 @@ async function openE2eeSetup() {
       try {
         await unlockE2eeWithPassword(pw, { trustDevice: !!(trustCb && trustCb.checked) });
         closeE2eeSetup();
-        await showAlertDialog("Готово", "Ключ разблокирован.");
+        await showAlertDialog(t("mfa.setup.doneTitle"), t("e2ee.setup.unlockDone"));
       } catch (e) {
-        err.textContent = "Неверный пароль или повреждённый ключ";
+        err.textContent = t("e2ee.setup.unlockErr");
       }
     });
     return;
   }
 
-  title.textContent = "Включить шифрование";
+  title.textContent = t("e2ee.title.init");
   body.innerHTML = `
     <div class="dialog-text">
-      Cell сгенерирует пару ключей на твоём устройстве. Приватный ключ
-      будет зашифрован твоим паролем и сохранён на сервере в зашифрованном виде.
-      <br><br>
-      <b>Важно:</b> мы не сможем восстановить его, если ты забудешь пароль.
-      Дополнительно будут сгенерированы <b>12 слов восстановления</b> — их надо сохранить.
+      ${t("e2ee.setup.initText")}
     </div>
-    <input type="password" id="e2ee-init-pw" placeholder="Пароль"
+    <input type="password" id="e2ee-init-pw" placeholder="${escapeHtml(t("e2ee.setup.unlockPassword"))}"
            style="width:100%;padding:14px;background:var(--bg-input);
                   border:1px solid var(--border);border-radius:12px;
                   color:var(--text);font-size:15px;outline:none;margin-bottom:12px;">
     <p class="error" id="e2ee-init-err" style="margin-bottom:10px;"></p>
     <button class="dialog-btn dialog-primary" id="e2ee-init-btn" style="width:100%;">
-      Сгенерировать ключи
+      ${escapeHtml(t("e2ee.setup.initBtn"))}
     </button>`;
 
   document.getElementById("e2ee-init-btn").addEventListener("click", async () => {
     const pw = document.getElementById("e2ee-init-pw").value;
     const err = document.getElementById("e2ee-init-err");
     err.textContent = "";
-    if (!pw || pw.length < 8) { err.textContent = "Пароль слишком короткий (мин. 8)"; return; }
+    if (!pw || pw.length < 8) { err.textContent = t("e2ee.setup.pwTooShort"); return; }
 
     const btn = document.getElementById("e2ee-init-btn");
     btn.disabled = true;
-    btn.textContent = "Генерирую...";
+    btn.textContent = t("e2ee.setup.initLoading");
 
     try {
       const { pubJwk, privJwk } = await Crypto.generateIdentityKeyPair();
@@ -2340,8 +2764,8 @@ async function openE2eeSetup() {
     } catch (e) {
       console.error(e);
       btn.disabled = false;
-      btn.textContent = "Сгенерировать ключи";
-      err.textContent = e.message || "Ошибка";
+      btn.textContent = t("e2ee.setup.initBtn");
+      err.textContent = e.message || t("auth.err.prefix");
     }
   });
 }
@@ -2366,7 +2790,7 @@ function showRecoveryWords(words) {
   continueBtn.onclick = async () => {
     overlay.classList.add("hidden");
     await refreshE2eeStatus();
-    await showAlertDialog("Готово", "Шифрование включено.");
+    await showAlertDialog(t("mfa.setup.doneTitle"), t("e2ee.setup.enabledDone"));
   };
 
   overlay.classList.remove("hidden");
@@ -2374,9 +2798,9 @@ function showRecoveryWords(words) {
 
 async function disableE2ee() {
   const ok = await showConfirmDialog(
-    "Отключить шифрование",
-    "Все НОВЫЕ сообщения будут храниться в открытом виде. Уже зашифрованные останутся зашифрованными. Продолжить?",
-    "Отключить"
+    t("e2ee.disable.title"),
+    t("e2ee.disable.text"),
+    t("e2ee.disable.action")
   );
   if (!ok) return;
 
@@ -2413,13 +2837,13 @@ async function getSharedKeyFor(userId) {
 
 async function openSafetyNumberDialog(otherUser) {
   if (!cryptoUnlocked) {
-    await showAlertDialog("Заблокировано", "Разблокируй шифрование в настройках.");
+    await showAlertDialog(t("e2ee.safety.lockedTitle"), t("e2ee.safety.lockedText"));
     return;
   }
   const { data: other } = await supabase.from("profiles")
     .select("public_key, display_name, username").eq("id", otherUser.id).single();
   if (!other || !other.public_key) {
-    await showAlertDialog("Нет ключа", "У собеседника не включено шифрование.");
+    await showAlertDialog(t("e2ee.safety.noKeyTitle"), t("e2ee.safety.noKeyText"));
     return;
   }
   let theirPub;
@@ -2428,8 +2852,8 @@ async function openSafetyNumberDialog(otherUser) {
   const num = await Crypto.computeSafetyNumber(myIdentityPublicJwk, theirPub);
   const groups = num.match(/.{1,5}/g).join(" ");
   await showAlertDialog(
-    "Safety number",
-    `Сверь этот код с @${other.username} лично или вслух. Если совпадает — вас не подслушивают.\n\n${groups}`
+    t("e2ee.safety.title"),
+    tFmt("e2ee.safety.text", { username: other.username, groups })
   );
 }
 
@@ -2667,16 +3091,16 @@ async function getChannelPlaintext(msg) {
   if (!msg || !msg.encrypted) return msg.content || "";
   if (decryptedCache.has(msg.id)) return decryptedCache.get(msg.id);
   if (!cryptoUnlocked || !myIdentityPrivateJwk) {
-    return "🔒 Зашифровано — разблокируйте в настройках";
+    return t("e2ee.msg.locked");
   }
   const key = await getChannelKeyForMe(msg.chat_id);
-  if (!key) return "🔒 Нет ключа канала";
+  if (!key) return t("e2ee.msg.noChannelKey");
   try {
     const plain = await Crypto.decryptMessage(key, msg.content);
     decryptedCache.set(msg.id, plain);
     return plain;
   } catch (e) {
-    return "🔒 Не удалось расшифровать";
+    return t("e2ee.msg.decryptFailed");
   }
 }
 
@@ -2693,7 +3117,7 @@ async function getPlaintext(msg, otherIdOverride) {
 
   // Нужен ключ
   if (!cryptoUnlocked || !myIdentityPrivateJwk) {
-    return "🔒 Зашифровано — разблокируйте в настройках";
+    return t("e2ee.msg.locked");
   }
 
   // Если это канал — свой путь расшифровки
@@ -2707,16 +3131,16 @@ async function getPlaintext(msg, otherIdOverride) {
     ? (currentOtherUser && currentOtherUser.id)
     : msg.sender_id);
 
-  if (!otherId) return "🔒 Не удалось расшифровать";
+  if (!otherId) return t("e2ee.msg.decryptFailed");
 
   try {
     const sharedKey = await getSharedKeyFor(otherId);
-    if (!sharedKey) return "🔒 Нет ключа для расшифровки";
+    if (!sharedKey) return t("e2ee.msg.noSharedKey");
     const plain = await Crypto.decryptMessage(sharedKey, msg.content);
     decryptedCache.set(msg.id, plain);
     return plain;
   } catch (e) {
-    return "🔒 Не удалось расшифровать";
+    return t("e2ee.msg.decryptFailed");
   }
 }
 
@@ -2821,7 +3245,7 @@ function getPlaintextSync(msg) {
   if (!msg) return "";
   if (!msg.encrypted) return msg.content || "";
   if (decryptedCache.has(msg.id)) return decryptedCache.get(msg.id);
-  return "🔒 Зашифровано";
+  return t("preview.encrypted");
 }
 
 // Асинхронно расшифровывает превью последнего сообщения в списке чатов
@@ -4041,12 +4465,12 @@ async function loadBlocks() {
 }
 async function blockUser(userId) {
   const { error } = await supabase.from("blocked_users").insert({ blocker_id: currentUser.id, blocked_id: userId });
-  if (error) { await showAlertDialog("Ошибка", "Не удалось: " + error.message); return; }
+  if (error) { await showAlertDialog(t("auth.err.prefix"), t("block.failed") + ": " + error.message); return; }
   await loadBlocks();
 }
 async function unblockUser(userId) {
   const { error } = await supabase.from("blocked_users").delete().eq("blocker_id", currentUser.id).eq("blocked_id", userId);
-  if (error) { await showAlertDialog("Ошибка", "Не удалось: " + error.message); return; }
+  if (error) { await showAlertDialog(t("auth.err.prefix"), t("block.failed") + ": " + error.message); return; }
   await loadBlocks();
 }
 function isBlockedByMe(id) { return myBlockedIds.has(id); }
@@ -4213,7 +4637,7 @@ function subscribeToGlobalMessages() {
       // его «🔒 Зашифровано» от realtime.
       let finalPreviewText = previewText;
       if (isMine && m.encrypted && prev && prev.msgId === m.id &&
-          prev.text && prev.text !== "🔒 Зашифровано") {
+          prev.text && prev.text !== t("preview.encrypted")) {
         finalPreviewText = prev.text;
       }
 
@@ -4225,7 +4649,7 @@ function subscribeToGlobalMessages() {
       });
 
       // Расшифровываем превью, если оно зашифровано и не расшифровано локально.
-      if (m.encrypted && m.message_type !== "attachment" && finalPreviewText === "🔒 Зашифровано") {
+      if (m.encrypted && m.message_type !== "attachment" && finalPreviewText === t("preview.encrypted")) {
         if (channelCache.has(m.chat_id)) {
           // Для канала otherId не нужен — decryptChatPreview сам возьмёт
           // канальный ключ через getChannelKeyForMe (и для чужих, и для своих).
@@ -4806,10 +5230,10 @@ function updateChatItemPreview(chatId) {
   const isChannel = el.dataset.chatType === "channel";
   const previewEl = el.querySelector(".user-item-preview");
   const timeEl = el.querySelector(".user-item-time");
-  let preview = stripMarkdown(data.text) || "Нет сообщений";
+  let preview = stripMarkdown(data.text) || t("preview.noMessages");
   const isSpecialPreview = preview.startsWith("🧩") || preview.startsWith("🎁") || preview.startsWith("📷") || preview.startsWith("🎥") || preview.startsWith("📎");
   if (!isChannel && preview && !isSpecialPreview && data.senderId === currentUser.id) {
-    preview = "Вы: " + preview;
+    preview = t("preview.you") + preview;
   }
   if (previewEl) { previewEl.innerHTML = renderPreviewHtml(preview); previewEl.classList.toggle("unread", data.unread > 0); }
   if (timeEl) timeEl.textContent = data.time ? formatChatTime(data.time) : "";
@@ -5617,18 +6041,19 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
     }
     user._customName = valueToSave || null;
   } else if (action === "clear") {
-    const choice = await showChoiceDialog("Очистить чат", "Выбери, что очистить:", [
-      { label: "Только у меня", value: "me" }, { label: "У обоих", value: "both" },
-    ], "Очистить");
+    const choice = await showChoiceDialog(t("delete.clear.title"), t("delete.clear.text"), [
+      { label: t("delete.clear.me"), value: "me" },
+      { label: t("delete.clear.both"), value: "both" },
+    ], t("delete.clear.action"));
     if (!choice) return;
     await openChatWith(user);
     if (choice === "me") await clearChatForMe();
     else if (choice === "both") await clearChatForBoth();
   } else if (action === "delete") {
-    const choice = await showChoiceDialog("Удалить чат", "Что удалить?", [
-      { label: "У меня (вернётся при новом сообщении)", value: "me" },
-      { label: "У обоих (безвозвратно)", value: "both" },
-    ], "Удалить");
+    const choice = await showChoiceDialog(t("delete.chat.title"), t("delete.chat.text"), [
+      { label: t("delete.chat.me"), value: "me" },
+      { label: t("delete.chat.both"), value: "both" },
+    ], t("delete.chat.action"));
     if (!choice) return;
     await openChatWith(user);
     if (choice === "me") await hideChatFromList();
@@ -6159,7 +6584,7 @@ async function renderSystemMessage(msg) {
 }
 
 async function buildMsgHtml(msg) {
-  const time = new Date(msg.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const time = new Date(msg.created_at).toLocaleTimeString(localeId(), { hour: "2-digit", minute: "2-digit" });
   let html = "";
   if (msg.forwarded_from_name) {
     html += `<div class="msg-fwd-link" data-fwd-username="${escapeHtml(msg.forwarded_from_username || "")}">Переслано от ${escapeHtml(msg.forwarded_from_name)}</div>`;
@@ -6172,7 +6597,7 @@ async function buildMsgHtml(msg) {
     const origName = orig.sender_id === currentUser.id ? t("msg.reply.you") : (origProfile ? origProfile.display_name : "?");
     const origPlain = orig.message_type === "attachment" ? "" : await getPlaintext(orig);
     const origPreview = orig.message_type === "attachment"
-      ? (orig.file_kind === "image" ? "📷 Фото" : orig.file_kind === "video" ? "🎥 Видео" : "📎 Файл")
+      ? (orig.file_kind === "image" ? t("preview.photo") : orig.file_kind === "video" ? t("preview.video") : t("preview.file"))
       : origPlain.slice(0, 60);
     html += `<div class="msg-reply" data-scroll-to="${msg.reply_to_id}">
       <span class="msg-reply-name">${t("msg.reply.answer")} ${escapeHtml(origName)}</span>
@@ -6546,9 +6971,15 @@ function updateDateFloat() {
 function formatDateHeader(d) {
   const today = new Date();
   const yest = new Date(); yest.setDate(today.getDate() - 1);
-  if (d.toDateString() === today.toDateString()) return "Сегодня";
-  if (d.toDateString() === yest.toDateString()) return "Вчера";
-  const months = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+  if (d.toDateString() === today.toDateString()) return t("date.today");
+  if (d.toDateString() === yest.toDateString()) return t("date.yesterday");
+  const monthsRu = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+  const monthsEn = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const months = currentLang === "en" ? monthsEn : monthsRu;
+  if (currentLang === "en") {
+    if (d.getFullYear() === today.getFullYear()) return months[d.getMonth()] + " " + d.getDate();
+    return months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+  }
   if (d.getFullYear() === today.getFullYear()) return d.getDate() + " " + months[d.getMonth()];
   return d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear();
 }
@@ -6705,11 +7136,11 @@ async function runCmdPaletteSearch(q) {
   listEl.innerHTML = "";
 
   const commands = [
-    { kind: "cmd", title: "Создать канал", sub: "Открывает диалог создания канала", value: "create-channel", icon: "＋" },
-    { kind: "cmd", title: "Профиль", sub: "Свой профиль", value: "profile", icon: "👤" },
-    { kind: "cmd", title: "Подарки", sub: "Открыть мои подарки", value: "gifts", icon: "🎁" },
-    { kind: "cmd", title: "Настройки канала", sub: "Только для владельца/админа открытого канала", value: "channel-edit", icon: "⚙" },
-    { kind: "cmd", title: "О приложении", sub: "Cell · credits", value: "about", icon: "ℹ" },
+    { kind: "cmd", title: t("cmd.cmd.create-channel"), sub: t("cmd.cmd.create-channel.sub"), value: "create-channel", icon: "＋" },
+    { kind: "cmd", title: t("cmd.cmd.profile"), sub: t("cmd.cmd.profile.sub"), value: "profile", icon: "👤" },
+    { kind: "cmd", title: t("cmd.cmd.gifts"), sub: t("cmd.cmd.gifts.sub"), value: "gifts", icon: "🎁" },
+    { kind: "cmd", title: t("cmd.cmd.channel-edit"), sub: t("cmd.cmd.channel-edit.sub"), value: "channel-edit", icon: "⚙" },
+    { kind: "cmd", title: t("cmd.cmd.about"), sub: t("cmd.cmd.about.sub"), value: "about", icon: "ℹ" },
   ];
 
   const ql = q.toLowerCase();
@@ -6763,7 +7194,7 @@ async function runCmdPaletteSearch(q) {
 function renderCmdPalette() {
   const listEl = document.getElementById("cmd-palette-list");
   if (!cmdPaletteResults.length) {
-    listEl.innerHTML = '<div class="empty">Ничего не найдено</div>';
+    listEl.innerHTML = '<div class="empty">' + escapeHtml(t("cmd.empty")) + '</div>';
     return;
   }
   listEl.innerHTML = cmdPaletteResults.map((r, i) => {
@@ -6775,10 +7206,12 @@ function renderCmdPalette() {
           <div class="cmd-palette-item-title">${escapeHtml(r.title)}</div>
           <div class="cmd-palette-item-sub">${escapeHtml(r.sub)}</div>
         </div>
-        <span class="cmd-palette-item-kind">cmd</span>
+        <span class="cmd-palette-item-kind">${escapeHtml(t("cmd.kind.cmd"))}</span>
       </div>`;
     }
-    const kindLabel = r.kind === "channel" ? "канал" : r.kind === "chat" ? "чат" : "профиль";
+    const kindLabel = r.kind === "channel" ? t("cmd.kind.channel")
+      : r.kind === "chat" ? t("cmd.kind.chat")
+      : t("cmd.kind.profile");
     const avatarHtml = r.profile
       ? `<div class="avatar" data-avatar-for="${r.userId}">?</div>`
       : `<div class="avatar" style="background: hsl(${r.hue}, 60%, 55%);"></div>`;
@@ -6788,7 +7221,7 @@ function renderCmdPalette() {
         <div class="cmd-palette-item-title">${escapeHtml(r.title)}</div>
         <div class="cmd-palette-item-sub">${escapeHtml(r.sub)}</div>
       </div>
-      <span class="cmd-palette-item-kind">${kindLabel}</span>
+      <span class="cmd-palette-item-kind">${escapeHtml(kindLabel)}</span>
     </div>`;
   }).join("");
 
@@ -7245,7 +7678,7 @@ function renderEmojiGrid() {
   else list = EMOJI_SETS[emojiCurrentCategory] || [];
 
   if (!list.length) {
-    grid.innerHTML = `<div class="emoji-picker-empty">Здесь появятся недавно использованные эмодзи</div>`;
+    grid.innerHTML = `<div class="emoji-picker-empty">${escapeHtml(t("emoji.recent.empty"))}</div>`;
     return;
   }
   grid.innerHTML = list.map((em) => {
@@ -7772,7 +8205,7 @@ function renderMediaViewer() {
     v.autoplay = true;
     v.playsInline = true;
     v.onerror = () => {
-      content.innerHTML = '<div style="color:#fff;font-size:16px;text-align:center;padding:20px;">❌ Не удалось загрузить видео.<br><span style="font-size:13px;opacity:0.7;">Возможно, ссылка протухла. Переоткрой вложение.</span></div>';
+      content.innerHTML = `<div style="color:#fff;font-size:16px;text-align:center;padding:20px;">${escapeHtml(t("media.loadVideoFailed"))}<br><span style="font-size:13px;opacity:0.7;">${escapeHtml(t("media.loadVideoFailedHint"))}</span></div>`;
     };
     content.appendChild(v);
   } else {
@@ -7780,7 +8213,7 @@ function renderMediaViewer() {
     img.src = cur.url;
     img.alt = "";
     img.onerror = () => {
-      content.innerHTML = '<div style="color:#fff;font-size:16px;text-align:center;padding:20px;">❌ Не удалось загрузить изображение.<br><span style="font-size:13px;opacity:0.7;">Возможно, ссылка протухла. Переоткрой вложение.</span></div>';
+      content.innerHTML = `<div style="color:#fff;font-size:16px;text-align:center;padding:20px;">${escapeHtml(t("media.loadImageFailed"))}<br><span style="font-size:13px;opacity:0.7;">${escapeHtml(t("media.loadImageFailedHint"))}</span></div>`;
     };
     content.appendChild(img);
   }
@@ -7879,7 +8312,7 @@ async function lazyLoadEncryptedAttachment(placeholderId, msg) {
 
   if (!displayUrl) {
     el.outerHTML = `<div class="msg-attachment-uploading" style="max-width:260px;display:block;text-align:center;line-height:1.4;">
-      🔒 Файл зашифрован.<br>Разблокируйте в настройках, чтобы просмотреть.
+      ${t("attach.encryptedBlocked")}
     </div>`;
     return;
   }
@@ -7911,7 +8344,7 @@ async function buildAttachmentHtml(msg) {
   const size = msg.file_size || 0;
   const kind = msg.file_kind || "file";
   if (!url) {
-    return `<div class="msg-attachment-uploading">⏳ Загрузка…</div>`;
+    return `<div class="msg-attachment-uploading">${escapeHtml(t("attach.loadingShort"))}</div>`;
   }
 
   const isEncryptedFile = !!(msg.file_key_enc && msg.file_iv);
@@ -7921,15 +8354,15 @@ async function buildAttachmentHtml(msg) {
     const placeholderId = "att-" + msg.id + "-" + Math.random().toString(36).slice(2, 8);
     setTimeout(() => { lazyLoadEncryptedAttachment(placeholderId, msg); }, 0);
     if (kind === "image" || kind === "video") {
-      return `<div id="${placeholderId}" class="msg-attachment-uploading" style="width:200px;height:140px;display:flex;align-items:center;justify-content:center;">🔒 Загрузка...</div>`;
+      return `<div id="${placeholderId}" class="msg-attachment-uploading" style="width:200px;height:140px;display:flex;align-items:center;justify-content:center;">${escapeHtml(t("attach.encryptedLoading"))}</div>`;
     }
-    return `<div id="${placeholderId}" class="msg-attachment-uploading">🔒 Загрузка файла...</div>`;
+    return `<div id="${placeholderId}" class="msg-attachment-uploading">${escapeHtml(t("attach.encryptedLoadingFile"))}</div>`;
   }
 
   // Незашифрованные — сразу. Signed URL уже в кэше (batch-prefetch).
   const displayUrl = await getSignedUrl(url);
   if (!displayUrl) {
-    return `<div class="msg-attachment-uploading">⏳ Загрузка…</div>`;
+    return `<div class="msg-attachment-uploading">${escapeHtml(t("attach.loadingShort"))}</div>`;
   }
 
   if (kind === "image") {
@@ -8056,10 +8489,10 @@ async function uploadAndSendAttachment(file, chatId, caption, asFile) {
   try {
     originalBuffer = await file.arrayBuffer();
   } catch (ex) {
-    const t = document.querySelector(`[data-id="${tempId}"]`);
-    if (t) t.remove();
+    const tempElRead = document.querySelector(`[data-id="${tempId}"]`);
+    if (tempElRead) tempElRead.remove();
     msgCache.delete(tempId);
-    await showAlertDialog("Ошибка чтения файла", ex.message || String(ex));
+    await showAlertDialog(t("attach.err.readTitle"), ex.message || String(ex));
     return;
   }
 
@@ -8084,7 +8517,7 @@ async function uploadAndSendAttachment(file, chatId, caption, asFile) {
   if (upErr) {
     if (tempEl) tempEl.remove();
     msgCache.delete(tempId);
-    await showAlertDialog("Ошибка загрузки", upErr.message || String(upErr));
+    await showAlertDialog(t("attach.err.uploadTitle"), upErr.message || String(upErr));
     return;
   }
 
@@ -8123,7 +8556,7 @@ async function uploadAndSendAttachment(file, chatId, caption, asFile) {
   msgCache.delete(tempId);
 
   if (error) {
-    await showAlertDialog("Не отправлено", error.message || "Ошибка сети");
+    await showAlertDialog(t("attach.err.notSent"), error.message || t("attach.err.network"));
     return;
   }
 
@@ -8238,7 +8671,7 @@ async function sendMessage(chatId, content) {
   msgCache.delete(tempId);
 
   if (error) {
-    await showAlertDialog("Не отправлено", error.message || "Ошибка сети");
+    await showAlertDialog(t("attach.err.notSent"), error.message || t("attach.err.network"));
     return;
   }
 
@@ -8525,17 +8958,17 @@ function setupChatMenu() {
     if (action === "tokens") {
       openTokensDialog();
     } else if (action === "clear") {
-      const choice = await showChoiceDialog("Очистить чат", "Выбери, что очистить:", [
-        { label: "Только у меня", value: "me" },
-        { label: "У обоих", value: "both" },
-      ], "Очистить");
+      const choice = await showChoiceDialog(t("delete.clear.title"), t("delete.clear.text"), [
+        { label: t("delete.clear.me"), value: "me" },
+        { label: t("delete.clear.both"), value: "both" },
+      ], t("delete.clear.action"));
       if (choice === "me") await clearChatForMe();
       else if (choice === "both") await clearChatForBoth();
     } else if (action === "delete") {
-      const choice = await showChoiceDialog("Удалить чат", "Что удалить?", [
-        { label: "У меня (вернётся при новом сообщении)", value: "me" },
-        { label: "У обоих (безвозвратно)", value: "both" },
-      ], "Удалить");
+      const choice = await showChoiceDialog(t("delete.chat.title"), t("delete.chat.text"), [
+        { label: t("delete.chat.me"), value: "me" },
+        { label: t("delete.chat.both"), value: "both" },
+      ], t("delete.chat.action"));
       if (choice === "me") await hideChatFromList();
       else if (choice === "both") await deleteChatForBoth();
     } else if (action === "block") {
@@ -9016,7 +9449,7 @@ function renderMsgReactionsBar(msgId) {
 
   if (rest.length) {
     const arrow = contextReactionsExpanded ? "▴" : "▾";
-    html += `<button type="button" class="reaction-emoji-btn expand-btn" data-react-expand="1" title="Ещё реакции">${arrow}</button>`;
+    html += `<button type="button" class="reaction-emoji-btn expand-btn" data-react-expand="1" title="${escapeHtml(t("msgCtx.expand"))}">${arrow}</button>`;
   }
   html += `</div>`;
 
@@ -9128,7 +9561,7 @@ function closeMsgContextMenu() {
 
 async function openGiftDetailById(ugId) {
   const { data: ug } = await supabase.from("user_gifts").select("*").eq("id", ugId).maybeSingle();
-  if (!ug) { await showAlertDialog("Подарок", "Подарок не найден"); return; }
+  if (!ug) { await showAlertDialog(t("gifts.title.detail"), t("gifts.notFound")); return; }
   document.getElementById("gifts-overlay").classList.remove("hidden");
   await refreshBalance();
   await renderGiftDetail(ug.owner_id, ug);
@@ -9321,8 +9754,8 @@ async function startReply(msgId) {
   editingMsgId = null;
   replyToMsg = msg;
   const profile = await getProfile(msg.sender_id);
-  const name = msg.sender_id === currentUser.id ? "Ты" : (profile ? profile.display_name : "?");
-  document.getElementById("reply-bar-title").textContent = "Ответ " + name;
+  const name = msg.sender_id === currentUser.id ? t("msg.reply.you") : (profile ? profile.display_name : "?");
+  document.getElementById("reply-bar-title").textContent = t("replyBar.answer") + " " + name;
   const replyPlain = await getPlaintext(msg);
   document.getElementById("reply-bar-text").textContent = replyPlain.slice(0, 80);
   document.getElementById("reply-bar-icon").textContent = "↩";
@@ -9341,7 +9774,7 @@ async function startEdit(msgId) {
   if (msg.forwarded_from_name || msg.message_type === "tokens" || msg.message_type === "gift") return;
   cancelReply();
   editingMsgId = msgId;
-  document.getElementById("reply-bar-title").textContent = "Редактирование";
+  document.getElementById("reply-bar-title").textContent = t("replyBar.edit");
   const editPlain = await getPlaintext(msg);
   document.getElementById("reply-bar-text").textContent = editPlain.slice(0, 80);
   document.getElementById("reply-bar-icon").textContent = "✎";
@@ -9370,10 +9803,10 @@ async function handleDeleteOne(msgId) {
     await deleteMessageForBoth(msgId);
     return;
   }
-  const choice = await showChoiceDialog("Удалить сообщение", "У кого удалить?", [
-    { label: "У меня", value: "me" },
-    { label: "У обоих", value: "both" },
-  ], "Удалить");
+  const choice = await showChoiceDialog(t("delete.one.title"), t("delete.one.text"), [
+    { label: t("delete.me"), value: "me" },
+    { label: t("delete.both"), value: "both" },
+  ], t("delete.action"));
   if (choice === "me") await hideMessageForMe(msgId);
   else if (choice === "both") await deleteMessageForBoth(msgId);
 }
@@ -9382,7 +9815,7 @@ async function hideMessageForMe(msgId) {
   if (String(msgId).startsWith("tmp_")) return;
   const { error } = await supabase.from("message_hides").insert({ message_id: msgId, user_id: currentUser.id });
   if (error && !String(error.message).toLowerCase().includes("duplicate")) {
-    await showAlertDialog("Ошибка", error.message); return;
+    await showAlertDialog(t("auth.err.prefix"), error.message); return;
   }
   hiddenMsgIds.add(msgId); msgCache.delete(msgId);
   const el = document.querySelector(`[data-id="${msgId}"]`);
@@ -9395,14 +9828,9 @@ async function deleteMessageForBoth(msgId) {
   // 🔴 .select() — критично: Supabase с RLS возвращает error=null даже когда
   // политика не даёт удалить строку. Без select мы не увидим «0 удалено».
   const { data, error } = await supabase.from("messages").delete().eq("id", msgId).select("id");
-  if (error) { await showAlertDialog("Ошибка удаления", error.message); return; }
+  if (error) { await showAlertDialog(t("delete.failed.title"), error.message); return; }
   if (!data || data.length === 0) {
-    await showAlertDialog(
-      "Не удалось удалить",
-      "Сервер не подтвердил удаление. Вероятно, RLS-политика на таблице messages " +
-      "не разрешает удалять это сообщение. Покажи мне SQL-политику для messages — " +
-      "я подскажу, как поправить."
-    );
+    await showAlertDialog(t("delete.failed.title"), t("delete.failed.text"));
     return;
   }
   msgCache.delete(msgId); reactionsCache.delete(msgId);
@@ -9430,7 +9858,7 @@ function setupSelectionToolbar() {
     if (selectedMsgIds.has(id)) {
       selectedMsgIds.delete(id); el.classList.remove("selected");
     } else {
-      if (selectedMsgIds.size >= 100) { showAlertDialog("Лимит", "Максимум 100 сообщений"); return; }
+      if (selectedMsgIds.size >= 100) { showAlertDialog(t("delete.limit.title"), t("delete.limit.text")); return; }
       selectedMsgIds.add(id); el.classList.add("selected");
     }
     updateSelectionUI();
@@ -9468,10 +9896,15 @@ function updateSelectionUI() {
 async function handleDeleteSelected() {
   const count = selectedMsgIds.size;
   if (!count) return;
-  const choice = await showChoiceDialog("Удалить сообщения", `Будет удалено: ${count}`, [
-    { label: "У меня", value: "me" },
-    { label: "У обоих", value: "both" },
-  ], "Удалить");
+  const choice = await showChoiceDialog(
+    t("delete.selected.title"),
+    tFmt("delete.selected.text", { n: count }),
+    [
+      { label: t("delete.me"), value: "me" },
+      { label: t("delete.both"), value: "both" },
+    ],
+    t("delete.action")
+  );
   if (!choice) return;
   const ids = [...selectedMsgIds].filter((id) => !String(id).startsWith("tmp_"));
   if (choice === "me") {
@@ -9483,7 +9916,7 @@ async function handleDeleteSelected() {
     }
   } else if (choice === "both") {
     const { data: del, error } = await supabase.from("messages").delete().in("id", ids).select("id");
-    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
     const deletedIds = new Set((del || []).map((r) => r.id));
     ids.forEach((id) => {
       if (!deletedIds.has(id)) return;
@@ -9849,7 +10282,7 @@ function formatChatTime(ts) {
   const d = new Date(ts);
   const now = new Date();
   const isToday = d.toDateString() === now.toDateString();
-  if (isToday) return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  if (isToday) return d.toLocaleTimeString(localeId(), { hour: "2-digit", minute: "2-digit" });
   const day = String(d.getDate()).padStart(2, "0");
   const mo = String(d.getMonth() + 1).padStart(2, "0");
   return `${day}.${mo}`;
@@ -11122,8 +11555,10 @@ async function openTokensDialog() {
   const balance = data ? data.imagi_tokens : 0;
   myProfile.imagi_tokens = balance;
 
-  document.getElementById("tokens-send-to").textContent = "Кому: " + currentOtherUser.display_name;
-  document.getElementById("tokens-send-balance").innerHTML = `У вас: ${NECTAR_HTML} <b>${balance}</b>`;
+  document.getElementById("tokens-send-to").textContent = tFmt("tokens.to", { name: currentOtherUser.display_name });
+  document.getElementById("tokens-send-balance").innerHTML = tFmt("tokens.balance", {
+    balance: `${NECTAR_HTML} <b>${balance}</b>`,
+  });
   const amountEl = document.getElementById("tokens-send-amount");
   amountEl.value = "";
   amountEl.max = balance;
@@ -12290,12 +12725,16 @@ async function renderPinBar() {
   if (!pin) { bar.classList.add("hidden"); return; }
   const msg = pin._msg;
   const plain = await getPlaintext(msg);
-  const preview = stripMarkdown(plain || "") || (msg.message_type === "gift" ? "🎁 Подарок" : msg.message_type === "tokens" ? "🧩 ImagiTokens" : "");
-  textEl.textContent = preview.slice(0, 80) || "(сообщение)";
+  const preview = stripMarkdown(plain || "") || (
+    msg.message_type === "gift" ? t("pins.gift")
+    : msg.message_type === "tokens" ? t("pins.tokens")
+    : ""
+  );
+  textEl.textContent = preview.slice(0, 80) || t("pins.noText");
   const total = currentPinnedList.length;
   titleEl.textContent = total > 1
-    ? `Закреплённое сообщение · ${currentPinnedIndex + 1} из ${total}`
-    : "Закреплённое сообщение";
+    ? tFmt("pins.multi", { i: currentPinnedIndex + 1, total })
+    : t("pins.one");
 }
 
 function updateCurrentPinnedByScroll() {
@@ -12325,8 +12764,8 @@ function updatePinMenuLabel(msgId) {
   if (!pinBtn) return;
   const myPin = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "personal" && p.pinned_by === currentUser.id);
   const sharedPin = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "shared");
-  if (myPin || sharedPin) pinBtn.textContent = "Открепить";
-  else pinBtn.textContent = "Закрепить";
+  if (myPin || sharedPin) pinBtn.textContent = t("msgCtx.unpin");
+  else pinBtn.textContent = t("msgCtx.pin");
 }
 
 async function handlePinAction(msgId) {
@@ -12343,15 +12782,15 @@ async function handlePinAction(msgId) {
     }
     const existing = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "shared");
     if (existing) {
-      const ok = await showConfirmDialog("Открепить", "Открепить это сообщение в канале?", "Открепить");
+      const ok = await showConfirmDialog(t("msgCtx.unpin"), t("pins.unpinChannel"), t("pins.chooseAction"));
       if (!ok) return;
       const { error } = await supabase.from("pinned_messages").delete().eq("id", existing.id);
-      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
     } else {
       const { error } = await supabase.from("pinned_messages").insert({
         chat_id: currentChatId, message_id: msgId, pinned_by: currentUser.id, scope: "shared",
       });
-      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
     }
     await loadPinned(currentChatId);
     return;
@@ -12363,72 +12802,76 @@ async function handlePinAction(msgId) {
 
   // Если уже shared — только «открепить»
   if (sharedPin && !myPin) {
-    const ok = await showConfirmDialog("Открепить", "Открепить это сообщение у обоих?", "Открепить");
+    const ok = await showConfirmDialog(t("msgCtx.unpin"), t("pins.unpinShared"), t("pins.chooseAction"));
     if (!ok) return;
     const { error } = await supabase.from("pinned_messages").delete().eq("id", sharedPin.id);
-    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
     await loadPinned(currentChatId);
     return;
   }
 
   // Если только личный — только «открепить у меня»
   if (myPin && !sharedPin) {
-    const ok = await showConfirmDialog("Открепить", "Открепить это сообщение у себя?", "Открепить");
+    const ok = await showConfirmDialog(t("msgCtx.unpin"), t("pins.unpinMine"), t("pins.chooseAction"));
     if (!ok) return;
     const { error } = await supabase.from("pinned_messages").delete().eq("id", myPin.id);
-    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
     await loadPinned(currentChatId);
     return;
   }
 
   // Если оба закрепа — предложить снять любой
   if (myPin && sharedPin) {
-    const choice = await showChoiceDialog("Открепление", "Что снять?", [
-      { label: "У меня", value: "unpin_me" },
-      { label: "У обоих", value: "unpin_both" },
-    ], "Открепить");
+    const choice = await showChoiceDialog(t("pins.choose"), t("pins.chooseText"), [
+      { label: t("pins.chooseUnpinMe"), value: "unpin_me" },
+      { label: t("pins.chooseUnpinBoth"), value: "unpin_both" },
+    ], t("pins.chooseAction"));
     if (!choice) return;
     const id = choice === "unpin_me" ? myPin.id : sharedPin.id;
     const { error } = await supabase.from("pinned_messages").delete().eq("id", id);
-    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
     await loadPinned(currentChatId);
     return;
   }
 
   // Ничего нет — предлагаем закрепить
-  const choice2 = await showChoiceDialog("Закрепление", "Как закрепить?", [
-    { label: "У меня", value: "pin_me" },
-    { label: "У обоих", value: "pin_both" },
-  ], "Закрепить");
+  const choice2 = await showChoiceDialog(t("pins.pinTitle"), t("pins.pinText"), [
+    { label: t("pins.pinMe"), value: "pin_me" },
+    { label: t("pins.pinBoth"), value: "pin_both" },
+  ], t("pins.pinAction"));
   if (!choice2) return;
 
   if (choice2 === "pin_me") {
     const { error } = await supabase.from("pinned_messages").insert({
       chat_id: currentChatId, message_id: msgId, pinned_by: currentUser.id, scope: "personal",
     });
-    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
   } else {
     const { error } = await supabase.from("pinned_messages").insert({
       chat_id: currentChatId, message_id: msgId, pinned_by: currentUser.id, scope: "shared",
     });
-    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
   }
   await loadPinned(currentChatId);
 }
 
 function openPinnedListDialog() {
   if (!currentPinnedList.length) {
-    showAlertDialog("Закреплённые", "Пока нет закреплённых сообщений.");
+    showAlertDialog(t("pins.title"), t("pins.none"));
     return;
   }
   const listEl = document.getElementById("pinned-list");
   listEl.innerHTML = currentPinnedList.map((pin, idx) => {
     const msg = pin._msg;
     const time = new Date(msg.created_at).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-    const preview = stripMarkdown(decryptedCache.get(msg.id) || (msg.encrypted ? "🔒 Зашифровано" : msg.content) || "") || (msg.message_type === "gift" ? "🎁 Подарок" : msg.message_type === "tokens" ? "🧩 ImagiTokens" : "(без текста)");
+    const preview = stripMarkdown(decryptedCache.get(msg.id) || (msg.encrypted ? t("preview.encrypted") : msg.content) || "") || (
+      msg.message_type === "gift" ? t("pins.gift")
+      : msg.message_type === "tokens" ? t("pins.tokens")
+      : t("pins.noText")
+    );
     const sender = profileCache.get(msg.sender_id);
-    const senderName = msg.sender_id === currentUser.id ? "Вы" : (sender ? sender.display_name : "—");
-    const scopeLabel = pin.scope === "shared" ? "Общий" : "Личный";
+    const senderName = msg.sender_id === currentUser.id ? t("pins.you") : (sender ? sender.display_name : "—");
+    const scopeLabel = pin.scope === "shared" ? t("pins.scope.shared") : t("pins.scope.personal");
     return `
       <div class="pinned-list-item" data-pin-idx="${idx}">
         <div class="pinned-list-item-head">
@@ -12440,7 +12883,7 @@ function openPinnedListDialog() {
           <span>${scopeLabel}</span>
           <button type="button" class="pinned-unpin-btn" data-unpin-idx="${idx}"
                   style="background:transparent;border:none;color:var(--danger);font-size:12px;font-family:inherit;cursor:pointer;padding:2px 6px;border-radius:6px;">
-            Открепить
+            ${escapeHtml(t("pins.unpin"))}
           </button>
         </div>
       </div>`;
@@ -12461,11 +12904,15 @@ function openPinnedListDialog() {
       const idx = parseInt(btn.dataset.unpinIdx, 10);
       const pin = currentPinnedList[idx];
       if (!pin) return;
-      const label = pin.scope === "shared" ? "у обоих" : "у себя";
-      const ok = await showConfirmDialog("Открепить", `Открепить сообщение ${label}?`, "Открепить");
+      const label = pin.scope === "shared" ? t("pins.unpinLabelBoth") : t("pins.unpinLabelMine");
+      const ok = await showConfirmDialog(
+        t("msgCtx.unpin"),
+        tFmt("pins.unpinOne", { label }),
+        t("pins.chooseAction")
+      );
       if (!ok) return;
       const { error } = await supabase.from("pinned_messages").delete().eq("id", pin.id);
-      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
       await loadPinned(currentChatId);
       if (currentPinnedList.length) openPinnedListDialog();
       else document.getElementById("pinned-list-overlay").classList.add("hidden");
