@@ -231,6 +231,15 @@ const I18N = {
     "settings.close": "Закрыть",
     "settings.language.label": "Язык",
     "settings.language.hint": "Язык интерфейса. Ники, названия каналов и подписи подарков не переводятся.",
+    "settings.notifications.label": "Уведомления",
+    "settings.notifications.enable": "Показывать уведомления о новых сообщениях",
+    "settings.notifications.hint": "На компьютере уведомление всплывает в системном углу экрана. На телефоне — работает, когда приложение открыто или свёрнуто.",
+    "settings.notifications.test": "Проверить уведомление",
+    "settings.notifications.testTitle": "Cell",
+    "settings.notifications.testBody": "Так будет выглядеть уведомление о новом сообщении.",
+    "settings.notifications.denied": "Уведомления запрещены в настройках браузера",
+    "settings.notifications.deniedText": "Разреши уведомления для сайта в настройках браузера и попробуй снова.",
+    "notif.newMessage": "Новое сообщение",
 
     // ---- Экран входа ----
     "auth.tagline": "Собираемся по кусочкам",
@@ -959,6 +968,15 @@ const I18N = {
     "settings.close": "Close",
     "settings.language.label": "Language",
     "settings.language.hint": "Interface language. Nicknames, channel names and gift captions are not translated.",
+    "settings.notifications.label": "Notifications",
+    "settings.notifications.enable": "Show notifications about new messages",
+    "settings.notifications.hint": "On desktop, a notification pops up in the system corner. On mobile, it works while the app is open or in the background.",
+    "settings.notifications.test": "Test notification",
+    "settings.notifications.testTitle": "Cell",
+    "settings.notifications.testBody": "This is how a new-message notification will look.",
+    "settings.notifications.denied": "Notifications are blocked in browser settings",
+    "settings.notifications.deniedText": "Allow notifications for this site in your browser settings and try again.",
+    "notif.newMessage": "New message",
 
     // ---- Auth screen ----
     "auth.tagline": "Gathering piece by piece",
@@ -4807,7 +4825,58 @@ function subscribeToGlobalMessages() {
           setTimeout(() => markChatRead(m.chat_id), 300);
         }
       }
+
+      // Уведомление о новом входящем сообщении.
+      // — не показываем для своих сообщений;
+      // — не показываем, если это открытый сейчас чат И окно в фокусе;
+      // — не показываем для замьюченных чатов (muted, см. следующий этап);
+      // — не показываем для сервисных сообщений (gift/tokens/attachment с пустым текстом).
+      if (!isMine) {
+        const chatEl = document.querySelector(`.user-item[data-chat-id="${m.chat_id}"]`);
+        const isMuted = chatEl && chatEl.dataset.muted === "1";
+        const isCurrentChatVisible =
+          currentChatId === m.chat_id &&
+          document.visibilityState === "visible" &&
+          document.hasFocus();
+        if (!isMuted && !isCurrentChatVisible) {
+          showMessageNotification(m);
+        }
+      }
     }).subscribe();
+}
+
+// Формирует и показывает уведомление о новом сообщении.
+async function showMessageNotification(m) {
+  if (!m) return;
+  // Имя отправителя: из profileCache (заполняется при загрузке списка чатов).
+  let senderName = "Cell";
+  try {
+    const p = profileCache.get(m.sender_id);
+    if (p && p.display_name) senderName = p.display_name;
+    else {
+      const { data } = await supabase.from("profiles")
+        .select("display_name").eq("id", m.sender_id).maybeSingle();
+      if (data && data.display_name) senderName = data.display_name;
+    }
+  } catch (e) { /* silent */ }
+
+  let body = "";
+  if (m.message_type === "tokens") body = t("preview.gift");
+  else if (m.message_type === "gift") body = t("preview.gift");
+  else if (m.message_type === "attachment") {
+    if (m.file_kind === "image") body = t("preview.photo");
+    else if (m.file_kind === "video") body = t("preview.video");
+    else body = t("preview.file");
+  } else if (m.encrypted) {
+    body = t("preview.encrypted");
+  } else {
+    body = stripMarkdown(m.content || "").slice(0, 140);
+  }
+
+  showAppNotification(senderName, {
+    body: body || t("notif.newMessage"),
+    tag: "cell-chat-" + m.chat_id,
+  });
 }
 
 function updateUserEverywhere(profile) {
@@ -13720,6 +13789,67 @@ function setupSettings() {
   const mfaSetupClose = document.getElementById("mfa-setup-close");
   if (mfaSetupClose) mfaSetupClose.addEventListener("click", closeMfaSetup);
 
+  // Секция «Уведомления»
+  const notifCb = document.getElementById("settings-notifications-enabled");
+  const notifTest = document.getElementById("settings-notifications-test");
+  if (notifCb && !notifCb.__bound) {
+    notifCb.__bound = true;
+    notifCb.checked = areNotificationsEnabled();
+    notifCb.addEventListener("change", async () => {
+      if (notifCb.checked) {
+        const ok = await requestNotificationPermission();
+        if (!ok) {
+          notifCb.checked = false;
+          setNotificationsEnabled(false);
+          await showAlertDialog(
+            t("settings.notifications.denied"),
+            t("settings.notifications.deniedText")
+          );
+          return;
+        }
+        setNotificationsEnabled(true);
+      } else {
+        setNotificationsEnabled(false);
+      }
+    });
+  }
+  if (notifTest && !notifTest.__bound) {
+    notifTest.__bound = true;
+    notifTest.addEventListener("click", async () => {
+      // Тест тоже требует клика — просим разрешение здесь.
+      if (!areNotificationsEnabled()) {
+        const ok = await requestNotificationPermission();
+        if (!ok) {
+          await showAlertDialog(
+            t("settings.notifications.denied"),
+            t("settings.notifications.deniedText")
+          );
+          return;
+        }
+        setNotificationsEnabled(true);
+        if (notifCb) notifCb.checked = true;
+      }
+      // Принудительно показываем — игнорируя фокус окна (иначе тест
+      // ничего не покажет, ведь пользователь как раз смотрит на экран).
+      if (!("Notification" in window) || Notification.permission !== "granted") {
+        await showAlertDialog(
+          t("settings.notifications.denied"),
+          t("settings.notifications.deniedText")
+        );
+        return;
+      }
+      try {
+        const n = new Notification(t("settings.notifications.testTitle"), {
+          body: t("settings.notifications.testBody"),
+          icon: "icon-192.png",
+        });
+        setTimeout(() => { try { n.close(); } catch (e) {} }, 6000);
+      } catch (e) {
+        await showAlertDialog(t("auth.err.prefix"), String(e.message || e));
+      }
+    });
+  }
+
   // Кнопка «Режим Бабушка»
   const grandmaBtn = document.getElementById("grandma-toggle-btn");
   if (grandmaBtn) {
@@ -13766,6 +13896,8 @@ function setupSettings() {
   btn.addEventListener("click", async () => {
     updateSettingsUI();
     updateAccentButtons();
+    const notifCbSync = document.getElementById("settings-notifications-enabled");
+    if (notifCbSync) notifCbSync.checked = areNotificationsEnabled();
     await refreshMfaStatus();
     await refreshE2eeStatus();
     // Пересобираем видимость на случай, если режим Бабушка включён.
@@ -14024,6 +14156,68 @@ function setupAttachPreviewDialog() {
 // ======================================================
 // 44.5. ВОССТАНОВЛЕНИЕ ПАРОЛЯ ПО ПОЧТЕ
 // ======================================================
+
+// ======================================================
+// УВЕДОМЛЕНИЯ О НОВЫХ СООБЩЕНИЯХ
+// ======================================================
+// Хранится в localStorage: cell_notifications_enabled = "1" | "0".
+// По умолчанию выключено — пользователь должен сам включить в настройках
+// (иначе браузер будет ругаться на запрос разрешения без клика).
+const NOTIFICATIONS_KEY = "cell_notifications_enabled";
+
+function areNotificationsEnabled() {
+  try { return localStorage.getItem(NOTIFICATIONS_KEY) === "1"; } catch (e) { return false; }
+}
+
+function setNotificationsEnabled(on) {
+  try { localStorage.setItem(NOTIFICATIONS_KEY, on ? "1" : "0"); } catch (e) {}
+}
+
+// Просит у браузера разрешение. Возвращает true/false.
+// НЕ вызывать без клика пользователя — браузер проигнорирует.
+async function requestNotificationPermission() {
+  if (!("Notification" in window)) return false;
+  if (Notification.permission === "granted") return true;
+  if (Notification.permission === "denied") return false;
+  try {
+    const perm = await Notification.requestPermission();
+    return perm === "granted";
+  } catch (e) {
+    return false;
+  }
+}
+
+// Показывает уведомление. Тихо игнорируется, если:
+//  — выключено в настройках,
+//  — браузер не поддерживает Notification API,
+//  — вкладка/окно в фокусе (пользователь и так видит).
+// opts: { body, tag, silent }.
+function showAppNotification(title, opts) {
+  opts = opts || {};
+  if (!areNotificationsEnabled()) return;
+  if (!("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+
+  // Не показываем, если вкладка в фокусе и активна — пользователь и так видит сообщение.
+  if (document.visibilityState === "visible" && document.hasFocus()) return;
+
+  try {
+    const iconUrl = "icon-192.png";
+    const n = new Notification(title, {
+      body: opts.body || "",
+      tag: opts.tag || "cell-message",
+      icon: iconUrl,
+      badge: iconUrl,
+      silent: !!opts.silent,
+    });
+    n.onclick = () => {
+      try { window.focus(); n.close(); } catch (e) {}
+    };
+    setTimeout(() => { try { n.close(); } catch (e) {} }, 8000);
+  } catch (e) {
+    console.warn("Notification failed:", e);
+  }
+}
 
 // ======================================================
 // ЛОКАЛЬНЫЙ ВХОД (anonymous sign-in)
