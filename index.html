@@ -727,7 +727,18 @@
 
   <div id="settings-overlay" class="dialog-overlay hidden">
     <div class="dialog dialog-settings">
-      <div class="dialog-title">Настройки</div>
+      <div class="dialog-title" data-i18n="settings.title">Настройки</div>
+
+      <div class="profile-section" id="settings-language-section">
+        <div class="profile-label" data-i18n="settings.language.label">Язык</div>
+        <div class="visibility-toggle" id="settings-language-toggle">
+          <button type="button" data-lang="ru">Русский</button>
+          <button type="button" data-lang="en">English</button>
+        </div>
+        <div class="username-hint" data-i18n="settings.language.hint">
+          Язык интерфейса. Ники, названия каналов и подписи подарков не переводятся.
+        </div>
+      </div>
 
       <div class="profile-section">
         <div class="profile-label">Цвет приложения</div>
@@ -785,7 +796,7 @@
       </div>
 
       <div class="dialog-actions">
-        <button class="dialog-btn dialog-primary" id="settings-close">Закрыть</button>
+        <button class="dialog-btn dialog-primary" id="settings-close" data-i18n="settings.close">Закрыть</button>
       </div>
     </div>
   </div>

@@ -193,6 +193,90 @@ try {
 } catch (e) { /* silent */ }
 document.documentElement.dataset.scrollMode = scrollMode;
 
+// ======================================================
+// I18N — локализация интерфейса
+// ======================================================
+// Словарь строк. Ключи — по секциям, чтобы не запутаться.
+// При переводе пользовательских данных (ники, каналы, подписи
+// подарков) — они НЕ переводятся, они хранятся в БД как есть.
+const LANG_KEY = "cell_lang";
+
+const I18N = {
+  ru: {
+    "settings.title": "Настройки",
+    "settings.close": "Закрыть",
+    "settings.language.label": "Язык",
+    "settings.language.hint": "Язык интерфейса. Ники, названия каналов и подписи подарков не переводятся.",
+  },
+  en: {
+    "settings.title": "Settings",
+    "settings.close": "Close",
+    "settings.language.label": "Language",
+    "settings.language.hint": "Interface language. Nicknames, channel names and gift captions are not translated.",
+  },
+};
+
+// Текущий язык. Приоритет: сохранённый в localStorage → по браузеру → ru.
+let currentLang = "ru";
+try {
+  const saved = localStorage.getItem(LANG_KEY);
+  if (saved === "ru" || saved === "en") {
+    currentLang = saved;
+  } else if (navigator.language && navigator.language.toLowerCase().startsWith("en")) {
+    currentLang = "en";
+  }
+} catch (e) { /* silent */ }
+
+// Хелпер перевода. Если ключа нет в текущем языке — падаем на ru,
+// потом на fallback, потом на сам ключ (чтобы не было пустоты).
+function t(key, fallback) {
+  const dict = I18N[currentLang] || I18N.ru;
+  if (dict[key] !== undefined) return dict[key];
+  if (I18N.ru[key] !== undefined) return I18N.ru[key];
+  return fallback !== undefined ? fallback : key;
+}
+
+// Переключить язык и перерисовать все видимые тексты.
+function setLanguage(lang) {
+  if (lang !== "ru" && lang !== "en") return;
+  currentLang = lang;
+  try { localStorage.setItem(LANG_KEY, lang); } catch (e) { /* silent */ }
+  applyLanguage();
+}
+
+// Применяет переводы к статическому HTML:
+//  - data-i18n              → textContent
+//  - data-i18n-placeholder  → placeholder
+//  - data-i18n-title        → title (тултип)
+// Плюс подсвечивает активную кнопку в переключателе языка.
+function applyLanguage() {
+  document.documentElement.setAttribute("lang", currentLang);
+
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    if (key) el.textContent = t(key);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-placeholder");
+    if (key) el.setAttribute("placeholder", t(key));
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-title");
+    if (key) el.setAttribute("title", t(key));
+  });
+
+  const langToggle = document.getElementById("settings-language-toggle");
+  if (langToggle) {
+    langToggle.querySelectorAll("button[data-lang]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.lang === currentLang);
+    });
+  }
+}
+
+// Применяем язык сразу при загрузке скрипта — DOM уже разобран
+// (app.js подключён как type="module" → defer-поведение).
+applyLanguage();
+
 // ======================= Nectar (валюта) =======================
 const NECTAR_ICON_URL = "https://i.ibb.co/MkfVPGwZ/icons8-100.png";
 const NECTAR_HTML = `<img class="nectar-icon" src="${NECTAR_ICON_URL}" alt="Nectar" draggable="false">`;
@@ -11752,6 +11836,21 @@ function setupSettings() {
   const closeBtn = document.getElementById("settings-close");
   const toggle = document.getElementById("settings-scroll-mode");
   if (!btn || !overlay) return;
+
+  // Переключатель языка. Привязываем один раз (защита от двойного
+  // вызова setupSettings — например, при повторном входе).
+  const langToggle = document.getElementById("settings-language-toggle");
+  if (langToggle && !langToggle.__langBound) {
+    langToggle.__langBound = true;
+    langToggle.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-lang]");
+      if (!b) return;
+      if (b.dataset.lang === currentLang) return;
+      setLanguage(b.dataset.lang);
+    });
+  }
+  // Подсветить актуальную кнопку (на случай, если язык выбирался в прошлой сессии)
+  applyLanguage();
 
   // Секция 2FA
   const mfaManageBtn = document.getElementById("mfa-manage-btn");
