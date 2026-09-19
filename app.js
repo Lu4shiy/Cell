@@ -11409,7 +11409,7 @@ async function renderGiftDetail(ownerId, ug) {
     <div class="gift-detail">
       <div class="gift-hero" style="${bg}">
         <div class="gift-hero-pattern" style="${patternStyle}"></div>
-        <div class="gift-hero-emoji">${renderGiftModel(giftDisplayImage(cat, ug), 96)}</div>
+        <div class="gift-hero-emoji">${renderGiftModel(giftDisplayImage(cat, ug), 170)}</div>
       </div>
 
       <div class="gift-detail-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
