@@ -445,16 +445,16 @@
 
   <div id="forward-overlay" class="dialog-overlay hidden">
     <div class="dialog">
-      <div class="dialog-title">Переслать</div>
-      <div class="dialog-text" id="forward-info">Выбери чаты</div>
+      <div class="dialog-title" data-i18n="forward.title">Переслать</div>
+      <div class="dialog-text" id="forward-info" data-i18n="forward.pickChats">Выбери чаты</div>
       <div id="forward-list" class="forward-list"></div>
       <label class="toggle-row">
         <input type="checkbox" id="forward-hide-sender">
-        <span>Скрыть отправителя</span>
+        <span data-i18n="forward.hideSender">Скрыть отправителя</span>
       </label>
       <div class="dialog-actions">
-        <button class="dialog-btn dialog-primary" id="forward-send">Переслать</button>
-        <button class="dialog-btn dialog-cancel" id="forward-cancel">Отмена</button>
+        <button class="dialog-btn dialog-primary" id="forward-send" data-i18n="forward.send">Переслать</button>
+        <button class="dialog-btn dialog-cancel" id="forward-cancel" data-i18n="dialog.cancel">Отмена</button>
       </div>
     </div>
   </div>
@@ -955,19 +955,19 @@
       <label class="toggle-row attach-preview-toggle">
         <span class="cell-icon cell-icon-sm" data-icon="checkboxOff" id="attach-as-file-icon"></span>
         <input type="checkbox" id="attach-as-file">
-        <span>Отправить как файл</span>
+        <span data-i18n="attach.asFile">Отправить как файл</span>
       </label>
 
-      <div class="profile-label" style="margin-top:4px;">Подпись</div>
-      <textarea id="attach-caption" class="attach-caption" placeholder="Введите подпись..." rows="1"></textarea>
+      <div class="profile-label" style="margin-top:4px;" data-i18n="attach.caption">Подпись</div>
+      <textarea id="attach-caption" class="attach-caption" placeholder="Введите подпись..." data-i18n-placeholder="attach.captionPlaceholder" rows="1"></textarea>
 
       <input type="file" id="attach-more-input" multiple hidden>
 
       <div class="attach-preview-actions">
-        <button type="button" class="attach-add-btn" id="attach-add-btn" title="Добавить файл"><span class="cell-icon" data-icon="addFile"></span></button>
+        <button type="button" class="attach-add-btn" id="attach-add-btn" title="Добавить файл" data-i18n-title="attach.addFile"><span class="cell-icon" data-icon="addFile"></span></button>
         <div class="attach-preview-actions-right">
-          <button class="dialog-btn dialog-cancel" id="attach-preview-cancel">Отмена</button>
-          <button class="dialog-btn dialog-primary" id="attach-preview-send">Отправить</button>
+          <button class="dialog-btn dialog-cancel" id="attach-preview-cancel" data-i18n="dialog.cancel">Отмена</button>
+          <button class="dialog-btn dialog-primary" id="attach-preview-send" data-i18n="attach.send">Отправить</button>
         </div>
       </div>
     </div>

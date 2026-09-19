@@ -619,6 +619,44 @@ const I18N = {
     "channel.err.noRightsOwner": "Только владелец канала может это делать",
     "channel.err.noRightsAdmin": "Только администраторы могут это делать",
 
+    // ---- Пересылка ----
+    "forward.title": "Переслать",
+    "forward.info": "Выбрано чатов: {n} / 10",
+    "forward.pickChats": "Выбери чаты",
+    "forward.hideSender": "Скрыть отправителя",
+    "forward.send": "Переслать",
+    "forward.cancel": "Отмена",
+    "forward.limit": "Максимум 10 чатов",
+    "forward.none": "Нет чатов",
+    "forward.done": "Готово",
+    "forward.linkSent": "Ссылка отправлена.",
+
+    // ---- Предпросмотр вложений ----
+    "attach.title.image": "Отправить изображение",
+    "attach.title.video": "Отправить видео",
+    "attach.title.file": "Отправить файл",
+    "attach.title.generic": "Отправить",
+    "attach.asFile": "Отправить как файл",
+    "attach.caption": "Подпись",
+    "attach.captionPlaceholder": "Введите подпись...",
+    "attach.addFile": "Добавить файл",
+    "attach.remove": "Убрать",
+    "attach.send": "Отправить",
+    "attach.cancel": "Отмена",
+    "attach.tooBig": "Файл слишком большой",
+    "attach.tooBigText": "«{name}» больше {size}.",
+    "attach.tooMany": "Слишком много файлов",
+    "attach.tooManyText": "Максимум {n} файлов за раз.",
+
+    // ---- Прочие алерты ----
+    "alert.error": "Ошибка",
+    "alert.notSent": "Не отправлено",
+    "alert.notSentBlocked": "Сообщение не отправлено: есть блокировка.",
+    "alert.notSentAttachment": "Есть блокировка — вложение не отправлено.",
+    "alert.cant": "Нельзя",
+    "alert.noChatYet": "Сначала напишите сообщение собеседнику — тогда создастся чат",
+    "alert.createChatFail": "Не удалось создать чат",
+
     // ---- Системные сообщения ----
     "msg.gift.youSent": "Вы отправили подарок за {price} {icon}",
     "msg.gift.sent.male": "{name} отправил вам подарок за {price} {icon}",
@@ -1065,6 +1103,44 @@ const I18N = {
     "channel.err.noRightsOwner": "Only the channel owner can do this",
     "channel.err.noRightsAdmin": "Only administrators can do this",
 
+    // ---- Forward ----
+    "forward.title": "Forward",
+    "forward.info": "Selected chats: {n} / 10",
+    "forward.pickChats": "Pick chats",
+    "forward.hideSender": "Hide sender",
+    "forward.send": "Forward",
+    "forward.cancel": "Cancel",
+    "forward.limit": "Maximum 10 chats",
+    "forward.none": "No chats",
+    "forward.done": "Done",
+    "forward.linkSent": "Link sent.",
+
+    // ---- Attachment preview ----
+    "attach.title.image": "Send image",
+    "attach.title.video": "Send video",
+    "attach.title.file": "Send file",
+    "attach.title.generic": "Send",
+    "attach.asFile": "Send as file",
+    "attach.caption": "Caption",
+    "attach.captionPlaceholder": "Enter a caption...",
+    "attach.addFile": "Add file",
+    "attach.remove": "Remove",
+    "attach.send": "Send",
+    "attach.cancel": "Cancel",
+    "attach.tooBig": "File is too large",
+    "attach.tooBigText": "\"{name}\" is larger than {size}.",
+    "attach.tooMany": "Too many files",
+    "attach.tooManyText": "Maximum {n} files at once.",
+
+    // ---- Other alerts ----
+    "alert.error": "Error",
+    "alert.notSent": "Not sent",
+    "alert.notSentBlocked": "Message not sent: there is a block.",
+    "alert.notSentAttachment": "There is a block — attachment was not sent.",
+    "alert.cant": "Not allowed",
+    "alert.noChatYet": "First send a message to this person — the chat will be created",
+    "alert.createChatFail": "Failed to create chat",
+
     // ---- System messages ----
     "msg.gift.youSent": "You sent a gift worth {price} {icon}",
     "msg.gift.sent.male": "{name} sent you a gift worth {price} {icon}",
@@ -1211,6 +1287,11 @@ function setLanguage(lang) {
   const chEditOverlay = document.getElementById("channel-edit-overlay");
   if (chEditOverlay && !chEditOverlay.classList.contains("hidden")) {
     if (typeof renderChannelEditAdmins === "function") renderChannelEditAdmins();
+  }
+  // Если открыт предпросмотр вложений — обновим заголовок.
+  const attachOverlay = document.getElementById("attach-preview-overlay");
+  if (attachOverlay && !attachOverlay.classList.contains("hidden")) {
+    if (typeof renderAttachPreview === "function") renderAttachPreview();
   }
 }
 
@@ -5667,7 +5748,7 @@ async function createChatWith(otherUserId) {
   const { data: newChat, error: chatErr } = await supabase.from("chats").insert({}).select().single();
   if (chatErr) {
     console.error("Ошибка создания chat:", chatErr);
-    await showAlertDialog("Ошибка", "Не удалось создать чат: " + (chatErr.message || ""));
+    await showAlertDialog(t("alert.error"), t("alert.createChatFail") + ": " + (chatErr.message || ""));
     return null;
   }
   const { error: membersErr } = await supabase.from("chat_members").insert([
@@ -5676,7 +5757,7 @@ async function createChatWith(otherUserId) {
   ]);
   if (membersErr) {
     console.error("Ошибка добавления участников:", membersErr);
-    await showAlertDialog("Ошибка", "Не удалось добавить участников: " + (membersErr.message || ""));
+    await showAlertDialog(t("alert.error"), membersErr.message || "");
     // Убираем созданный чат, чтобы не было мусора
     await supabase.from("chats").delete().eq("id", newChat.id);
     return null;
@@ -7908,16 +7989,22 @@ async function handleAttachments(files, caption, asFile) {
     }
   }
   if (currentOtherUser && (isBlockedByMe(currentOtherUser.id) || hasBlockedMe(currentOtherUser.id))) {
-    await showAlertDialog("Не отправлено", "Есть блокировка — вложение не отправлено.");
+    await showAlertDialog(t("alert.notSent"), t("alert.notSentAttachment"));
     return;
   }
   if (files.length > ATTACH_MAX_FILES) {
-    await showAlertDialog("Слишком много файлов", `Максимум ${ATTACH_MAX_FILES} файлов за раз.`);
+    await showAlertDialog(
+      t("attach.tooMany"),
+      tFmt("attach.tooManyText", { n: ATTACH_MAX_FILES })
+    );
     return;
   }
   for (const f of files) {
     if (f.size > ATTACH_MAX_SIZE) {
-      await showAlertDialog("Файл слишком большой", `«${f.name}» больше ${formatFileSize(ATTACH_MAX_SIZE)}.`);
+      await showAlertDialog(
+        t("attach.tooBig"),
+        tFmt("attach.tooBigText", { name: f.name, size: formatFileSize(ATTACH_MAX_SIZE) })
+      );
       return;
     }
   }
@@ -8058,7 +8145,7 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
   e.preventDefault();
 
   if (currentOtherUser && (isBlockedByMe(currentOtherUser.id) || hasBlockedMe(currentOtherUser.id))) {
-    await showAlertDialog("Не отправлено", "Сообщение не отправлено: есть блокировка.");
+    await showAlertDialog(t("alert.notSent"), t("alert.notSentBlocked"));
     return;
   }
 
@@ -8085,7 +8172,7 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
   if (!currentChatId && currentOtherUser) {
     clearInput();
     const chatId = await createChatWith(currentOtherUser.id);
-    if (!chatId) { await showAlertDialog("Ошибка", "Не удалось создать чат"); return; }
+    if (!chatId) { await showAlertDialog(t("alert.error"), t("alert.createChatFail")); return; }
     currentChatId = chatId;
     pendingOtherUser = null;
     document.getElementById("messages").innerHTML = "";
@@ -9440,7 +9527,7 @@ async function openForwardDialog(msgs) {
   const hideRow = document.querySelector("#forward-overlay .toggle-row");
   if (hideRow) hideRow.classList.remove("hidden");
   document.getElementById("forward-overlay").classList.remove("hidden");
-  document.getElementById("forward-list").innerHTML = '<div class="empty">Загрузка...</div>';
+  document.getElementById("forward-list").innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
   await populateForwardList();
   updateForwardInfo();
 }
@@ -9456,16 +9543,16 @@ async function openInviteShareDialog(text) {
   const hideRow = document.querySelector("#forward-overlay .toggle-row");
   if (hideRow) hideRow.classList.add("hidden");
   document.getElementById("forward-overlay").classList.remove("hidden");
-  document.getElementById("forward-list").innerHTML = '<div class="empty">Загрузка...</div>';
+  document.getElementById("forward-list").innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
   await populateForwardList();
-  document.getElementById("forward-info").textContent = `Выбрано чатов: 0 / 10`;
+  document.getElementById("forward-info").textContent = tFmt("forward.info", { n: 0 });
 }
 
 async function populateForwardList() {
   const listEl = document.getElementById("forward-list");
   const { data: myChats } = await supabase.from("chat_members").select("chat_id").eq("user_id", currentUser.id);
   const chatIds = (myChats || []).map((c) => c.chat_id);
-  if (!chatIds.length) { listEl.innerHTML = '<div class="empty">Нет чатов</div>'; return; }
+  if (!chatIds.length) { listEl.innerHTML = '<div class="empty">' + escapeHtml(t("forward.none")) + '</div>'; return; }
 
   // Каналы (только те, где я owner/admin — иначе отправка упадёт по RLS)
   const { data: myChans } = await supabase.from("channels").select("*").in("id", chatIds);
@@ -9506,7 +9593,7 @@ async function populateForwardList() {
     items.push({ type: "channel", chat_id: cid, channel: chanMap.get(cid) });
   });
 
-  if (!items.length) { listEl.innerHTML = '<div class="empty">Нет чатов</div>'; return; }
+  if (!items.length) { listEl.innerHTML = '<div class="empty">' + escapeHtml(t("forward.none")) + '</div>'; return; }
 
   listEl.innerHTML = items.map((x) => {
     const isCh = x.type === "channel";
@@ -9536,7 +9623,7 @@ async function populateForwardList() {
         el.classList.remove("selected");
         el.querySelector(".fcheck").classList.add("hidden");
       } else {
-        if (forwardSelectedChats.size >= 10) { showAlertDialog("Лимит", "Максимум 10 чатов"); return; }
+        if (forwardSelectedChats.size >= 10) { showAlertDialog(t("forward.title"), t("forward.limit")); return; }
         forwardSelectedChats.add(id);
         el.classList.add("selected");
         el.querySelector(".fcheck").classList.remove("hidden");
@@ -9547,7 +9634,7 @@ async function populateForwardList() {
 }
 
 function updateForwardInfo() {
-  document.getElementById("forward-info").textContent = `Выбрано чатов: ${forwardSelectedChats.size} / 10`;
+  document.getElementById("forward-info").textContent = tFmt("forward.info", { n: forwardSelectedChats.size });
 }
 
 function setupForwardDialog() {
@@ -9576,14 +9663,14 @@ async function sendForward() {
       }
     }
     const { error } = await supabase.from("messages").insert(payloads);
-    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    if (error) { await showAlertDialog(t("alert.error"), error.message); return; }
     document.getElementById("forward-overlay").classList.add("hidden");
     forwardPlainText = false;
     if (inviteShareReturnToInvite) {
       inviteShareReturnToInvite = false;
       document.getElementById("invite-overlay").classList.remove("hidden");
     }
-    await showAlertDialog("Готово", "Ссылка отправлена.");
+    await showAlertDialog(t("forward.done"), t("forward.linkSent"));
     return;
   }
 
@@ -9678,7 +9765,7 @@ async function sendForward() {
     : null;
 
   const { error } = await supabase.from("messages").insert(payloads);
-  if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  if (error) { await showAlertDialog(t("alert.error"), error.message); return; }
 
   document.getElementById("forward-overlay").classList.add("hidden");
   if (selectionMode) exitSelectionMode();
@@ -11029,7 +11116,7 @@ function setupTokensDialog() {
 
 async function openTokensDialog() {
   if (!currentOtherUser) return;
-  if (!currentChatId) { await showAlertDialog("Ошибка", "Сначала напишите сообщение собеседнику — тогда создастся чат"); return; }
+  if (!currentChatId) { await showAlertDialog(t("alert.error"), t("alert.noChatYet")); return; }
 
   const { data } = await supabase.from("profiles").select("imagi_tokens").eq("id", currentUser.id).single();
   const balance = data ? data.imagi_tokens : 0;
@@ -13126,7 +13213,7 @@ function renderAttachPreview() {
     }
     return `<div class="attach-preview-item">
       ${previewHtml}
-      <button class="attach-preview-remove" data-remove-idx="${i}" title="Убрать">✕</button>
+      <button class="attach-preview-remove" data-remove-idx="${i}" title="${escapeHtml(t("attach.remove"))}">✕</button>
     </div>`;
   }).join("");
 
@@ -13134,9 +13221,9 @@ function renderAttachPreview() {
   const titleEl = document.getElementById("attach-preview-title");
   if (titleEl) {
     const firstKind = detectFileKind(attachPendingFiles[0]);
-    if (firstKind === "image") titleEl.textContent = "Отправить изображение";
-    else if (firstKind === "video") titleEl.textContent = "Отправить видео";
-    else titleEl.textContent = "Отправить файл";
+    if (firstKind === "image") titleEl.textContent = t("attach.title.image");
+    else if (firstKind === "video") titleEl.textContent = t("attach.title.video");
+    else titleEl.textContent = t("attach.title.file");
   }
 
   listEl.querySelectorAll("[data-remove-idx]").forEach((btn) => {
@@ -13196,12 +13283,18 @@ function setupAttachPreviewDialog() {
       // Проверяем лимит и размер КАЖДОГО добавленного файла
       for (const f of files) {
         if (f.size > ATTACH_MAX_SIZE) {
-          showAlertDialog("Файл слишком большой", `«${f.name}» больше ${formatFileSize(ATTACH_MAX_SIZE)}.`);
+          showAlertDialog(
+            t("attach.tooBig"),
+            tFmt("attach.tooBigText", { name: f.name, size: formatFileSize(ATTACH_MAX_SIZE) })
+          );
           return;
         }
       }
       if (attachPendingFiles.length + files.length > ATTACH_MAX_FILES) {
-        showAlertDialog("Лимит", `Максимум ${ATTACH_MAX_FILES} файлов за раз.`);
+        showAlertDialog(
+          t("attach.tooMany"),
+          tFmt("attach.tooManyText", { n: ATTACH_MAX_FILES })
+        );
         return;
       }
       attachPendingFiles = attachPendingFiles.concat(files);
