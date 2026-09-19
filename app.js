@@ -5,7 +5,7 @@
 // Трафик идёт через Cloudflare Worker (cell-proxy.zelenski-ivan10.workers.dev),
 // чтобы обходить блокировки провайдеров. Воркер прозрачно проксирует
 // REST + Auth + Storage + Realtime (WebSocket) в оригинальный Supabase.
-const SUPABASE_URL = "https://cell-proxy.zelenski-ivan10.workers.dev";
+const SUPABASE_URL = "https://uiktqkxfsoewjpgjpizf.supabase.co";
 // Оригинальный домен Supabase — нужен, чтобы переписывать ссылки из ответов
 // (signed URLs storage приходят с оригинального домена, а не с воркера).
 const SUPABASE_ORIGIN = "https://uiktqkxfsoewjpgjpizf.supabase.co";
@@ -390,6 +390,8 @@ const I18N = {
 
     // ---- ПКМ-меню на чате в списке ----
     "ctx.chat.profile": "Профиль",
+    "ctx.chat.mute": "Отключить звук",
+    "ctx.chat.unmute": "Включить звук",
     "ctx.chat.rename": "Переименовать",
     "ctx.chat.clear": "Очистить чат",
     "ctx.chat.delete": "Удалить чат",
@@ -1127,6 +1129,8 @@ const I18N = {
 
     // ---- Right-click menu on chat in list ----
     "ctx.chat.profile": "Profile",
+    "ctx.chat.mute": "Mute",
+    "ctx.chat.unmute": "Unmute",
     "ctx.chat.rename": "Rename",
     "ctx.chat.clear": "Clear chat",
     "ctx.chat.delete": "Delete chat",
@@ -5011,7 +5015,7 @@ async function loadRecentChats() {
     listEl.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
   }
 
-  const { data: myChats, error: e1 } = await supabase.from("chat_members").select("chat_id, custom_name").eq("user_id", currentUser.id);
+  const { data: myChats, error: e1 } = await supabase.from("chat_members").select("chat_id, custom_name, muted").eq("user_id", currentUser.id);
   if (e1 || !myChats || myChats.length === 0) {
     listEl.innerHTML = '<div class="empty">' + t("empty.noChats") + '</div>';
     chatIdByUser.clear(); return;
@@ -5050,7 +5054,11 @@ async function loadRecentChats() {
   const dmItems = []; const userIds = [];
   const channelItems = [];
   const customNameByChatId = new Map();
-  myChats.forEach((c) => { if (c.custom_name) customNameByChatId.set(c.chat_id, c.custom_name); });
+  const mutedByChatId = new Map();
+  myChats.forEach((c) => {
+    if (c.custom_name) customNameByChatId.set(c.chat_id, c.custom_name);
+    mutedByChatId.set(c.chat_id, !!c.muted);
+  });
 
   others.forEach((o) => {
     if (channelIds.has(o.chat_id)) return;
@@ -5063,6 +5071,7 @@ async function loadRecentChats() {
       chat_id: o.chat_id, user_id: o.user_id, lastMsg, lastTime,
       unread: unreadCountPerChat.get(o.chat_id) || 0,
       customName: customNameByChatId.get(o.chat_id) || null,
+      muted: mutedByChatId.get(o.chat_id) || false,
     });
     userIds.push(o.user_id);
   });
@@ -5079,6 +5088,7 @@ async function loadRecentChats() {
       type: "channel",
       chat_id: cid, channel: ch, lastMsg, lastTime,
       unread: unreadCountPerChat.get(cid) || 0,
+      muted: mutedByChatId.get(cid) || false,
     });
   });
 
@@ -5213,13 +5223,15 @@ function renderDmItemHtml(it, profileMap) {
   } else {
     preview = t("preview.noMessages");
   }
-  const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
+  const isMuted = !!it.muted;
+  const mutedMark = isMuted ? ' <span class="muted-mark" title="Без звука">🔇</span>' : "";
+  const unreadHtml = it.unread > 0 ? `<span class="unread-badge${isMuted ? " muted" : ""}">${it.unread}</span>` : "";
   return `
-    <div class="user-item" data-user-id="${user.id}" data-chat-id="${it.chat_id}" data-chat-type="dm" data-custom-name="${it.customName ? escapeHtml(it.customName) : ""}">
+    <div class="user-item" data-user-id="${user.id}" data-chat-id="${it.chat_id}" data-chat-type="dm" data-muted="${isMuted ? "1" : "0"}" data-custom-name="${it.customName ? escapeHtml(it.customName) : ""}">
       <div class="avatar"></div>
       <div class="user-item-body">
         <div class="user-item-row1">
-          <div class="user-item-name">${escapeHtml(name)}${verifiedBadge(user)}${blocked}</div>
+          <div class="user-item-name">${escapeHtml(name)}${verifiedBadge(user)}${blocked}${mutedMark}</div>
           <div class="user-item-time">${time}</div>
         </div>
         <div class="user-item-row2">
@@ -5239,13 +5251,15 @@ function renderChannelItemHtml(it) {
   } else {
     preview = t("preview.noMessages");
   }
-  const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
+  const isMuted = !!it.muted;
+  const mutedMark = isMuted ? ' <span class="muted-mark" title="Без звука">🔇</span>' : "";
+  const unreadHtml = it.unread > 0 ? `<span class="unread-badge${isMuted ? " muted" : ""}">${it.unread}</span>` : "";
   return `
-    <div class="user-item" data-chat-id="${it.chat_id}" data-chat-type="channel">
+    <div class="user-item" data-chat-id="${it.chat_id}" data-chat-type="channel" data-muted="${isMuted ? "1" : "0"}">
       <div class="avatar"></div>
       <div class="user-item-body">
         <div class="user-item-row1">
-          <div class="user-item-name">${escapeHtml(ch.name)}${verifiedBadge(ch)}<span class="channel-mark">📢</span></div>
+          <div class="user-item-name">${escapeHtml(ch.name)}${verifiedBadge(ch)}<span class="channel-mark">📢</span>${mutedMark}</div>
           <div class="user-item-time">${time}</div>
         </div>
         <div class="user-item-row2">
@@ -5521,9 +5535,15 @@ function updateChatItemPreview(chatId) {
   const row2 = el.querySelector(".user-item-row2");
   if (row2) {
     let badge = row2.querySelector(".unread-badge");
+    const isMuted = el.dataset.muted === "1";
     if (data.unread > 0) {
-      if (!badge) { badge = document.createElement("span"); badge.className = "unread-badge"; row2.appendChild(badge); }
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "unread-badge";
+        row2.appendChild(badge);
+      }
       badge.textContent = String(data.unread);
+      badge.classList.toggle("muted", isMuted);
     } else if (badge) badge.remove();
   }
   updateUnreadTitle();
@@ -5594,8 +5614,9 @@ async function addOrUpdateChatInList(chatId, otherUserId) {
     chatOtherUserCache.set(chatId, otherUserId);
 
     const { data: myMembership } = await supabase.from("chat_members")
-      .select("custom_name").eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle();
+      .select("custom_name, muted").eq("chat_id", chatId).eq("user_id", currentUser.id).maybeSingle();
     const customName = myMembership ? myMembership.custom_name : null;
+    const isMuted = !!(myMembership && myMembership.muted);
 
     // Если realtime уже успел получить первое сообщение (subscribeToGlobalMessages
     // кладёт сюда превью и unread), НЕ затираем его, а используем.
@@ -5611,6 +5632,7 @@ async function addOrUpdateChatInList(chatId, otherUserId) {
       lastTime: previewData.time,
       unread: previewData.unread,
       customName,
+      muted: isMuted,
     };
 
     const listEl = document.getElementById("users-list");
@@ -6210,7 +6232,7 @@ function openChatListContextMenu(ev, user, el) {
   contextChatCustomName = el.dataset.customName || null;
   contextChannelForMenu = null;
   const menu = document.getElementById("chat-list-context-menu");
-  ["profile", "rename", "clear", "delete", "block"].forEach((a) => {
+  ["profile", "rename", "mute", "clear", "delete", "block"].forEach((a) => {
     const b = menu.querySelector(`button[data-action="${a}"]`);
     if (b) b.classList.remove("hidden");
   });
@@ -6220,6 +6242,10 @@ function openChatListContextMenu(ev, user, el) {
   });
   const blockBtn = menu.querySelector('button[data-action="block"]');
   blockBtn.textContent = isBlockedByMe(user.id) ? t("ctx.chat.unblock") : t("ctx.chat.block");
+  // Кнопка mute — текст по текущему состоянию
+  const isMuted = el.dataset.muted === "1";
+  const muteBtn = menu.querySelector('button[data-action="mute"]');
+  if (muteBtn) muteBtn.textContent = isMuted ? t("ctx.chat.unmute") : t("ctx.chat.mute");
   menu.classList.remove("hidden");
   menu.style.left = "0px"; menu.style.top = "0px";
   const rect = menu.getBoundingClientRect();
@@ -6239,10 +6265,15 @@ function openChatListContextMenuForChannel(ev, channel) {
     const b = menu.querySelector(`button[data-action="${a}"]`);
     if (b) b.classList.add("hidden");
   });
-  ["channel-profile", "channel-unsubscribe"].forEach((a) => {
+  ["channel-profile", "channel-unsubscribe", "mute"].forEach((a) => {
     const b = menu.querySelector(`button[data-action="${a}"]`);
     if (b) b.classList.remove("hidden");
   });
+  // Текст кнопки mute по состоянию чата
+  const chatEl = document.querySelector(`.user-item[data-chat-id="${channel.id}"]`);
+  const isMuted = chatEl && chatEl.dataset.muted === "1";
+  const muteBtn = menu.querySelector('button[data-action="mute"]');
+  if (muteBtn) muteBtn.textContent = isMuted ? t("ctx.chat.unmute") : t("ctx.chat.mute");
   menu.classList.remove("hidden");
   menu.style.left = "0px"; menu.style.top = "0px";
   const rect = menu.getBoundingClientRect();
@@ -6268,6 +6299,55 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
   e.stopPropagation();
   const action = btn.dataset.action;
   document.getElementById("chat-list-context-menu").classList.add("hidden");
+
+  // Отключить/включить звук — работает и для DM, и для каналов.
+  if (action === "mute") {
+    let chatId = null;
+    let itemEl = null;
+    if (contextChatUser) {
+      chatId = chatIdByUser.get(contextChatUser.id);
+      itemEl = document.querySelector(`.user-item[data-user-id="${contextChatUser.id}"]`);
+    } else if (contextChannelForMenu) {
+      chatId = contextChannelForMenu.id;
+      itemEl = document.querySelector(`.user-item[data-chat-id="${chatId}"]`);
+    }
+    if (!chatId) return;
+    const isMutedNow = itemEl && itemEl.dataset.muted === "1";
+    const newMuted = !isMutedNow;
+
+    const { error } = await supabase.from("chat_members")
+      .update({ muted: newMuted })
+      .eq("chat_id", chatId).eq("user_id", currentUser.id);
+    if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
+
+    if (itemEl) {
+      itemEl.dataset.muted = newMuted ? "1" : "0";
+      // Значок 🔇 рядом с именем
+      const nameEl = itemEl.querySelector(".user-item-name");
+      if (nameEl) {
+        const oldMark = nameEl.querySelector(".muted-mark");
+        if (newMuted && !oldMark) {
+          const mark = document.createElement("span");
+          mark.className = "muted-mark";
+          mark.title = "Без звука";
+          mark.textContent = "🔇";
+          nameEl.appendChild(document.createTextNode(" "));
+          nameEl.appendChild(mark);
+        } else if (!newMuted && oldMark) {
+          // Убираем маркер и лишний пробел перед ним
+          const prev = oldMark.previousSibling;
+          if (prev && prev.nodeType === Node.TEXT_NODE && prev.textContent.trim() === "") {
+            prev.remove();
+          }
+          oldMark.remove();
+        }
+      }
+      // Бейдж непрочитанных — перекрасить
+      const badge = itemEl.querySelector(".unread-badge");
+      if (badge) badge.classList.toggle("muted", newMuted);
+    }
+    return;
+  }
 
   if (action === "channel-profile") {
     const ch = contextChannelForMenu;

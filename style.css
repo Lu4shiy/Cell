@@ -616,6 +616,12 @@ input:focus {
 .user-item-preview.unread { color: var(--text); font-weight: 500; }
 .user-item-preview b { color: var(--text); font-weight: 600; }
 
+/* Замьюченный чат — бейдж непрочитанных серый, вне зависимости от акцента. */
+.unread-badge.muted {
+  background: var(--text-dim);
+  color: var(--bg-side);
+}
+
 .unread-badge {
   background: var(--accent);
   color: #15110d;
@@ -652,6 +658,14 @@ input:focus {
   opacity: 0.55;
   margin-left: 4px;
   vertical-align: middle;
+}
+
+.muted-mark {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-left: 4px;
+  vertical-align: middle;
+  user-select: none;
 }
 
 /* ====================================================== */

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Cell</title>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ibb.co https://cdn.jsdelivr.net https://upload.wikimedia.org https://wsrv.nl https://*.supabase.co https://cell-proxy.zelenski-ivan10.workers.dev; media-src 'self' blob: https://*.supabase.co https://cell-proxy.zelenski-ivan10.workers.dev; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cell-proxy.zelenski-ivan10.workers.dev wss://cell-proxy.zelenski-ivan10.workers.dev https://cdn.jsdelivr.net https://wsrv.nl; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ibb.co https://cdn.jsdelivr.net https://upload.wikimedia.org https://wsrv.nl https://*.supabase.co; media-src 'self' blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://wsrv.nl; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
 
@@ -416,6 +416,7 @@
   <div id="chat-list-context-menu" class="context-menu hidden">
     <button data-action="profile" data-i18n="ctx.chat.profile">Профиль</button>
     <button data-action="rename" data-i18n="ctx.chat.rename">Переименовать</button>
+    <button data-action="mute" id="ctx-chat-mute-btn" data-i18n="ctx.chat.mute">Отключить звук</button>
     <button data-action="clear" data-i18n="ctx.chat.clear">Очистить чат</button>
     <button data-action="delete" data-i18n="ctx.chat.delete">Удалить чат</button>
     <button data-action="block" class="danger" data-i18n="ctx.chat.block">Заблокировать</button>
