@@ -343,6 +343,30 @@ const I18N = {
     "settings.e2ee.label": "Шифрование",
     "settings.e2ee.manage": "Управлять шифрованием",
 
+    // ---- Режим «Бабушка»: диалоги ----
+    "grandma.enable.title": "Включить режим «Бабушка»",
+    "grandma.enable.text": "Будут скрыты: выход из аккаунта, 2FA, шифрование, режим списка чатов, создание каналов, а также секция быстрых реакций и иконки приложения.\n\nОтключить можно будет долгим нажатием (1.5 сек) на аватар в боковом меню.",
+    "grandma.enable.confirm": "Включить",
+    "grandma.enabled.title": "Режим включён",
+    "grandma.enabled.text": "Интерфейс упрощён. Чтобы отключить — удерживайте палец на своём аватаре в левом верхнем углу 1.5 секунды.",
+    "grandma.disable.title": "Отключить режим «Бабушка»",
+    "grandma.disable.text": "Вернуть полный интерфейс: выход из аккаунта, 2FA, шифрование и другие настройки?",
+    "grandma.disable.confirm": "Отключить",
+    "grandma.disabled.title": "Режим отключён",
+    "grandma.disabled.text": "Полный интерфейс восстановлен.",
+
+    // ---- 2FA: статус ----
+    "mfa.status.enabled": "✅ Включена (с {date})",
+    "mfa.status.disabled": "❌ Отключена. Включи — это сильно повышает защиту.",
+    "mfa.status.error": "Не удалось проверить статус 2FA",
+
+    // ---- E2EE: статус ----
+    "e2ee.status.off": "🔓 E2EE выключена. Сообщения хранятся на сервере в открытом виде.",
+    "e2ee.status.broken": "⚠️ Что-то не так: флаг стоит, но ключи не найдены.",
+    "e2ee.status.unlocked": "🔒 Включено и разблокировано.",
+    "e2ee.status.locked": "🔒 Включено, но ключ заблокирован. Разблокируй паролем.",
+    "e2ee.status.error": "Не удалось проверить статус",
+
     // ---- Пустые состояния ----
     "empty.noChats": "У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.",
     "empty.noChatsShort": "У вас пока нет чатов.",
@@ -503,6 +527,30 @@ const I18N = {
     "settings.e2ee.label": "Encryption",
     "settings.e2ee.manage": "Manage encryption",
 
+    // ---- Grandma mode: dialogs ----
+    "grandma.enable.title": "Enable Grandma mode",
+    "grandma.enable.text": "The following will be hidden: sign out, 2FA, encryption, chat list mode, channel creation, as well as the quick reactions and app icon sections.\n\nYou can disable it by long-pressing (1.5 sec) the avatar in the sidebar.",
+    "grandma.enable.confirm": "Enable",
+    "grandma.enabled.title": "Mode enabled",
+    "grandma.enabled.text": "Interface simplified. To disable — hold your finger on your avatar in the top-left corner for 1.5 seconds.",
+    "grandma.disable.title": "Disable Grandma mode",
+    "grandma.disable.text": "Restore the full interface: sign out, 2FA, encryption and other settings?",
+    "grandma.disable.confirm": "Disable",
+    "grandma.disabled.title": "Mode disabled",
+    "grandma.disabled.text": "Full interface restored.",
+
+    // ---- 2FA: status ----
+    "mfa.status.enabled": "✅ Enabled (since {date})",
+    "mfa.status.disabled": "❌ Disabled. Enable it — this greatly increases security.",
+    "mfa.status.error": "Failed to check 2FA status",
+
+    // ---- E2EE: status ----
+    "e2ee.status.off": "🔓 E2EE is off. Messages are stored on the server in plain text.",
+    "e2ee.status.broken": "⚠️ Something is wrong: the flag is set, but no keys were found.",
+    "e2ee.status.unlocked": "🔒 Enabled and unlocked.",
+    "e2ee.status.locked": "🔒 Enabled, but the key is locked. Unlock with your password.",
+    "e2ee.status.error": "Failed to check status",
+
     // ---- Empty states ----
     "empty.noChats": "No chats yet.<br>Type @username above to find someone.",
     "empty.noChatsShort": "No chats yet.",
@@ -559,6 +607,11 @@ function tFmt(key, vars, fallback) {
   return s;
 }
 
+// Локаль для форматирования дат под текущий язык.
+function localeId() {
+  return currentLang === "en" ? "en-US" : "ru-RU";
+}
+
 // Переключить язык и перерисовать все видимые тексты.
 function setLanguage(lang) {
   if (lang !== "ru" && lang !== "en") return;
@@ -577,6 +630,12 @@ function setLanguage(lang) {
   // Если открыт чат — обновим заголовок баннера блокировки (там текст
   // зависит от текущего языка).
   if (typeof updateBlockUI === "function") updateBlockUI();
+  // Перепроверить статусы в настройках (2FA / E2EE) — они строятся из t().
+  const settingsOverlay = document.getElementById("settings-overlay");
+  if (settingsOverlay && !settingsOverlay.classList.contains("hidden")) {
+    if (typeof refreshMfaStatus === "function") refreshMfaStatus();
+    if (typeof refreshE2eeStatus === "function") refreshE2eeStatus();
+  }
 }
 
 // Применяет переводы к статическому HTML:
@@ -815,13 +874,23 @@ async function refreshMfaStatus() {
     const { data } = await supabase.auth.mfa.listFactors();
     const totp = data && data.totp && data.totp.find(f => f.status === "verified");
     if (totp) {
-      const dt = totp.created_at ? new Date(totp.created_at).toLocaleDateString("ru-RU") : "—";
-      row.innerHTML = `✅ <b>Включена</b> (с ${dt})`;
+      const dt = totp.created_at ? new Date(totp.created_at).toLocaleDateString(localeId()) : "—";
+      // Заменяем «жирные» вставки через небольшой HTML-хак: берём шаблон,
+      // подставляем дату, а «Включена» / «Enabled» оборачиваем в <b>.
+      const raw = tFmt("mfa.status.enabled", { date: dt });
+      row.innerHTML = escapeHtml(raw).replace(
+        /(Включена|Enabled)/,
+        "<b>$1</b>"
+      );
     } else {
-      row.innerHTML = `❌ <b>Отключена</b>. Включи — это сильно повышает защиту.`;
+      const raw = t("mfa.status.disabled");
+      row.innerHTML = escapeHtml(raw).replace(
+        /(Отключена|Disabled)/,
+        "<b>$1</b>"
+      );
     }
   } catch (e) {
-    row.textContent = "Не удалось проверить статус 2FA";
+    row.textContent = t("mfa.status.error");
   }
 }
 
@@ -1327,16 +1396,28 @@ async function refreshE2eeStatus() {
     }
 
     if (!prof || !prof.e2ee_enabled) {
-      row.innerHTML = `🔓 E2EE выключена. Сообщения хранятся на сервере в открытом виде.`;
+      row.textContent = t("e2ee.status.off");
     } else if (!sec) {
-      row.innerHTML = `⚠️ <b>Что-то не так</b>: флаг стоит, но ключи не найдены.`;
+      const raw = t("e2ee.status.broken");
+      row.innerHTML = escapeHtml(raw).replace(
+        /(Что-то не так|Something is wrong)/,
+        "<b>$1</b>"
+      );
     } else if (cryptoUnlocked) {
-      row.innerHTML = `🔒 <b>Включено и разблокировано</b>.`;
+      const raw = t("e2ee.status.unlocked");
+      row.innerHTML = escapeHtml(raw).replace(
+        /(Включено и разблокировано|Enabled and unlocked)/,
+        "<b>$1</b>"
+      );
     } else {
-      row.innerHTML = `🔒 <b>Включено</b>, но ключ заблокирован. Разблокируй паролем.`;
+      const raw = t("e2ee.status.locked");
+      row.innerHTML = escapeHtml(raw).replace(
+        /(Включено|Enabled)/,
+        "<b>$1</b>"
+      );
     }
   } catch (e) {
-    row.textContent = "Не удалось проверить статус";
+    row.textContent = t("e2ee.status.error");
   }
 }
 
@@ -11991,34 +12072,32 @@ function applyGrandmaModeUI() {
 
 async function enableGrandmaMode() {
   const ok = await showConfirmDialog(
-    "Включить режим «Бабушка»",
-    "Будут скрыты: выход из аккаунта, 2FA, шифрование, режим списка чатов, " +
-    "создание каналов, а также секция быстрых реакций и иконки приложения.\n\n" +
-    "Отключить можно будет долгим нажатием (1.5 сек) на аватар в боковом меню.",
-    "Включить"
+    t("grandma.enable.title"),
+    t("grandma.enable.text"),
+    t("grandma.enable.confirm")
   );
   if (!ok) return;
 
   try { localStorage.setItem(GRANDMA_MODE_KEY, "1"); } catch (e) {}
   applyGrandmaModeUI();
   await showAlertDialog(
-    "Режим включён",
-    "Интерфейс упрощён. Чтобы отключить — удерживайте палец на своём аватаре в левом верхнем углу 1.5 секунды."
+    t("grandma.enabled.title"),
+    t("grandma.enabled.text")
   );
 }
 
 async function disableGrandmaMode() {
   const ok = await showConfirmDialog(
-    "Отключить режим «Бабушка»",
-    "Вернуть полный интерфейс: выход из аккаунта, 2FA, шифрование и другие настройки?",
-    "Отключить"
+    t("grandma.disable.title"),
+    t("grandma.disable.text"),
+    t("grandma.disable.confirm")
   );
   if (!ok) return;
 
   try { localStorage.removeItem(GRANDMA_MODE_KEY); } catch (e) {}
   applyGrandmaModeUI();
   resetInactivityTimer();
-  await showAlertDialog("Режим отключён", "Полный интерфейс восстановлен.");
+  await showAlertDialog(t("grandma.disabled.title"), t("grandma.disabled.text"));
 }
 
 // Навешивает 5-тап и long-press на аватар в сайдбаре —
