@@ -250,6 +250,9 @@ const I18N = {
     "settings.notifications.enable": "Показывать уведомления о новых сообщениях",
     "settings.notifications.hint": "На компьютере уведомление всплывает в системном углу экрана. На телефоне — работает, когда приложение открыто или свёрнуто.",
     "settings.notifications.test": "Проверить уведомление",
+    "notif.pushUnsupported": "Браузер не поддерживает push-уведомления",
+    "notif.pushUnsupportedText": "На iPhone это работает только если приложение добавлено на домашний экран (iOS 16.4+).",
+    "notif.pushFailed": "Не удалось оформить push-подписку",
     "settings.notifications.testTitle": "Cell",
     "settings.notifications.testBody": "Так будет выглядеть уведомление о новом сообщении.",
     "settings.notifications.denied": "Уведомления запрещены в настройках браузера",
@@ -989,6 +992,9 @@ const I18N = {
     "settings.notifications.enable": "Show notifications about new messages",
     "settings.notifications.hint": "On desktop, a notification pops up in the system corner. On mobile, it works while the app is open or in the background.",
     "settings.notifications.test": "Test notification",
+    "notif.pushUnsupported": "This browser doesn't support push notifications",
+    "notif.pushUnsupportedText": "On iPhone it works only when the app is added to the home screen (iOS 16.4+).",
+    "notif.pushFailed": "Failed to create push subscription",
     "settings.notifications.testTitle": "Cell",
     "settings.notifications.testBody": "This is how a new-message notification will look.",
     "settings.notifications.denied": "Notifications are blocked in browser settings",
@@ -3693,6 +3699,10 @@ async function initApp() {
   // Пробуем автоматически разблокировать E2EE, если ключ был сохранён
   // в этой сессии или на доверенном устройстве.
   tryRestoreE2eeSession();
+  // Если уведомления включены — обновляем push-подписку в фоне.
+  if (areNotificationsEnabled() && isPushSupported()) {
+    setTimeout(() => { subscribeToWebPush().catch(() => {}); }, 1500);
+  }
   // Применяем режим «Бабушка» (если он включён) — прячем лишнее.
   applyGrandmaModeUI();
   await loadRecentChats();
@@ -4939,23 +4949,50 @@ async function showMessageNotification(m) {
 // Открывает чат/канал, к которому относится сообщение из уведомления.
 async function openChatFromNotification(m) {
   if (!m || !m.chat_id) return;
+  await openChatById(m.chat_id);
+}
+
+// Универсальный открыватель чата по chat_id (канал или DM).
+async function openChatById(chatId) {
+  if (!chatId || !currentUser) return;
   // Канал
-  if (channelCache.has(m.chat_id)) {
-    await openChannel(m.chat_id);
+  if (channelCache.has(chatId)) {
+    await openChannel(chatId);
     return;
   }
   // DM — ищем собеседника
-  let otherId = chatOtherUserCache.get(m.chat_id);
+  let otherId = chatOtherUserCache.get(chatId);
   if (!otherId) {
     try {
       const { data: others } = await supabase.from("chat_members")
-        .select("user_id").eq("chat_id", m.chat_id).neq("user_id", currentUser.id);
+        .select("user_id").eq("chat_id", chatId).neq("user_id", currentUser.id);
       if (others && others[0]) otherId = others[0].user_id;
     } catch (e) { /* silent */ }
   }
   if (!otherId) return;
   const p = profileCache.get(otherId) || await getProfile(otherId);
   if (p) await openChatWith(p);
+}
+
+// Приём сообщений от Service Worker (клик по системному уведомлению).
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "OPEN_CHAT" && e.data.chatId) {
+      openChatById(e.data.chatId).catch(() => {});
+    }
+  });
+}
+
+// Обработка хэша #open-chat=<id> — так открывает окно SW,
+// если приложение было полностью закрыто.
+async function handleOpenChatHash() {
+  const m = /[#&]open-chat=([^&]+)/.exec(window.location.hash || "");
+  if (!m) return;
+  const chatId = decodeURIComponent(m[1]);
+  try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch (e) {}
+  // Ждём, пока прогрузится список чатов и кэши
+  await new Promise((r) => setTimeout(r, 800));
+  try { await openChatById(chatId); } catch (e) { console.warn("open-chat hash:", e); }
 }
 
 function updateUserEverywhere(profile) {
@@ -13980,8 +14017,17 @@ function setupSettings() {
           return;
         }
         setNotificationsEnabled(true);
+        // Оформляем push-подписку для фоновых уведомлений.
+        const res = await subscribeToWebPush();
+        if (!res.ok && res.reason === "unsupported") {
+          // Не блокируем пользователя — in-app уведомления всё равно работают.
+          console.info("Push not supported, in-app only");
+        } else if (!res.ok) {
+          console.warn("Push subscription failed:", res.reason);
+        }
       } else {
         setNotificationsEnabled(false);
+        await unsubscribeFromWebPush();
       }
     });
   }
@@ -14328,6 +14374,80 @@ function setupAttachPreviewDialog() {
 // ======================================================
 // 44.5. ВОССТАНОВЛЕНИЕ ПАРОЛЯ ПО ПОЧТЕ
 // ======================================================
+
+// ======================================================
+// WEB PUSH — фоновые уведомления
+// ======================================================
+// VAPID-ключи. Публичный идёт в браузер — им подписываем запрос
+// на push. Приватный лежит ТОЛЬКО в Supabase (env функции push-on-message).
+const VAPID_PUBLIC_KEY = "BKu0OUTKndJyQgI4n_MOgLHgCP2aUqpi3tdLBaIpap_JugR2m7qbvbO5Kz_Z5AwgqPULYa9Fkr80OkZcQVEhE0A";
+
+// base64url → Uint8Array. Нужно для pushManager.subscribe().
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  const out = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) out[i] = rawData.charCodeAt(i);
+  return out;
+}
+
+function isPushSupported() {
+  return ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
+}
+
+// Оформляем push-подписку и сохраняем её в БД.
+// Возвращает { ok: true } или { ok: false, reason: "..." }.
+async function subscribeToWebPush() {
+  if (!isPushSupported()) return { ok: false, reason: "unsupported" };
+  if (!currentUser) return { ok: false, reason: "no-user" };
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    const json = sub.toJSON();
+    const { error } = await supabase.from("push_subscriptions").upsert({
+      user_id: currentUser.id,
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+      user_agent: (navigator.userAgent || "").slice(0, 200),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,endpoint" });
+    if (error) {
+      console.warn("push_subscriptions upsert:", error);
+      return { ok: false, reason: "db" };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.warn("subscribeToWebPush failed:", e);
+    return { ok: false, reason: (e && e.message) || "unknown" };
+  }
+}
+
+// Отписываемся и удаляем подписку из БД.
+async function unsubscribeFromWebPush() {
+  if (!isPushSupported()) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      const endpoint = sub.endpoint;
+      try { await sub.unsubscribe(); } catch (e) {}
+      if (currentUser) {
+        await supabase.from("push_subscriptions")
+          .delete()
+          .eq("user_id", currentUser.id)
+          .eq("endpoint", endpoint);
+      }
+    }
+  } catch (e) { /* silent */ }
+}
 
 // ======================================================
 // УВЕДОМЛЕНИЯ О НОВЫХ СООБЩЕНИЯХ
@@ -14870,5 +14990,8 @@ setupLocalLogin();
       return;
     }
     showApp(session.user);
+    // Если в URL есть #open-chat=<id> (клик по push-уведомлению на закрытом
+    // приложении) — открываем нужный чат после загрузки.
+    handleOpenChatHash();
   }
 })();

@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-v69";
+const CACHE_VERSION = "cell-v70";
 
 const CACHE_FILES = [
   "./",
@@ -118,6 +118,66 @@ self.addEventListener("fetch", (event) => {
       const fresh = await networkPromise;
       if (fresh) return fresh;
       return caches.match("./index.html");
+    })
+  );
+});
+
+// ======================================================
+// WEB PUSH — фоновые уведомления
+// ======================================================
+// Срабатывает, когда наша Edge Function (в Supabase) отправит push
+// на endpoint браузера. Браузер будит Service Worker и передаёт event
+// с payload — мы показываем системное уведомление.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    if (event.data) data = event.data.json();
+  } catch (e) {
+    try { data = { body: event.data && event.data.text() }; } catch (e2) {}
+  }
+
+  const title = data.title || "Cell";
+  const body = data.body || "";
+  const chatId = data.chatId || null;
+  const tag = data.tag || ("cell-chat-" + (chatId || "unknown"));
+  const iconUrl = data.icon || "icon-192.png";
+
+  const notifOptions = {
+    body: body,
+    icon: iconUrl,
+    badge: "icon-192.png",
+    tag: tag,
+    renotify: false,
+    data: { chatId: chatId, url: data.url || "/" },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, notifOptions));
+});
+
+// Срабатывает при клике на уведомление.
+// Открывает (или фокусирует) окно приложения и передаёт chatId.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const chatId = event.notification.data && event.notification.data.chatId;
+  const targetUrl = self.registration.scope;
+
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      // Если есть открытое окно Cell — фокусируем его и шлём сообщение.
+      for (const c of list) {
+        if (c.url.startsWith(targetUrl)) {
+          c.focus();
+          if (chatId) {
+            c.postMessage({ type: "OPEN_CHAT", chatId: chatId });
+          }
+          return;
+        }
+      }
+      // Иначе открываем новое окно. chatId передаём через хэш URL.
+      const url = chatId
+        ? (targetUrl + "#open-chat=" + encodeURIComponent(chatId))
+        : targetUrl;
+      if (clients.openWindow) return clients.openWindow(url);
     })
   );
 });
