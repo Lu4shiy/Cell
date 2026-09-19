@@ -240,6 +240,8 @@ const I18N = {
     "sidebar.search.clear": "Очистить поиск",
     "sidebar.section.chats": "Чаты",
     "sidebar.section.search": "Поиск",
+    "sidebar.search.found": "Найденные",
+    "sidebar.search.mine": "Ваши чаты и каналы",
 
     // ---- Шапка чата ----
     "chat.back": "Назад",
@@ -299,6 +301,36 @@ const I18N = {
     // ---- Закреплённые/ответы (плейсхолдеры) ----
     "msg.reply.you": "Ты",
     "msg.reply.answer": "В ответ",
+
+    // ---- Общие кнопки диалогов ----
+    "dialog.ok": "ОК",
+    "dialog.yes": "Да",
+    "dialog.cancel": "Отмена",
+    "dialog.confirm": "Подтвердить",
+    "dialog.search.placeholder": "Поиск...",
+
+    // ---- Баннер блокировки ----
+    "block.youBlocked": "Ты заблокировал(а) @{username}.",
+    "block.theyBlocked": "@{username} заблокировал(а) тебя.",
+
+    // ---- Пустые состояния ----
+    "empty.noChats": "У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.",
+    "empty.noChatsShort": "У вас пока нет чатов.",
+    "empty.noMessages": "Пока сообщений нет. Напиши первым!",
+    "empty.noMessagesChannel": "В этом канале пока что нет сообщений.",
+    "empty.channelNoRead": "Вы не являетесь подписчиком.<br>Подайте заявку, чтобы читать сообщения.",
+    "empty.channelNoReadPrivate": "Этот канал приватный.<br>Читать сообщения могут только подписчики.",
+    "empty.loading": "Загрузка...",
+    "empty.searching": "Ищу...",
+    "empty.search.start": "Начни вводить имя или @username",
+    "empty.search.notFound": "Никого не найдено по «{query}»",
+    "empty.search.empty": "Пусто",
+    "empty.startChat": "Здесь пока нет сообщений. Напишите первым!",
+
+    // ---- Блокировка (диалоги) ----
+    "block.confirm.title": "Блокировка",
+    "block.confirm.text": "Заблокировать @{username}?",
+    "block.confirm.action": "Заблокировать",
   },
   en: {
     // ---- Settings ----
@@ -338,6 +370,8 @@ const I18N = {
     "sidebar.search.clear": "Clear search",
     "sidebar.section.chats": "Chats",
     "sidebar.section.search": "Search",
+    "sidebar.search.found": "Found",
+    "sidebar.search.mine": "Your chats and channels",
 
     // ---- Chat header ----
     "chat.back": "Back",
@@ -397,6 +431,36 @@ const I18N = {
     // ---- Pinned / replies (placeholders) ----
     "msg.reply.you": "You",
     "msg.reply.answer": "In reply to",
+
+    // ---- Common dialog buttons ----
+    "dialog.ok": "OK",
+    "dialog.yes": "Yes",
+    "dialog.cancel": "Cancel",
+    "dialog.confirm": "Confirm",
+    "dialog.search.placeholder": "Search...",
+
+    // ---- Block banner ----
+    "block.youBlocked": "You blocked @{username}.",
+    "block.theyBlocked": "@{username} blocked you.",
+
+    // ---- Empty states ----
+    "empty.noChats": "No chats yet.<br>Type @username above to find someone.",
+    "empty.noChatsShort": "No chats yet.",
+    "empty.noMessages": "No messages yet. Be the first to write!",
+    "empty.noMessagesChannel": "No messages in this channel yet.",
+    "empty.channelNoRead": "You are not a subscriber.<br>Send a request to read messages.",
+    "empty.channelNoReadPrivate": "This channel is private.<br>Only subscribers can read messages.",
+    "empty.loading": "Loading...",
+    "empty.searching": "Searching...",
+    "empty.search.start": "Start typing a name or @username",
+    "empty.search.notFound": "Nobody found for \"{query}\"",
+    "empty.search.empty": "Empty",
+    "empty.startChat": "No messages here yet. Write first!",
+
+    // ---- Blocking (dialogs) ----
+    "block.confirm.title": "Block",
+    "block.confirm.text": "Block @{username}?",
+    "block.confirm.action": "Block",
   },
 };
 
@@ -418,6 +482,21 @@ function t(key, fallback) {
   if (dict[key] !== undefined) return dict[key];
   if (I18N.ru[key] !== undefined) return I18N.ru[key];
   return fallback !== undefined ? fallback : key;
+}
+
+// t + подстановка {placeholder}-ов. Пример:
+//   tFmt("block.youBlocked", { username: "vasya" })
+//   → "Ты заблокировал(а) @vasya."
+function tFmt(key, vars, fallback) {
+  let s = t(key, fallback);
+  if (vars) {
+    for (const k in vars) {
+      if (Object.prototype.hasOwnProperty.call(vars, k)) {
+        s = s.split("{" + k + "}").join(String(vars[k]));
+      }
+    }
+  }
+  return s;
 }
 
 // Переключить язык и перерисовать все видимые тексты.
@@ -2395,7 +2474,7 @@ function showAlertDialog(title, text) {
     const cancelBtn = document.getElementById("dialog-cancel");
     document.getElementById("dialog-title").textContent = title;
     document.getElementById("dialog-text").textContent = text || "";
-    confirmBtn.textContent = "ОК"; confirmBtn.disabled = false;
+    confirmBtn.textContent = t("dialog.ok"); confirmBtn.disabled = false;
     optionsEl.innerHTML = ""; cancelBtn.style.display = "none";
     overlay.classList.remove("hidden");
     function cleanup() { overlay.classList.add("hidden"); confirmBtn.onclick = null; cancelBtn.onclick = null; cancelBtn.style.display = ""; }
@@ -2411,7 +2490,7 @@ function showConfirmDialog(title, text, confirmLabel) {
     const cancelBtn = document.getElementById("dialog-cancel");
     document.getElementById("dialog-title").textContent = title;
     document.getElementById("dialog-text").textContent = text || "";
-    confirmBtn.textContent = confirmLabel || "Да"; confirmBtn.disabled = false;
+    confirmBtn.textContent = confirmLabel || t("dialog.yes"); confirmBtn.disabled = false;
     optionsEl.innerHTML = ""; cancelBtn.style.display = "";
     overlay.classList.remove("hidden");
     function cleanup() { overlay.classList.add("hidden"); confirmBtn.onclick = null; cancelBtn.onclick = null; }
@@ -2450,14 +2529,14 @@ function showChoiceDialog(title, text, options, confirmLabel, opts) {
     const cancelBtn = document.getElementById("dialog-cancel");
     document.getElementById("dialog-title").textContent = title;
     document.getElementById("dialog-text").textContent = text;
-    confirmBtn.textContent = confirmLabel || "Подтвердить";
+    confirmBtn.textContent = confirmLabel || t("dialog.confirm");
     confirmBtn.disabled = true;
     cancelBtn.style.display = "";
     optionsEl.innerHTML = "";
     optionsEl.style.flexDirection = "column";
 
     const searchable = !!opts.searchable;
-    const searchPlaceholder = opts.searchPlaceholder || "Поиск...";
+    const searchPlaceholder = opts.searchPlaceholder || t("dialog.search.placeholder", "Поиск...");
     let selected = null;
     let rendered = options.slice();
 
@@ -3427,12 +3506,12 @@ async function loadRecentChats() {
   // при обновлении данных пользователь видит мигание «Загрузка → чаты».
   const hasChatItems = !!listEl.querySelector(".user-item");
   if (!hasChatItems) {
-    listEl.innerHTML = '<div class="empty">Загрузка...</div>';
+    listEl.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
   }
 
   const { data: myChats, error: e1 } = await supabase.from("chat_members").select("chat_id, custom_name").eq("user_id", currentUser.id);
   if (e1 || !myChats || myChats.length === 0) {
-    listEl.innerHTML = '<div class="empty">У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.</div>';
+    listEl.innerHTML = '<div class="empty">' + t("empty.noChats") + '</div>';
     chatIdByUser.clear(); return;
   }
   const chatIds = myChats.map((c) => c.chat_id);
@@ -3502,7 +3581,7 @@ async function loadRecentChats() {
   });
 
   if (!dmItems.length && !channelItems.length) {
-    listEl.innerHTML = '<div class="empty">У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.</div>';
+    listEl.innerHTML = '<div class="empty">' + t("empty.noChats") + '</div>';
     chatIdByUser.clear(); return;
   }
 
@@ -3608,7 +3687,7 @@ function bindChatItemEvents(el, user) {
 
 function renderChatListUnified(items, profileMap) {
   const listEl = document.getElementById("users-list");
-  if (!items.length) { listEl.innerHTML = '<div class="empty">У вас пока нет чатов.</div>'; refreshWheelLayout(); return; }
+  if (!items.length) { listEl.innerHTML = '<div class="empty">' + escapeHtml(t("empty.noChatsShort")) + '</div>'; refreshWheelLayout(); return; }
   listEl.innerHTML = items.map((it) => {
     if (it.type === "channel") return renderChannelItemHtml(it);
     return renderDmItemHtml(it, profileMap);
@@ -4110,7 +4189,7 @@ function removeChatFromList(chatId) {
   chatLastMsg.delete(chatId);
   for (const [uid, cid] of chatIdByUser.entries()) if (cid === chatId) chatIdByUser.delete(uid);
   const listEl = document.getElementById("users-list");
-  if (listEl.querySelectorAll(".user-item").length === 0) listEl.innerHTML = '<div class="empty">У вас пока нет чатов.</div>';
+  if (listEl.querySelectorAll(".user-item").length === 0) listEl.innerHTML = '<div class="empty">' + escapeHtml(t("empty.noChatsShort")) + '</div>';
   refreshWheelLayout();
 }
 
@@ -4448,8 +4527,8 @@ async function performSearch(query) {
   if (!query) { await loadRecentChats(); return; }
   titleEl.textContent = t("sidebar.section.search");
   const clean = query.replace(/^@+/, "").trim().toLowerCase();
-  if (!clean) { listEl.innerHTML = '<div class="empty">Начни вводить имя или @username</div>'; return; }
-  listEl.innerHTML = '<div class="empty">Ищу...</div>';
+  if (!clean) { listEl.innerHTML = '<div class="empty">' + escapeHtml(t("empty.search.start")) + '</div>'; return; }
+  listEl.innerHTML = '<div class="empty">' + escapeHtml(t("empty.searching")) + '</div>';
   const reqId = ++searchReqId;
 
   const [profilesRes, customRes, channelsRes] = await Promise.all([
@@ -4482,7 +4561,7 @@ async function performSearch(query) {
     (c.visibility || "public") !== "private" || c.owner_id === currentUser.id
   );
   if (!resultIds.size && !channels.length) {
-    listEl.innerHTML = `<div class="empty">Никого не найдено по «${escapeHtml(query)}»</div>`;
+    listEl.innerHTML = `<div class="empty">${escapeHtml(tFmt("empty.search.notFound", { query }))}</div>`;
     return;
   }
 
@@ -4589,14 +4668,14 @@ function renderSearchResultsUnified(users, channels, myChannelIds, dmPartnerIds)
   ];
 
   if (!topNew.length && !myList.length) {
-    listEl.innerHTML = '<div class="empty">Пусто</div>';
+    listEl.innerHTML = '<div class="empty">' + escapeHtml(t("empty.search.empty")) + '</div>';
     return;
   }
 
   let html = "";
 
   if (topNew.length) {
-    html += `<div class="search-section-title">Найденные</div>`;
+    html += `<div class="search-section-title">${escapeHtml(t("sidebar.search.found"))}</div>`;
     html += topNew.map((item) => {
       if (item && item.username && item.owner_id) return renderSearchChannelHtml(item);
       return renderSearchUserHtml(item);
@@ -4604,7 +4683,7 @@ function renderSearchResultsUnified(users, channels, myChannelIds, dmPartnerIds)
   }
 
   if (myList.length) {
-    html += `<div class="search-section-title">Ваши чаты и каналы</div>`;
+    html += `<div class="search-section-title">${escapeHtml(t("sidebar.search.mine"))}</div>`;
     html += myList.map((item) => {
       if (item.kind === "channel") return renderSearchChannelHtml(item.data);
       return renderSearchUserHtml(item.data);
@@ -4775,7 +4854,11 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
   } else if (action === "block") {
     if (isBlockedByMe(user.id)) await unblockUser(user.id);
     else {
-      const ok = await showConfirmDialog("Блокировка", "Заблокировать @" + user.username + "?", "Заблокировать");
+      const ok = await showConfirmDialog(
+        t("block.confirm.title"),
+        tFmt("block.confirm.text", { username: user.username }),
+        t("block.confirm.action")
+      );
       if (!ok) return; await blockUser(user.id);
     }
     document.querySelectorAll(".user-item").forEach((el) => {
@@ -4857,7 +4940,7 @@ async function openChatWith(otherUser) {
   if (mySeq !== openSeq) return;
   if (!chatId) {
     currentChatId = null; pendingOtherUser = otherUser;
-    document.getElementById("messages").innerHTML = '<div class="empty">Здесь пока нет сообщений. Напишите первым!</div>';
+    document.getElementById("messages").innerHTML = '<div class="empty">' + escapeHtml(t("empty.startChat")) + '</div>';
     msgCache.clear(); reactionsCache.clear();
     if (currentChannel) { supabase.removeChannel(currentChannel); currentChannel = null; }
     if (reactionsChannel) { supabase.removeChannel(reactionsChannel); reactionsChannel = null; }
@@ -4958,12 +5041,12 @@ async function loadMessages(chatId, mySeq) {
     if (!hasReadAccess) {
       const vis = currentChannelObj.visibility || "public";
       if (vis === "request") {
-        box.innerHTML = '<div class="empty">Вы не являетесь подписчиком.<br>Подайте заявку, чтобы читать сообщения.</div>';
+        box.innerHTML = '<div class="empty">' + t("empty.channelNoRead") + '</div>';
         await loadPinned(chatId);
         return;
       }
       if (vis === "private") {
-        box.innerHTML = '<div class="empty">Этот канал приватный.<br>Читать сообщения могут только подписчики.</div>';
+        box.innerHTML = '<div class="empty">' + t("empty.channelNoReadPrivate") + '</div>';
         await loadPinned(chatId);
         return;
       }
@@ -4997,8 +5080,8 @@ async function loadMessages(chatId, mySeq) {
 
   if (visible.length === 0) {
     box.innerHTML = isChannel
-      ? '<div class="empty">В этом канале пока что нет сообщений.</div>'
-      : '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
+      ? '<div class="empty">' + escapeHtml(t("empty.noMessagesChannel")) + '</div>'
+      : '<div class="empty">' + escapeHtml(t("empty.noMessages")) + '</div>';
     await loadPinned(chatId);
     return;
   }
@@ -6163,9 +6246,9 @@ function checkEmptyChat() {
   const box = document.getElementById("messages");
   if (box.children.length === 0) {
     if (currentChannelObj) {
-      box.innerHTML = '<div class="empty">В этом канале пока что нет сообщений.</div>';
+      box.innerHTML = '<div class="empty">' + escapeHtml(t("empty.noMessagesChannel")) + '</div>';
     } else {
-      box.innerHTML = '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
+      box.innerHTML = '<div class="empty">' + escapeHtml(t("empty.noMessages")) + '</div>';
     }
   }
 }
@@ -7659,7 +7742,11 @@ function setupChatMenu() {
       if (!currentOtherUser) return;
       if (isBlockedByMe(currentOtherUser.id)) await unblockUser(currentOtherUser.id);
       else {
-        const ok = await showConfirmDialog("Блокировка", "Заблокировать @" + currentOtherUser.username + "?", "Заблокировать");
+        const ok = await showConfirmDialog(
+          t("block.confirm.title"),
+          tFmt("block.confirm.text", { username: currentOtherUser.username }),
+          t("block.confirm.action")
+        );
         if (!ok) return;
         await blockUser(currentOtherUser.id);
       }
@@ -7754,12 +7841,12 @@ function updateBlockUI() {
   const theyBlocked = hasBlockedMe(currentOtherUser.id);
 
   if (iBlocked) {
-    text.textContent = t("chat.menu.unblock") + ": @" + currentOtherUser.username;
+    text.textContent = tFmt("block.youBlocked", { username: currentOtherUser.username });
     btn.classList.remove("hidden"); banner.classList.remove("hidden");
     composerInput.disabled = true; composerBtn.disabled = true;
     menuBlockBtn.textContent = t("chat.menu.unblock");
   } else if (theyBlocked) {
-    text.textContent = "@" + currentOtherUser.username + " — " + t("chat.menu.block").toLowerCase();
+    text.textContent = tFmt("block.theyBlocked", { username: currentOtherUser.username });
     btn.classList.add("hidden"); banner.classList.remove("hidden");
     composerInput.disabled = true; composerBtn.disabled = true;
     menuBlockBtn.textContent = t("chat.menu.block");
@@ -7795,8 +7882,8 @@ async function clearChatForBoth() {
 
   // Чистим локально сразу
   document.getElementById("messages").innerHTML = currentChannelObj
-    ? '<div class="empty">В этом канале пока что нет сообщений.</div>'
-    : '<div class="empty">Пока сообщений нет. Напиши первым!</div>';
+    ? '<div class="empty">' + escapeHtml(t("empty.noMessagesChannel")) + '</div>'
+    : '<div class="empty">' + escapeHtml(t("empty.noMessages")) + '</div>';
   msgCache.clear(); reactionsCache.clear();
 
   // Если удалилось меньше, чем было в кэше, — явно предупреждаем.
