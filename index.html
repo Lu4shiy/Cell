@@ -99,25 +99,25 @@
       <div id="sidebar-menu-drawer" class="sidebar-menu-drawer">
 <button id="create-channel-btn" class="drawer-btn" type="button">
   <span class="cell-icon" data-icon="plus"></span>
-  <span>Создать канал</span>
+  <span data-i18n="sidebar.menu.createChannel">Создать канал</span>
 </button>
 <button id="settings-btn" class="drawer-btn" type="button">
   <span class="cell-icon" data-icon="settings"></span>
-  <span>Настройки</span>
+  <span data-i18n="sidebar.menu.settings">Настройки</span>
 </button>
 <button id="about-btn" class="drawer-btn" type="button">
   <span class="cell-icon" data-icon="info"></span>
-  <span>О приложении</span>
+  <span data-i18n="sidebar.menu.about">О приложении</span>
 </button>
 <button id="logout-btn" class="drawer-btn" type="button">
   <span class="cell-icon" data-icon="logout"></span>
-  <span>Выйти</span>
+  <span data-i18n="sidebar.menu.logout">Выйти</span>
 </button>
       </div>
 
       <div class="search-wrap">
-        <input type="text" id="search-input" placeholder="Поиск по имени или @username">
-        <button id="search-clear" class="search-clear hidden" title="Очистить поиск" type="button"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
+        <input type="text" id="search-input" placeholder="Поиск по имени или @username" data-i18n-placeholder="sidebar.search.placeholder">
+        <button id="search-clear" class="search-clear hidden" title="Очистить поиск" data-i18n-title="sidebar.search.clear" type="button"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
       </div>
 
       <div id="birthday-banner" class="birthday-banner hidden">
@@ -126,7 +126,7 @@
         <button class="birthday-close" id="birthday-close" title="Скрыть">✕</button>
       </div>
 
-      <div class="section-title" id="section-title">Чаты</div>
+      <div class="section-title" id="section-title" data-i18n="sidebar.section.chats">Чаты</div>
       <div class="wheel-wrap" id="wheel-wrap">
         <div class="wheel-arrow wheel-arrow-top hidden" aria-hidden="true">▴</div>
         <div class="wheel-fade wheel-fade-top"></div>
@@ -149,34 +149,34 @@
 
       <div id="chat-content" class="chat-content hidden">
         <header class="chat-header">
-          <button id="mobile-back-btn" class="mobile-back-btn" type="button" aria-label="Назад"><span class="cell-icon" data-icon="left"></span></button>
+          <button id="mobile-back-btn" class="mobile-back-btn" type="button" aria-label="Назад" data-i18n-title="chat.back"><span class="cell-icon" data-icon="left"></span></button>
           <div class="avatar" id="chat-avatar">?</div>
           <div class="chat-header-text clickable" id="chat-header-text">
             <div class="chat-title" id="chat-title">Имя</div>
             <div class="chat-subtitle" id="chat-subtitle">@username</div>
           </div>
-          <button id="chat-search-btn" class="icon-btn" title="Поиск в чате"><span class="cell-icon" data-icon="search"></span></button>
-          <button id="chat-pin-btn" class="icon-btn" title="Закреплённые"><span class="cell-icon" data-icon="pin"></span><span class="pin-count-badge hidden" id="pin-count-badge">0</span></button>
-          <button id="chat-menu-btn" class="icon-btn" title="Меню"><span class="cell-icon" data-icon="menuVertical"></span></button>
+          <button id="chat-search-btn" class="icon-btn" title="Поиск в чате" data-i18n-title="chat.search.open"><span class="cell-icon" data-icon="search"></span></button>
+          <button id="chat-pin-btn" class="icon-btn" title="Закреплённые" data-i18n-title="chat.pins.open"><span class="cell-icon" data-icon="pin"></span><span class="pin-count-badge hidden" id="pin-count-badge">0</span></button>
+          <button id="chat-menu-btn" class="icon-btn" title="Меню" data-i18n-title="chat.menu.open"><span class="cell-icon" data-icon="menuVertical"></span></button>
           <div id="chat-menu" class="menu hidden">
-            <button data-action="tokens">Отправить Nectar</button>
-            <button data-action="clear">Очистить чат</button>
-            <button data-action="delete">Удалить чат</button>
-            <button data-action="block" id="menu-block" class="danger">Заблокировать</button>
-            <button data-action="channel-profile" class="hidden">Профиль канала</button>
-            <button data-action="channel-invite" class="hidden">Пригласить по ссылке</button>
-            <button data-action="channel-configure" class="hidden">Настроить канал</button>
-            <button data-action="channel-unsubscribe" class="hidden danger">Отписаться</button>
-            <button data-action="channel-delete" class="hidden danger">Удалить канал</button>
+            <button data-action="tokens" data-i18n="chat.menu.tokens">Отправить Nectar</button>
+            <button data-action="clear" data-i18n="chat.menu.clear">Очистить чат</button>
+            <button data-action="delete" data-i18n="chat.menu.delete">Удалить чат</button>
+            <button data-action="block" id="menu-block" class="danger" data-i18n="chat.menu.block">Заблокировать</button>
+            <button data-action="channel-profile" class="hidden" data-i18n="chat.menu.channel.profile">Профиль канала</button>
+            <button data-action="channel-invite" class="hidden" data-i18n="chat.menu.channel.invite">Пригласить по ссылке</button>
+            <button data-action="channel-configure" class="hidden" data-i18n="chat.menu.channel.configure">Настроить канал</button>
+            <button data-action="channel-unsubscribe" class="hidden danger" data-i18n="chat.menu.channel.unsubscribe">Отписаться</button>
+            <button data-action="channel-delete" class="hidden danger" data-i18n="chat.menu.channel.delete">Удалить канал</button>
           </div>
         </header>
 
         <div id="chat-search-bar" class="chat-search-bar hidden">
-          <input type="text" id="chat-search-input" placeholder="Поиск в чате..." autocomplete="off">
+          <input type="text" id="chat-search-input" placeholder="Поиск в чате..." data-i18n-placeholder="chat.search.placeholder" autocomplete="off">
           <span class="chat-search-count" id="chat-search-count"></span>
-          <button class="chat-search-nav" id="chat-search-prev" title="Предыдущее" type="button"><span class="cell-icon cell-icon-sm" data-icon="up"></span></button>
-          <button class="chat-search-nav" id="chat-search-next" title="Следующее" type="button"><span class="cell-icon cell-icon-sm" data-icon="down"></span></button>
-          <button class="chat-search-nav" id="chat-search-close" title="Закрыть" type="button"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
+          <button class="chat-search-nav" id="chat-search-prev" title="Предыдущее" data-i18n-title="chat.search.prev" type="button"><span class="cell-icon cell-icon-sm" data-icon="up"></span></button>
+          <button class="chat-search-nav" id="chat-search-next" title="Следующее" data-i18n-title="chat.search.next" type="button"><span class="cell-icon cell-icon-sm" data-icon="down"></span></button>
+          <button class="chat-search-nav" id="chat-search-close" title="Закрыть" data-i18n-title="chat.search.close" type="button"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
         </div>
 
         <div id="block-banner" class="block-banner hidden">
@@ -187,40 +187,40 @@
         <div id="pin-bar" class="pin-bar hidden">
           <span class="pin-bar-icon"><span class="cell-icon" data-icon="pin"></span></span>
           <div class="pin-bar-content">
-            <div class="pin-bar-title" id="pin-bar-title">Закреплённое сообщение</div>
+            <div class="pin-bar-title" id="pin-bar-title" data-i18n="chat.pin.title">Закреплённое сообщение</div>
             <div class="pin-bar-text" id="pin-bar-text"></div>
           </div>
-          <button class="pin-bar-list-btn" id="pin-bar-list" title="Все закрепы" type="button"><span class="cell-icon" data-icon="menuVertical"></span></button>
+          <button class="pin-bar-list-btn" id="pin-bar-list" title="Все закрепы" data-i18n-title="chat.pin.list.open" type="button"><span class="cell-icon" data-icon="menuVertical"></span></button>
         </div>
         <div class="messages" id="messages"></div>
         <div id="date-float" class="date-float hidden"></div>
         <div id="chat-timeline" class="chat-timeline hidden"></div>
-        <button id="scroll-bottom-btn" class="scroll-bottom-btn" title="Вниз"><span class="cell-icon" data-icon="down"></span></button>
+        <button id="scroll-bottom-btn" class="scroll-bottom-btn" title="Вниз" data-i18n-title="chat.scroll.down"><span class="cell-icon" data-icon="down"></span></button>
 
         <div id="reply-bar" class="reply-bar hidden">
           <div class="reply-bar-icon" id="reply-bar-icon">↩</div>
           <div class="reply-bar-content">
-            <div class="reply-bar-title" id="reply-bar-title">Ответ</div>
+            <div class="reply-bar-title" id="reply-bar-title" data-i18n="chat.reply.title">Ответ</div>
             <div class="reply-bar-text" id="reply-bar-text"></div>
           </div>
-          <button id="reply-bar-close" class="reply-bar-close" title="Отмена"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
+          <button id="reply-bar-close" class="reply-bar-close" title="Отмена" data-i18n-title="chat.reply.cancel"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
         </div>
 
         <div id="e2ee-unlock-banner" class="e2ee-unlock-banner hidden">
-          <span class="cell-icon" data-icon="lock"></span> <span>Сообщения в этом чате зашифрованы.</span>
-          <button type="button" id="e2ee-unlock-banner-btn">Разблокировать</button>
+          <span class="cell-icon" data-icon="lock"></span> <span data-i18n="e2ee.banner.text">Сообщения в этом чате зашифрованы.</span>
+          <button type="button" id="e2ee-unlock-banner-btn" data-i18n="e2ee.banner.unlock">Разблокировать</button>
         </div>
 
         <div id="e2ee-composer-hint" class="e2ee-composer-hint hidden">
-          <span class="cell-icon cell-icon-sm" data-icon="lock"></span> <span id="e2ee-composer-hint-text">Зашифровано</span>
+          <span class="cell-icon cell-icon-sm" data-icon="lock"></span> <span id="e2ee-composer-hint-text" data-i18n="e2ee.composer.hint">Зашифровано</span>
         </div>
 
         <form class="composer" id="composer">
-          <button type="button" id="attach-btn" class="attach-btn" title="Прикрепить файл"><span class="cell-icon" data-icon="attach"></span></button>
+          <button type="button" id="attach-btn" class="attach-btn" title="Прикрепить файл" data-i18n-title="composer.attach"><span class="cell-icon" data-icon="attach"></span></button>
           <input type="file" id="attach-input" multiple hidden>
-          <div id="message-input" class="message-input" contenteditable="true" data-placeholder="Написать сообщение..." role="textbox" spellcheck="false"></div>
-          <button type="button" id="emoji-btn" class="emoji-btn" title="Эмодзи"><span class="cell-icon" data-icon="happy"></span></button>
-          <button type="submit" class="send-btn" id="send-btn" title="Отправить"><span class="cell-icon" data-icon="sent"></span></button>
+          <div id="message-input" class="message-input" contenteditable="true" data-placeholder="Написать сообщение..." data-i18n-data-placeholder="composer.placeholder" role="textbox" spellcheck="false"></div>
+          <button type="button" id="emoji-btn" class="emoji-btn" title="Эмодзи" data-i18n-title="composer.emoji"><span class="cell-icon" data-icon="happy"></span></button>
+          <button type="submit" class="send-btn" id="send-btn" title="Отправить" data-i18n-title="composer.send"><span class="cell-icon" data-icon="sent"></span></button>
         </form>
 
         <div id="emoji-picker" class="emoji-picker hidden">
@@ -229,15 +229,15 @@
         </div>
 
         <div id="channel-action-bar" class="channel-action-bar hidden">
-          <button id="channel-subscribe-btn" class="channel-action-btn">Подписаться</button>
+          <button id="channel-subscribe-btn" class="channel-action-btn" data-i18n="channel.action.subscribe">Подписаться</button>
         </div>
 
         <div id="selection-toolbar" class="selection-toolbar hidden">
           <span id="selection-count">Выбрано: 0</span>
           <div>
-            <button id="sel-delete">Удалить</button>
-            <button id="sel-forward">Переслать</button>
-            <button id="sel-cancel">Отмена</button>
+            <button id="sel-delete" data-i18n="selection.delete">Удалить</button>
+            <button id="sel-forward" data-i18n="selection.forward">Переслать</button>
+            <button id="sel-cancel" data-i18n="selection.cancel">Отмена</button>
           </div>
         </div>
       </div>
@@ -734,9 +734,6 @@
         <div class="visibility-toggle" id="settings-language-toggle">
           <button type="button" data-lang="ru">Русский</button>
           <button type="button" data-lang="en">English</button>
-        </div>
-        <div class="username-hint" data-i18n="settings.language.hint">
-          Язык интерфейса. Ники, названия каналов и подписи подарков не переводятся.
         </div>
       </div>
 

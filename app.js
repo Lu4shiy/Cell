@@ -230,6 +230,75 @@ const I18N = {
     "auth.err.register.loading": "Регистрирую...",
     "auth.err.register.checkEmail": "Проверь почту и подтверди email.",
     "auth.err.login.tooManyAttempts": "Слишком много попыток. Подожди 5 минут.",
+
+    // ---- Сайдбар ----
+    "sidebar.menu.createChannel": "Создать канал",
+    "sidebar.menu.settings": "Настройки",
+    "sidebar.menu.about": "О приложении",
+    "sidebar.menu.logout": "Выйти",
+    "sidebar.search.placeholder": "Поиск по имени или @username",
+    "sidebar.search.clear": "Очистить поиск",
+    "sidebar.section.chats": "Чаты",
+    "sidebar.section.search": "Поиск",
+
+    // ---- Шапка чата ----
+    "chat.back": "Назад",
+    "chat.search.open": "Поиск в чате",
+    "chat.pins.open": "Закреплённые",
+    "chat.menu.open": "Меню",
+    "chat.menu.tokens": "Отправить Nectar",
+    "chat.menu.clear": "Очистить чат",
+    "chat.menu.delete": "Удалить чат",
+    "chat.menu.block": "Заблокировать",
+    "chat.menu.unblock": "Разблокировать",
+    "chat.menu.channel.profile": "Профиль канала",
+    "chat.menu.channel.invite": "Пригласить по ссылке",
+    "chat.menu.channel.configure": "Настроить канал",
+    "chat.menu.channel.unsubscribe": "Отписаться",
+    "chat.menu.channel.delete": "Удалить канал",
+
+    // ---- Поиск в чате ----
+    "chat.search.placeholder": "Поиск в чате...",
+    "chat.search.prev": "Предыдущее",
+    "chat.search.next": "Следующее",
+    "chat.search.close": "Закрыть",
+
+    // ---- Панели над сообщениями ----
+    "chat.pin.title": "Закреплённое сообщение",
+    "chat.pin.list.open": "Все закрепы",
+    "chat.reply.title": "Ответ",
+    "chat.reply.cancel": "Отмена",
+    "chat.scroll.down": "Вниз",
+
+    // ---- E2EE ----
+    "e2ee.banner.text": "Сообщения в этом чате зашифрованы.",
+    "e2ee.banner.unlock": "Разблокировать",
+    "e2ee.composer.hint": "Зашифровано",
+    "e2ee.composer.hint.full": "Зашифровано end-to-end",
+
+    // ---- Composer ----
+    "composer.placeholder": "Написать сообщение...",
+    "composer.attach": "Прикрепить файл",
+    "composer.emoji": "Эмодзи",
+    "composer.send": "Отправить",
+
+    // ---- Канал ----
+    "channel.action.subscribe": "Подписаться",
+    "channel.action.unsubscribe": "Отписаться",
+    "channel.action.request": "Подать заявку",
+    "channel.action.requestCancel": "Отозвать заявку",
+    "channel.action.requestRejected": "Заявка отклонена",
+    "channel.action.private": "Только по ссылке-приглашению",
+
+    // ---- Режим выбора ----
+    "selection.count": "Выбрано: ",
+    "selection.delete": "Удалить",
+    "selection.forward": "Переслать",
+    "selection.cancel": "Отмена",
+
+    // ---- Закреплённые/ответы (плейсхолдеры) ----
+    "msg.reply.you": "Ты",
+    "msg.reply.answer": "В ответ",
   },
   en: {
     // ---- Settings ----
@@ -259,6 +328,75 @@ const I18N = {
     "auth.err.register.loading": "Signing up...",
     "auth.err.register.checkEmail": "Check your email and confirm the address.",
     "auth.err.login.tooManyAttempts": "Too many attempts. Wait 5 minutes.",
+
+    // ---- Sidebar ----
+    "sidebar.menu.createChannel": "Create channel",
+    "sidebar.menu.settings": "Settings",
+    "sidebar.menu.about": "About",
+    "sidebar.menu.logout": "Log out",
+    "sidebar.search.placeholder": "Search by name or @username",
+    "sidebar.search.clear": "Clear search",
+    "sidebar.section.chats": "Chats",
+    "sidebar.section.search": "Search",
+
+    // ---- Chat header ----
+    "chat.back": "Back",
+    "chat.search.open": "Search in chat",
+    "chat.pins.open": "Pinned",
+    "chat.menu.open": "Menu",
+    "chat.menu.tokens": "Send Nectar",
+    "chat.menu.clear": "Clear chat",
+    "chat.menu.delete": "Delete chat",
+    "chat.menu.block": "Block",
+    "chat.menu.unblock": "Unblock",
+    "chat.menu.channel.profile": "Channel profile",
+    "chat.menu.channel.invite": "Invite by link",
+    "chat.menu.channel.configure": "Configure channel",
+    "chat.menu.channel.unsubscribe": "Unsubscribe",
+    "chat.menu.channel.delete": "Delete channel",
+
+    // ---- Chat search ----
+    "chat.search.placeholder": "Search in chat...",
+    "chat.search.prev": "Previous",
+    "chat.search.next": "Next",
+    "chat.search.close": "Close",
+
+    // ---- Panels above messages ----
+    "chat.pin.title": "Pinned message",
+    "chat.pin.list.open": "All pins",
+    "chat.reply.title": "Reply",
+    "chat.reply.cancel": "Cancel",
+    "chat.scroll.down": "Down",
+
+    // ---- E2EE ----
+    "e2ee.banner.text": "Messages in this chat are encrypted.",
+    "e2ee.banner.unlock": "Unlock",
+    "e2ee.composer.hint": "Encrypted",
+    "e2ee.composer.hint.full": "End-to-end encrypted",
+
+    // ---- Composer ----
+    "composer.placeholder": "Write a message...",
+    "composer.attach": "Attach file",
+    "composer.emoji": "Emoji",
+    "composer.send": "Send",
+
+    // ---- Channel ----
+    "channel.action.subscribe": "Subscribe",
+    "channel.action.unsubscribe": "Unsubscribe",
+    "channel.action.request": "Send request",
+    "channel.action.requestCancel": "Withdraw request",
+    "channel.action.requestRejected": "Request declined",
+    "channel.action.private": "Invite link only",
+
+    // ---- Selection mode ----
+    "selection.count": "Selected: ",
+    "selection.delete": "Delete",
+    "selection.forward": "Forward",
+    "selection.cancel": "Cancel",
+
+    // ---- Pinned / replies (placeholders) ----
+    "msg.reply.you": "You",
+    "msg.reply.answer": "In reply to",
   },
 };
 
@@ -288,6 +426,13 @@ function setLanguage(lang) {
   currentLang = lang;
   try { localStorage.setItem(LANG_KEY, lang); } catch (e) { /* silent */ }
   applyLanguage();
+  // Заголовок секции управляется JS — обновим его вручную.
+  const titleEl = document.getElementById("section-title");
+  const searchInput = document.getElementById("search-input");
+  if (titleEl) {
+    if (searchInput && searchInput.value.trim()) titleEl.textContent = t("sidebar.section.search");
+    else titleEl.textContent = t("sidebar.section.chats");
+  }
 }
 
 // Применяет переводы к статическому HTML:
@@ -300,6 +445,10 @@ function applyLanguage() {
 
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     const key = el.getAttribute("data-i18n");
+    // Пропускаем section-title — им управляет JS (Чаты/Поиск), и
+    // data-i18n там может перетереть актуальное значение. Оно обновится
+    // через явный вызов loadRecentChats/performSearch.
+    if (el.id === "section-title") return;
     if (key) el.textContent = t(key);
   });
   document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
@@ -309,6 +458,12 @@ function applyLanguage() {
   document.querySelectorAll("[data-i18n-title]").forEach((el) => {
     const key = el.getAttribute("data-i18n-title");
     if (key) el.setAttribute("title", t(key));
+  });
+  // Отдельно — data-placeholder (у contenteditable нет attribute placeholder,
+  // там CSS читает attr(data-placeholder)).
+  document.querySelectorAll("[data-i18n-data-placeholder]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-data-placeholder");
+    if (key) el.setAttribute("data-placeholder", t(key));
   });
 
   const langToggle = document.getElementById("settings-language-toggle");
@@ -1083,7 +1238,7 @@ async function updateE2eeComposerHint() {
   // У собеседника ключ есть. Показываем либо «всё ок», либо баннер разблокировки
   if (cryptoUnlocked) {
     hint.classList.remove("hidden");
-    txt.textContent = "Зашифровано end-to-end";
+    txt.textContent = t("e2ee.composer.hint.full");
     if (banner) banner.classList.add("hidden");
   } else {
     hint.classList.add("hidden");
@@ -1954,7 +2109,7 @@ function resetAppState() {
   // Список чатов к дефолту
   const list = document.getElementById("users-list");
   if (list) list.innerHTML = '<div class="empty">Загрузка...</div>';
-  document.getElementById("section-title").textContent = "Чаты";
+  document.getElementById("section-title").textContent = t("sidebar.section.chats");
   // Заголовок чата к дефолту
   const title = document.getElementById("chat-title");
   if (title) title.textContent = "Имя";
@@ -3266,7 +3421,7 @@ function subscribeToProfiles() {
 // ======================= 10. СПИСОК ЧАТОВ =======================
 async function loadRecentChats() {
   const listEl = document.getElementById("users-list");
-  document.getElementById("section-title").textContent = "Чаты";
+  document.getElementById("section-title").textContent = t("sidebar.section.chats");
   // 🔴 Показываем «Загрузка...» только если список ещё пуст (первичная
   // загрузка). При повторных вызовах оставляем текущий список — иначе
   // при обновлении данных пользователь видит мигание «Загрузка → чаты».
@@ -3664,7 +3819,7 @@ async function updateChannelComposerState() {
   subBtn.disabled = false;
 
   if (currentChannelIsSubscribed) {
-    subBtn.textContent = "Отписаться";
+    subBtn.textContent = t("channel.action.unsubscribe");
     subBtn.classList.add("unsub");
     return;
   }
@@ -3672,23 +3827,23 @@ async function updateChannelComposerState() {
   const vis = currentChannelObj.visibility || "public";
   if (vis === "request") {
     if (currentChannelRequestRejected) {
-      subBtn.textContent = "Заявка отклонена";
+      subBtn.textContent = t("channel.action.requestRejected");
       subBtn.disabled = true;
       subBtn.classList.remove("unsub");
     } else if (currentChannelHasRequest) {
       // 🔴 Пока заявка висит — кнопка «Отозвать заявку», а не «Заявка отправлена».
-      subBtn.textContent = "Отозвать заявку";
+      subBtn.textContent = t("channel.action.requestCancel");
       subBtn.disabled = false;
       subBtn.classList.add("unsub");
     } else {
-      subBtn.textContent = "Подать заявку";
+      subBtn.textContent = t("channel.action.request");
       subBtn.classList.remove("unsub");
     }
   } else if (vis === "private") {
-    subBtn.textContent = "Только по ссылке-приглашению";
+    subBtn.textContent = t("channel.action.private");
     subBtn.disabled = true;
   } else {
-    subBtn.textContent = "Подписаться";
+    subBtn.textContent = t("channel.action.subscribe");
   }
 }
 
@@ -4291,7 +4446,7 @@ async function performSearch(query) {
   const clearBtn = document.getElementById("search-clear");
   if (clearBtn) clearBtn.classList.toggle("hidden", !query);
   if (!query) { await loadRecentChats(); return; }
-  titleEl.textContent = "Поиск";
+  titleEl.textContent = t("sidebar.section.search");
   const clean = query.replace(/^@+/, "").trim().toLowerCase();
   if (!clean) { listEl.innerHTML = '<div class="empty">Начни вводить имя или @username</div>'; return; }
   listEl.innerHTML = '<div class="empty">Ищу...</div>';
@@ -4650,7 +4805,7 @@ async function openChatWith(otherUser) {
   const sbBtn = document.getElementById("scroll-bottom-btn");
   if (sbBtn) sbBtn.classList.remove("visible");
   document.getElementById("message-input").setAttribute("contenteditable", "true");
-  document.getElementById("message-input").setAttribute("data-placeholder", "Написать сообщение...");
+  document.getElementById("message-input").setAttribute("data-placeholder", t("composer.placeholder"));
   resetChatMenuToDm();
   document.getElementById("composer").classList.remove("hidden");
   document.getElementById("channel-action-bar").classList.add("hidden");
@@ -5137,13 +5292,13 @@ async function buildMsgHtml(msg) {
     // 🔴 Без await: профиль уже предзагружен batch-запросом в loadMessages.
     // Если его там нет — это либо наш профиль, либо редкий случай.
     const origProfile = profileCache.get(orig.sender_id) || (orig.sender_id === currentUser.id ? myProfile : null);
-    const origName = orig.sender_id === currentUser.id ? "Ты" : (origProfile ? origProfile.display_name : "?");
+    const origName = orig.sender_id === currentUser.id ? t("msg.reply.you") : (origProfile ? origProfile.display_name : "?");
     const origPlain = orig.message_type === "attachment" ? "" : await getPlaintext(orig);
     const origPreview = orig.message_type === "attachment"
       ? (orig.file_kind === "image" ? "📷 Фото" : orig.file_kind === "video" ? "🎥 Видео" : "📎 Файл")
       : origPlain.slice(0, 60);
     html += `<div class="msg-reply" data-scroll-to="${msg.reply_to_id}">
-      <span class="msg-reply-name">В ответ ${escapeHtml(origName)}</span>
+      <span class="msg-reply-name">${t("msg.reply.answer")} ${escapeHtml(origName)}</span>
       <span class="msg-reply-text">${escapeHtml(origPreview)}</span>
     </div>`;
   }
@@ -7599,19 +7754,19 @@ function updateBlockUI() {
   const theyBlocked = hasBlockedMe(currentOtherUser.id);
 
   if (iBlocked) {
-    text.textContent = "Ты заблокировал(а) @" + currentOtherUser.username + ".";
+    text.textContent = t("chat.menu.unblock") + ": @" + currentOtherUser.username;
     btn.classList.remove("hidden"); banner.classList.remove("hidden");
     composerInput.disabled = true; composerBtn.disabled = true;
-    menuBlockBtn.textContent = "Разблокировать";
+    menuBlockBtn.textContent = t("chat.menu.unblock");
   } else if (theyBlocked) {
-    text.textContent = "@" + currentOtherUser.username + " заблокировал(а) тебя.";
+    text.textContent = "@" + currentOtherUser.username + " — " + t("chat.menu.block").toLowerCase();
     btn.classList.add("hidden"); banner.classList.remove("hidden");
     composerInput.disabled = true; composerBtn.disabled = true;
-    menuBlockBtn.textContent = "Заблокировать";
+    menuBlockBtn.textContent = t("chat.menu.block");
   } else {
     banner.classList.add("hidden"); btn.classList.add("hidden");
     composerInput.disabled = false; composerBtn.disabled = false;
-    menuBlockBtn.textContent = "Заблокировать";
+    menuBlockBtn.textContent = t("chat.menu.block");
   }
 }
 
@@ -8416,7 +8571,7 @@ function exitSelectionMode() {
 }
 
 function updateSelectionUI() {
-  document.getElementById("selection-count").textContent = "Выбрано: " + selectedMsgIds.size;
+  document.getElementById("selection-count").textContent = t("selection.count") + selectedMsgIds.size;
 }
 
 async function handleDeleteSelected() {
