@@ -259,39 +259,39 @@
 
   <div id="profile-overlay" class="dialog-overlay hidden">
     <div class="dialog dialog-profile">
-      <div class="dialog-title">Профиль</div>
+      <div class="dialog-title" data-i18n="profile.title">Профиль</div>
 
       <div class="profile-section">
-        <div class="profile-label">Аватар</div>
+        <div class="profile-label" data-i18n="profile.section.avatar">Аватар</div>
         <div class="avatar-preview">
           <div class="avatar avatar-large" id="profile-avatar-preview">?</div>
         </div>
         <div class="avatar-grid" id="avatar-grid"></div>
-        <label class="upload-btn">Загрузить свою<input type="file" id="avatar-upload" accept="image/*" hidden></label>
+        <label class="upload-btn"><span data-i18n="profile.upload">Загрузить свою</span><input type="file" id="avatar-upload" accept="image/*" hidden></label>
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Имя</div>
-        <input type="text" id="profile-displayname" placeholder="Ваше имя" maxlength="25" autocomplete="off">
+        <div class="profile-label" data-i18n="profile.section.name">Имя</div>
+        <input type="text" id="profile-displayname" placeholder="Ваше имя" data-i18n-placeholder="profile.name.placeholder" maxlength="25" autocomplete="off">
         <div class="profile-name-counter" id="profile-displayname-counter">0 / 25</div>
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">О себе</div>
-        <textarea id="profile-bio" class="profile-bio-input" placeholder="Пара слов о себе..." maxlength="200" rows="3"></textarea>
+        <div class="profile-label" data-i18n="profile.section.bio">О себе</div>
+        <textarea id="profile-bio" class="profile-bio-input" placeholder="Пара слов о себе..." data-i18n-placeholder="profile.bio.placeholder" maxlength="200" rows="3"></textarea>
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Пол</div>
+        <div class="profile-label" data-i18n="profile.section.gender">Пол</div>
         <div class="gender-toggle" id="gender-toggle">
-          <button data-gender="male">Мужской</button>
-          <button data-gender="female">Женский</button>
-          <button data-gender="unset">Не выбрано</button>
+          <button data-gender="male" data-i18n="profile.gender.male">Мужской</button>
+          <button data-gender="female" data-i18n="profile.gender.female">Женский</button>
+          <button data-gender="unset" data-i18n="profile.gender.unset">Не выбрано</button>
         </div>
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Имя пользователя</div>
+        <div class="profile-label" data-i18n="profile.section.username">Имя пользователя</div>
         <div class="username-input-wrap">
           <span class="username-prefix">@</span>
           <input type="text" id="profile-username" placeholder="username" maxlength="32" autocomplete="off" spellcheck="false">
@@ -300,38 +300,38 @@
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">День рождения</div>
+        <div class="profile-label" data-i18n="profile.section.birthday">День рождения</div>
         <div class="birthday-input-wrap">
-          <input type="text" id="profile-birthday" placeholder="ДД.ММ или ДД.ММ.ГГГГ" maxlength="10" autocomplete="off">
-          <button type="button" id="profile-birthday-calendar" class="birthday-calendar-btn" title="Выбрать дату"><span class="cell-icon" data-icon="calendar"></span></button>
+          <input type="text" id="profile-birthday" placeholder="ДД.ММ или ДД.ММ.ГГГГ" data-i18n-placeholder="profile.birthday.placeholder" maxlength="10" autocomplete="off">
+          <button type="button" id="profile-birthday-calendar" class="birthday-calendar-btn" title="Выбрать дату" data-i18n-title="profile.birthday.calendar"><span class="cell-icon" data-icon="calendar"></span></button>
           <div id="birthday-calendar" class="birthday-calendar hidden">
             <div class="bc-header">
-              <button type="button" class="bc-nav" data-bc="prev-year" title="Год назад">«</button>
-              <button type="button" class="bc-nav" data-bc="prev-month" title="Месяц назад">‹</button>
+              <button type="button" class="bc-nav" data-bc="prev-year" title="Год назад" data-i18n-title="calendar.prevYear">«</button>
+              <button type="button" class="bc-nav" data-bc="prev-month" title="Месяц назад" data-i18n-title="calendar.prevMonth">‹</button>
               <div class="bc-title" id="bc-title">—</div>
-              <button type="button" class="bc-nav" data-bc="next-month" title="Месяц вперёд">›</button>
-              <button type="button" class="bc-nav" data-bc="next-year" title="Год вперёд">»</button>
+              <button type="button" class="bc-nav" data-bc="next-month" title="Месяц вперёд" data-i18n-title="calendar.nextMonth">›</button>
+              <button type="button" class="bc-nav" data-bc="next-year" title="Год вперёд" data-i18n-title="calendar.nextYear">»</button>
             </div>
             <div class="bc-days-head">
               <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
             </div>
             <div class="bc-days" id="bc-days"></div>
             <div class="bc-footer">
-              <button type="button" class="bc-btn" id="bc-today">Сегодня</button>
-              <button type="button" class="bc-btn" id="bc-clear">Очистить</button>
+              <button type="button" class="bc-btn" id="bc-today" data-i18n="calendar.today">Сегодня</button>
+              <button type="button" class="bc-btn" id="bc-clear" data-i18n="calendar.clear">Очистить</button>
             </div>
           </div>
         </div>
       </div>
 
       <button class="profile-gifts-btn" id="profile-gifts-btn">
-        <span style="display:flex;align-items:center;gap:8px;"><span class="cell-icon" data-icon="gift"></span>Подарки</span>
+        <span style="display:flex;align-items:center;gap:8px;"><span class="cell-icon" data-icon="gift"></span><span data-i18n="profile.gifts">Подарки</span></span>
         <span class="gifts-count-badge" id="profile-gifts-count">0</span>
       </button>
 
       <div class="dialog-actions">
-        <button class="dialog-btn dialog-primary" id="profile-apply" disabled>Применить изменения</button>
-        <button class="dialog-btn dialog-cancel" id="profile-close">Закрыть</button>
+        <button class="dialog-btn dialog-primary" id="profile-apply" disabled data-i18n="profile.apply">Применить изменения</button>
+        <button class="dialog-btn dialog-cancel" id="profile-close" data-i18n="profile.close">Закрыть</button>
       </div>
     </div>
   </div>
@@ -348,7 +348,7 @@
 
   <div id="user-profile-overlay" class="dialog-overlay hidden">
     <div class="dialog dialog-profile">
-      <button type="button" class="profile-back-btn hidden" id="user-profile-back" title="Назад"><span class="cell-icon" data-icon="left"></span></button>
+      <button type="button" class="profile-back-btn hidden" id="user-profile-back" title="Назад" data-i18n-title="userProfile.back"><span class="cell-icon" data-icon="left"></span></button>
       <div class="profile-hero">
         <div class="avatar avatar-large" id="user-profile-avatar">?</div>
         <div class="profile-hero-name" id="user-profile-name">—</div>
@@ -361,39 +361,39 @@
           <span class="pir-icon">@</span>
           <div class="pir-body">
             <div class="pir-value" id="user-profile-username">—</div>
-            <div class="pir-label">Имя пользователя</div>
+            <div class="pir-label" data-i18n="userProfile.username">Имя пользователя</div>
           </div>
         </div>
         <div class="profile-info-row">
           <span class="pir-icon"><span class="cell-icon" data-icon="birthday"></span></span>
           <div class="pir-body">
             <div class="pir-value" id="user-profile-birthday">—</div>
-            <div class="pir-label">День рождения</div>
+            <div class="pir-label" data-i18n="userProfile.birthday">День рождения</div>
           </div>
         </div>
         <div class="profile-info-row">
           <span class="pir-icon"><span class="cell-icon" data-icon="typing"></span></span>
           <div class="pir-body">
             <div class="pir-value" id="user-profile-msgcount">0</div>
-            <div class="pir-label">Сообщений в чате</div>
+            <div class="pir-label" data-i18n="userProfile.msgcount">Сообщений в чате</div>
           </div>
         </div>
         <div class="profile-info-row">
           <span class="pir-icon"><span class="cell-icon" data-icon="calendar"></span></span>
           <div class="pir-body">
             <div class="pir-value" id="user-profile-created">—</div>
-            <div class="pir-label">Дата регистрации аккаунта</div>
+            <div class="pir-label" data-i18n="userProfile.created">Дата регистрации аккаунта</div>
           </div>
         </div>
       </div>
 
       <button class="profile-gifts-btn" id="user-profile-gifts-btn">
-        <span style="display:flex;align-items:center;gap:8px;"><span class="cell-icon" data-icon="gift"></span>Подарки</span>
+        <span style="display:flex;align-items:center;gap:8px;"><span class="cell-icon" data-icon="gift"></span><span data-i18n="userProfile.gifts">Подарки</span></span>
         <span class="gifts-count-badge" id="user-profile-gifts-count">0</span>
       </button>
 
       <div class="dialog-actions">
-        <button class="dialog-btn dialog-cancel" id="user-profile-close">Закрыть</button>
+        <button class="dialog-btn dialog-cancel" id="user-profile-close" data-i18n="userProfile.close">Закрыть</button>
       </div>
     </div>
   </div>

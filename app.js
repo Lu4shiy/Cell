@@ -367,6 +367,82 @@ const I18N = {
     "e2ee.status.locked": "🔒 Включено, но ключ заблокирован. Разблокируй паролем.",
     "e2ee.status.error": "Не удалось проверить статус",
 
+    // ---- Свой профиль ----
+    "profile.title": "Профиль",
+    "profile.section.avatar": "Аватар",
+    "profile.section.name": "Имя",
+    "profile.section.bio": "О себе",
+    "profile.section.gender": "Пол",
+    "profile.section.username": "Имя пользователя",
+    "profile.section.birthday": "День рождения",
+    "profile.upload": "Загрузить свою",
+    "profile.name.placeholder": "Ваше имя",
+    "profile.bio.placeholder": "Пара слов о себе...",
+    "profile.gender.male": "Мужской",
+    "profile.gender.female": "Женский",
+    "profile.gender.unset": "Не выбрано",
+    "profile.birthday.placeholder": "ДД.ММ или ДД.ММ.ГГГГ",
+    "profile.birthday.calendar": "Выбрать дату",
+    "profile.gifts": "Подарки",
+    "profile.apply": "Применить изменения",
+    "profile.close": "Закрыть",
+
+    // ---- Чужой профиль ----
+    "userProfile.username": "Имя пользователя",
+    "userProfile.birthday": "День рождения",
+    "userProfile.msgcount": "Сообщений в чате",
+    "userProfile.created": "Дата регистрации аккаунта",
+    "userProfile.gifts": "Подарки",
+    "userProfile.close": "Закрыть",
+    "userProfile.back": "Назад",
+
+    // ---- Календарь дня рождения ----
+    "calendar.today": "Сегодня",
+    "calendar.clear": "Очистить",
+    "calendar.prevYear": "Год назад",
+    "calendar.prevMonth": "Месяц назад",
+    "calendar.nextMonth": "Месяц вперёд",
+    "calendar.nextYear": "Год вперёд",
+
+    // ---- Хинты юзернейма ----
+    "username.free": "@{username} свободен",
+    "username.taken": "@{username} уже занят",
+    "username.reserved": "@{username} зарезервирован",
+    "username.current": "Это ваш текущий юзернейм",
+    "username.checking": "Проверяю...",
+    "username.error": "Ошибка проверки",
+    "username.onlyLatin": "Только английские буквы, цифры, _ и -",
+    "username.tooShort": "Минимум 3 символа",
+    "username.saved": "Сохранено",
+    "username.invalid": "Проверьте юзернейм",
+
+    // ---- Last seen ----
+    "lastSeen.online": "в сети",
+    "lastSeen.recently.male": "был недавно",
+    "lastSeen.recently.female": "была недавно",
+    "lastSeen.recently.other": "был(-а) недавно",
+    "lastSeen.minutes.male": "был {n} {word} назад",
+    "lastSeen.minutes.female": "была {n} {word} назад",
+    "lastSeen.minutes.other": "был(-а) {n} {word} назад",
+    "lastSeen.hours.male": "был {n} {word} назад",
+    "lastSeen.hours.female": "была {n} {word} назад",
+    "lastSeen.hours.other": "был(-а) {n} {word} назад",
+    "lastSeen.today.male": "был сегодня в {time}",
+    "lastSeen.today.female": "была сегодня в {time}",
+    "lastSeen.today.other": "был(-а) сегодня в {time}",
+    "lastSeen.yesterday.male": "был вчера в {time}",
+    "lastSeen.yesterday.female": "была вчера в {time}",
+    "lastSeen.yesterday.other": "был(-а) вчера в {time}",
+    "lastSeen.date.male": "был {date} в {time}",
+    "lastSeen.date.female": "была {date} в {time}",
+    "lastSeen.date.other": "был(-а) {date} в {time}",
+    "lastSeen.minWord.one": "минуту",
+    "lastSeen.minWord.few": "минуты",
+    "lastSeen.minWord.many": "минут",
+    "lastSeen.hourWord.one": "час",
+    "lastSeen.hourWord.few": "часа",
+    "lastSeen.hourWord.many": "часов",
+
     // ---- Пустые состояния ----
     "empty.noChats": "У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.",
     "empty.noChatsShort": "У вас пока нет чатов.",
@@ -551,6 +627,82 @@ const I18N = {
     "e2ee.status.locked": "🔒 Enabled, but the key is locked. Unlock with your password.",
     "e2ee.status.error": "Failed to check status",
 
+    // ---- Own profile ----
+    "profile.title": "Profile",
+    "profile.section.avatar": "Avatar",
+    "profile.section.name": "Name",
+    "profile.section.bio": "About",
+    "profile.section.gender": "Gender",
+    "profile.section.username": "Username",
+    "profile.section.birthday": "Birthday",
+    "profile.upload": "Upload your own",
+    "profile.name.placeholder": "Your name",
+    "profile.bio.placeholder": "A few words about you...",
+    "profile.gender.male": "Male",
+    "profile.gender.female": "Female",
+    "profile.gender.unset": "Not set",
+    "profile.birthday.placeholder": "MM.DD or MM.DD.YYYY",
+    "profile.birthday.calendar": "Pick a date",
+    "profile.gifts": "Gifts",
+    "profile.apply": "Apply changes",
+    "profile.close": "Close",
+
+    // ---- Other user's profile ----
+    "userProfile.username": "Username",
+    "userProfile.birthday": "Birthday",
+    "userProfile.msgcount": "Messages in chat",
+    "userProfile.created": "Account created",
+    "userProfile.gifts": "Gifts",
+    "userProfile.close": "Close",
+    "userProfile.back": "Back",
+
+    // ---- Birthday calendar ----
+    "calendar.today": "Today",
+    "calendar.clear": "Clear",
+    "calendar.prevYear": "Year back",
+    "calendar.prevMonth": "Month back",
+    "calendar.nextMonth": "Month forward",
+    "calendar.nextYear": "Year forward",
+
+    // ---- Username hints ----
+    "username.free": "@{username} is available",
+    "username.taken": "@{username} is taken",
+    "username.reserved": "@{username} is reserved",
+    "username.current": "This is your current username",
+    "username.checking": "Checking...",
+    "username.error": "Check failed",
+    "username.onlyLatin": "Only English letters, digits, _ and -",
+    "username.tooShort": "At least 3 characters",
+    "username.saved": "Saved",
+    "username.invalid": "Check the username",
+
+    // ---- Last seen ----
+    "lastSeen.online": "online",
+    "lastSeen.recently.male": "was online recently",
+    "lastSeen.recently.female": "was online recently",
+    "lastSeen.recently.other": "was online recently",
+    "lastSeen.minutes.male": "was online {n} {word} ago",
+    "lastSeen.minutes.female": "was online {n} {word} ago",
+    "lastSeen.minutes.other": "was online {n} {word} ago",
+    "lastSeen.hours.male": "was online {n} {word} ago",
+    "lastSeen.hours.female": "was online {n} {word} ago",
+    "lastSeen.hours.other": "was online {n} {word} ago",
+    "lastSeen.today.male": "was online today at {time}",
+    "lastSeen.today.female": "was online today at {time}",
+    "lastSeen.today.other": "was online today at {time}",
+    "lastSeen.yesterday.male": "was online yesterday at {time}",
+    "lastSeen.yesterday.female": "was online yesterday at {time}",
+    "lastSeen.yesterday.other": "was online yesterday at {time}",
+    "lastSeen.date.male": "was online {date} at {time}",
+    "lastSeen.date.female": "was online {date} at {time}",
+    "lastSeen.date.other": "was online {date} at {time}",
+    "lastSeen.minWord.one": "minute",
+    "lastSeen.minWord.few": "minutes",
+    "lastSeen.minWord.many": "minutes",
+    "lastSeen.hourWord.one": "hour",
+    "lastSeen.hourWord.few": "hours",
+    "lastSeen.hourWord.many": "hours",
+
     // ---- Empty states ----
     "empty.noChats": "No chats yet.<br>Type @username above to find someone.",
     "empty.noChatsShort": "No chats yet.",
@@ -624,6 +776,16 @@ function setLanguage(lang) {
   if (titleEl) {
     if (searchInput && searchInput.value.trim()) titleEl.textContent = t("sidebar.section.search");
     else titleEl.textContent = t("sidebar.section.chats");
+  }
+  // Дни недели в календаре дня рождения (в HTML они статичны).
+  const bcDaysHead = document.querySelector(".bc-days-head");
+  if (bcDaysHead) {
+    const ru = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+    const en = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+    const days = currentLang === "en" ? en : ru;
+    bcDaysHead.querySelectorAll("span").forEach((s, i) => {
+      if (days[i]) s.textContent = days[i];
+    });
   }
   // Текст кнопки «Бабушка» управляется JS — обновим через applyGrandmaModeUI.
   if (typeof applyGrandmaModeUI === "function") applyGrandmaModeUI();
@@ -2811,19 +2973,19 @@ async function applyProfileChanges() {
   const unameVal = unameInput.value.trim();
   if (unameVal && unameVal !== myProfile.username && unameVal !== validatedUsername) {
     const hint = document.getElementById("username-hint");
-    hint.className = "username-hint err"; hint.textContent = "Проверьте юзернейм"; return;
+    hint.className = "username-hint err"; hint.textContent = t("username.invalid"); return;
   }
   if (draftProfile.birthday) {
     const normalized = normalizeBirthday(draftProfile.birthday);
     if (!normalized) {
-      await showAlertDialog("Ошибка", "Дата рождения в формате ДД.ММ или ДД.ММ.ГГГГ");
+      await showAlertDialog(t("auth.err.prefix"), t("profile.birthday.placeholder"));
       return;
     }
     draftProfile.birthday = normalized; // сохраняем нормализованную
   }
   if (unameVal && unameVal !== myProfile.username) {
     const { error } = await supabase.from("profiles").update({ username: unameVal }).eq("id", currentUser.id);
-    if (error) { await showAlertDialog("Ошибка", "Не удалось сохранить юзернейм"); return; }
+    if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
     myProfile.username = unameVal; document.getElementById("me-username").textContent = "@" + unameVal;
   }
   const payload = {};
@@ -2833,7 +2995,7 @@ async function applyProfileChanges() {
   if (draftProfile.bio !== undefined) payload.bio = (draftProfile.bio || "").trim() || null;
   if (Object.keys(payload).length) {
     const { error } = await supabase.from("profiles").update(payload).eq("id", currentUser.id);
-    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
     Object.assign(myProfile, payload);
     if (payload.display_name) document.getElementById("me-name").textContent = payload.display_name;
     if (currentOtherUser) renderChatSubtitle();
@@ -2841,7 +3003,7 @@ async function applyProfileChanges() {
   draftProfile = {};
   document.getElementById("profile-apply").disabled = true;
   const hint = document.getElementById("username-hint");
-  hint.className = "username-hint ok"; hint.textContent = "Сохранено";
+  hint.className = "username-hint ok"; hint.textContent = t("username.saved");
 }
 
 async function openProfilePanel() {
@@ -3275,27 +3437,27 @@ async function checkUsernameLive(value) {
   const hint = document.getElementById("username-hint");
   const username = value.trim(); validatedUsername = null;
   if (!username) { hint.className = "username-hint"; hint.textContent = ""; return; }
-  if (!/^[a-zA-Z0-9_-]+$/.test(username)) { hint.className = "username-hint err"; hint.textContent = "Только английские буквы, цифры, _ и -"; return; }
-  if (username.length < 3) { hint.className = "username-hint err"; hint.textContent = "Минимум 3 символа"; return; }
+  if (!/^[a-zA-Z0-9_-]+$/.test(username)) { hint.className = "username-hint err"; hint.textContent = t("username.onlyLatin"); return; }
+  if (username.length < 3) { hint.className = "username-hint err"; hint.textContent = t("username.tooShort"); return; }
   if (myProfile && username.toLowerCase() === myProfile.username.toLowerCase()) {
-    hint.className = "username-hint ok"; hint.textContent = "Это ваш текущий юзернейм"; validatedUsername = username; return;
+    hint.className = "username-hint ok"; hint.textContent = t("username.current"); validatedUsername = username; return;
   }
-  hint.className = "username-hint"; hint.textContent = "Проверяю...";
+  hint.className = "username-hint"; hint.textContent = t("username.checking");
 
   const reserved = await isUsernameReservedForOther(username);
   if (reserved) {
     if (document.getElementById("profile-username").value.trim() !== username) return;
     hint.className = "username-hint err";
-    hint.textContent = `@${username} зарезервирован`;
+    hint.textContent = tFmt("username.reserved", { username });
     validatedUsername = null;
     return;
   }
 
   const { data, error } = await supabase.from("profiles").select("id").ilike("username", username).neq("id", currentUser.id).limit(1);
   if (document.getElementById("profile-username").value.trim() !== username) return;
-  if (error) { hint.className = "username-hint err"; hint.textContent = "Ошибка проверки"; return; }
-  if (data && data.length > 0) { hint.className = "username-hint err"; hint.textContent = `@${username} уже занят`; validatedUsername = null; }
-  else { hint.className = "username-hint ok"; hint.textContent = `@${username} свободен`; validatedUsername = username; }
+  if (error) { hint.className = "username-hint err"; hint.textContent = t("username.error"); return; }
+  if (data && data.length > 0) { hint.className = "username-hint err"; hint.textContent = tFmt("username.taken", { username }); validatedUsername = null; }
+  else { hint.className = "username-hint ok"; hint.textContent = tFmt("username.free", { username }); validatedUsername = username; }
 }
 
 // ======================= 8. ПРОФИЛЬ СОБЕСЕДНИКА =======================
@@ -3352,7 +3514,7 @@ async function openUserProfileDialog(userOverride) {
   const bdMD = parseBirthdayMD(p.birthday);
   const isBd = bdMD && bdMD === todayMD;
   document.getElementById("user-profile-birthday").innerHTML = escapeHtml(bdStr) + (isBd && bdStr !== "—" ? '<span class="bd-party">🎉</span>' : "");
-  document.getElementById("user-profile-created").textContent = p.created_at ? new Date(p.created_at).toLocaleDateString("ru-RU") : "—";
+  document.getElementById("user-profile-created").textContent = p.created_at ? new Date(p.created_at).toLocaleDateString(localeId()) : "—";
   let msgCount = 0;
   if (currentChatId && currentOtherUser && currentOtherUser.id === user.id) {
     const { data: msgs } = await supabase.from("messages").select("id").eq("chat_id", currentChatId);
@@ -9235,9 +9397,11 @@ let bcViewYear = 2000;
 let bcViewMonth = 0; // 0..11
 
 function bcUpdateTitle() {
-  const months = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
-  const t = document.getElementById("bc-title");
-  if (t) t.textContent = months[bcViewMonth] + " " + bcViewYear;
+  const monthsRu = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+  const monthsEn = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const months = currentLang === "en" ? monthsEn : monthsRu;
+  const el = document.getElementById("bc-title");
+  if (el) el.textContent = months[bcViewMonth] + " " + bcViewYear;
 }
 
 function bcRender() {
@@ -9384,17 +9548,38 @@ function formatBirthday(str) {
   const m = /^(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?$/.exec(str);
   if (!m) return "—";
   const day = parseInt(m[1], 10), mo = parseInt(m[2], 10), year = m[3];
-  const months = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
-  let res = day + " " + months[mo - 1];
-  if (year) { let y = year; if (y.length === 2) y = "20" + y; res += " " + y; }
+  const monthsRu = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+  const monthsEn = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const months = currentLang === "en" ? monthsEn : monthsRu;
+  let res;
+  if (currentLang === "en") {
+    // В английском: "January 5" или "January 5, 1990"
+    res = months[mo - 1] + " " + day;
+    if (year) { let y = year; if (y.length === 2) y = "20" + y; res += ", " + y; }
+  } else {
+    res = day + " " + months[mo - 1];
+    if (year) { let y = year; if (y.length === 2) y = "20" + y; res += " " + y; }
+  }
   return res;
 }
 
+// Плюрализация с учётом языка. Для EN достаточно "one" vs "many",
+// но сохраняем сигнатуру с тремя формами, чтобы не менять вызовы.
 function pluralRu(n, one, few, many) {
+  if (currentLang === "en") {
+    return n === 1 ? one : many;
+  }
   const mod10 = n % 10, mod100 = n % 100;
   if (mod10 === 1 && mod100 !== 11) return one;
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
   return many;
+}
+
+// Склонение по роду (male / female / other). Ключи вида
+// "lastSeen.minutes.{gender}" — их и берём.
+function genderKey(base, gender) {
+  if (gender === "male" || gender === "female") return base + "." + gender;
+  return base + ".other";
 }
 
 function genderVerb(profile) {
@@ -9409,24 +9594,45 @@ function formatLastSeen(profile) {
   const lastSeen = profile.last_seen ? new Date(profile.last_seen).getTime() : 0;
   if (!lastSeen) return "";
   const diffSec = Math.floor((Date.now() - lastSeen) / 1000);
-  if (diffSec < 45) return "в сети";
-  const wasVerb = genderVerb(profile);
+  if (diffSec < 45) return t("lastSeen.online");
+
+  const g = profile.gender;
+  const gk = genderKey("lastSeen", g); // "lastSeen.male" и т.п. — не используем напрямую
+  const gSuffix = (g === "male" || g === "female") ? "." + g : ".other";
+
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 1) return wasVerb + " недавно";
-  if (diffMin < 60) return wasVerb + " " + diffMin + " " + pluralRu(diffMin, "минуту", "минуты", "минут") + " назад";
+  if (diffMin < 1) return t("lastSeen.recently" + gSuffix);
+  if (diffMin < 60) {
+    const word = pluralRu(
+      diffMin,
+      t("lastSeen.minWord.one"),
+      t("lastSeen.minWord.few"),
+      t("lastSeen.minWord.many")
+    );
+    return tFmt("lastSeen.minutes" + gSuffix, { n: diffMin, word });
+  }
   const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 13) return wasVerb + " " + diffHours + " " + pluralRu(diffHours, "час", "часа", "часов") + " назад";
+  if (diffHours < 13) {
+    const word = pluralRu(
+      diffHours,
+      t("lastSeen.hourWord.one"),
+      t("lastSeen.hourWord.few"),
+      t("lastSeen.hourWord.many")
+    );
+    return tFmt("lastSeen.hours" + gSuffix, { n: diffHours, word });
+  }
   const d = new Date(lastSeen);
   const nowDate = new Date();
   const todayStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime();
   const yesterdayStart = todayStart - 86400000;
-  const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-  if (d.getTime() >= todayStart) return wasVerb + " сегодня в " + time;
-  if (d.getTime() >= yesterdayStart) return wasVerb + " вчера в " + time;
+  const time = d.toLocaleTimeString(localeId(), { hour: "2-digit", minute: "2-digit" });
+  if (d.getTime() >= todayStart) return tFmt("lastSeen.today" + gSuffix, { time });
+  if (d.getTime() >= yesterdayStart) return tFmt("lastSeen.yesterday" + gSuffix, { time });
   const day = String(d.getDate()).padStart(2, "0");
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const year = String(d.getFullYear()).slice(-2);
-  return wasVerb + " " + day + "/" + month + "/" + year + " в " + time;
+  const date = `${day}/${month}/${year}`;
+  return tFmt("lastSeen.date" + gSuffix, { date, time });
 }
 
 function isUserOnline(profile) {
