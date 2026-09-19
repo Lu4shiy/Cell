@@ -503,6 +503,122 @@ const I18N = {
     "preview.noMessages": "Нет сообщений",
     "preview.encrypted": "🔒 Зашифровано",
 
+    // ---- Создание канала ----
+    "channel.create.title": "Создать канал",
+    "channel.create.avatar": "Аватар",
+    "channel.create.name": "Название",
+    "channel.create.namePlaceholder": "Название канала",
+    "channel.create.username": "Юзернейм канала",
+    "channel.create.visibility": "Тип канала",
+    "channel.create.visibility.public": "Открытый",
+    "channel.create.visibility.request": "По заявке",
+    "channel.create.visibility.private": "Приватный",
+    "channel.create.visibility.hint": "Открытый — любой может подписаться. По заявке — нужна одобренная заявка. Приватный — только по ссылке-приглашению.",
+    "channel.create.confirm": "Создать канал",
+    "channel.create.creating": "Создаю...",
+    "channel.create.uploadOwn": "Загрузить свою",
+
+    // ---- Редактирование канала ----
+    "channel.edit.title": "Изменить канал",
+    "channel.edit.save": "Сохранить",
+    "channel.edit.saving": "Сохраняю...",
+    "channel.edit.reactions": "Доступные реакции",
+    "channel.edit.admins": "Администраторы",
+    "channel.edit.addAdmin": "+ Добавить администратора",
+    "channel.edit.owner": "Владелец канала",
+    "channel.edit.transfer": "Передать владение",
+    "channel.edit.noAdmins": "Нет администраторов",
+    "channel.edit.confirmAdd": "Выбрать администратора",
+    "channel.edit.confirmAddText": "Кого назначить админом канала? Можно искать по имени или @username.",
+    "channel.edit.confirmAddAction": "Назначить",
+    "channel.edit.confirmTransfer": "Передать владение",
+    "channel.edit.confirmTransferText": "Выберите нового владельца. Можно искать по имени или @username. Вы потеряете права владельца.",
+    "channel.edit.confirmTransferAction": "Передать",
+    "channel.edit.confirmTransferConfirm": "Точно передать владение? Действие необратимо.",
+    "channel.edit.transferSuccess": "Владение передано.",
+    "channel.edit.removeAdminTitle": "Снять администратора",
+    "channel.edit.removeAdminText": "Снять с должности администратора?",
+    "channel.edit.removeAdminAction": "Снять",
+    "channel.edit.noMembers": "В канале нет других подписчиков",
+    "channel.edit.allAdmins": "Все подписчики уже администраторы",
+    "channel.edit.ownerRole": "Владелец",
+    "channel.edit.adminRole": "Админ",
+    "channel.edit.subscriberRole": "Подписчик",
+
+    // ---- Профиль канала ----
+    "channel.profile.title": "Профиль канала",
+    "channel.profile.username": "Юзернейм канала",
+    "channel.profile.subs": "Подписчиков",
+    "channel.profile.subsHint": "Подписчиков · нажми, чтобы посмотреть список",
+    "channel.profile.requests": "Заявок на вступление",
+    "channel.profile.requestsHint": "Заявок на вступление · нажми, чтобы посмотреть",
+    "channel.profile.requestsHintPlural": "{n} {word} · нажми, чтобы посмотреть",
+    "channel.profile.views": "Просмотров за все время",
+    "channel.profile.created": "Дата создания",
+    "channel.profile.subsList": "Подписчики",
+    "channel.profile.noSubs": "Нет подписчиков",
+    "channel.profile.requestsList": "Заявки на вступление",
+    "channel.profile.noRequests": "Нет активных заявок",
+    "channel.subsWord.one": "подписчик",
+    "channel.subsWord.few": "подписчика",
+    "channel.subsWord.many": "подписчиков",
+    "channel.requestWord.one": "заявка",
+    "channel.requestWord.few": "заявки",
+    "channel.requestWord.many": "заявок",
+
+    // ---- Меню профиля канала ----
+    "channel.menu.edit": "Изменить",
+    "channel.menu.delete": "Удалить канал",
+
+    // ---- Приглашения ----
+    "invite.title": "Ссылка-приглашение",
+    "invite.text": "По ссылке любой сможет подписаться на канал.",
+    "invite.create": "Создать новую ссылку",
+    "invite.empty": "Пока нет ссылок",
+    "invite.open": "Открыть в этой вкладке",
+    "invite.share": "Переслать",
+    "invite.copy": "Скопировать",
+    "invite.revoke": "Отозвать",
+    "invite.revokeTitle": "Отозвать ссылку",
+    "invite.revokeText": "Ссылка перестанет работать. Продолжить?",
+    "invite.revokeAction": "Отозвать",
+
+    // ---- Удаление канала ----
+    "channel.delete.title": "Удалить канал",
+    "channel.delete.text": "Канал «{name}» будет удалён у всех подписчиков безвозвратно. Продолжить?",
+    "channel.delete.continue": "Продолжить",
+    "channel.delete.confirmTitle": "Подтверждение",
+    "channel.delete.confirmText": "Введите название канала «{name}» для подтверждения",
+    "channel.delete.mismatch": "Отменено",
+    "channel.delete.mismatchText": "Название не совпало. Канал не удалён.",
+
+    // ---- Подписка / заявки ----
+    "channel.sub.unsubscribeTitle": "Отписаться",
+    "channel.sub.unsubscribeText": "Отписаться от канала «{name}»?",
+    "channel.sub.unsubscribeAction": "Отписаться",
+    "channel.sub.privateTitle": "Приватный канал",
+    "channel.sub.privateText": "В этот канал можно попасть только по ссылке-приглашению.",
+    "channel.sub.errorSub": "Ошибка подписки",
+    "channel.sub.errorUnsub": "Ошибка отписки",
+    "channel.sub.onlyAdminsDelete": "Только администраторы могут удалять сообщения в канале",
+    "channel.sub.onlyAdminsPin": "Только администраторы могут закреплять сообщения в канале",
+    "channel.sub.cantWrite": "Вы не являетесь подписчиком канала",
+
+    // ---- Заявки (approve/reject) ----
+    "request.approve": "Одобрить",
+    "request.reject": "Отклонить",
+
+    // ---- Ошибки каналов ----
+    "channel.err.notFound": "Канал не найден",
+    "channel.err.createFail": "Не удалось создать канал: {msg}",
+    "channel.err.usernameTaken": "Юзернейм уже занят",
+    "channel.err.noReactions": "Выберите хотя бы одну реакцию",
+    "channel.err.enterName": "Введите название",
+    "channel.err.enterUsername": "Введите юзернейм",
+    "channel.err.checkUsername": "Проверьте юзернейм",
+    "channel.err.noRightsOwner": "Только владелец канала может это делать",
+    "channel.err.noRightsAdmin": "Только администраторы могут это делать",
+
     // ---- Системные сообщения ----
     "msg.gift.youSent": "Вы отправили подарок за {price} {icon}",
     "msg.gift.sent.male": "{name} отправил вам подарок за {price} {icon}",
@@ -833,6 +949,122 @@ const I18N = {
     "preview.noMessages": "No messages",
     "preview.encrypted": "🔒 Encrypted",
 
+    // ---- Create channel ----
+    "channel.create.title": "Create channel",
+    "channel.create.avatar": "Avatar",
+    "channel.create.name": "Name",
+    "channel.create.namePlaceholder": "Channel name",
+    "channel.create.username": "Channel username",
+    "channel.create.visibility": "Channel type",
+    "channel.create.visibility.public": "Public",
+    "channel.create.visibility.request": "By request",
+    "channel.create.visibility.private": "Private",
+    "channel.create.visibility.hint": "Public — anyone can subscribe. By request — an approved request is required. Private — invite link only.",
+    "channel.create.confirm": "Create channel",
+    "channel.create.creating": "Creating...",
+    "channel.create.uploadOwn": "Upload your own",
+
+    // ---- Edit channel ----
+    "channel.edit.title": "Edit channel",
+    "channel.edit.save": "Save",
+    "channel.edit.saving": "Saving...",
+    "channel.edit.reactions": "Available reactions",
+    "channel.edit.admins": "Administrators",
+    "channel.edit.addAdmin": "+ Add administrator",
+    "channel.edit.owner": "Channel owner",
+    "channel.edit.transfer": "Transfer ownership",
+    "channel.edit.noAdmins": "No administrators",
+    "channel.edit.confirmAdd": "Choose administrator",
+    "channel.edit.confirmAddText": "Who to make channel admin? You can search by name or @username.",
+    "channel.edit.confirmAddAction": "Promote",
+    "channel.edit.confirmTransfer": "Transfer ownership",
+    "channel.edit.confirmTransferText": "Choose the new owner. You can search by name or @username. You will lose owner rights.",
+    "channel.edit.confirmTransferAction": "Transfer",
+    "channel.edit.confirmTransferConfirm": "Transfer ownership? This action is irreversible.",
+    "channel.edit.transferSuccess": "Ownership transferred.",
+    "channel.edit.removeAdminTitle": "Remove admin",
+    "channel.edit.removeAdminText": "Remove from the admin position?",
+    "channel.edit.removeAdminAction": "Remove",
+    "channel.edit.noMembers": "No other subscribers in this channel",
+    "channel.edit.allAdmins": "All subscribers are already administrators",
+    "channel.edit.ownerRole": "Owner",
+    "channel.edit.adminRole": "Admin",
+    "channel.edit.subscriberRole": "Subscriber",
+
+    // ---- Channel profile ----
+    "channel.profile.title": "Channel profile",
+    "channel.profile.username": "Channel username",
+    "channel.profile.subs": "Subscribers",
+    "channel.profile.subsHint": "Subscribers · tap to see the list",
+    "channel.profile.requests": "Join requests",
+    "channel.profile.requestsHint": "Join requests · tap to see the list",
+    "channel.profile.requestsHintPlural": "{n} {word} · tap to see",
+    "channel.profile.views": "Total views",
+    "channel.profile.created": "Created on",
+    "channel.profile.subsList": "Subscribers",
+    "channel.profile.noSubs": "No subscribers",
+    "channel.profile.requestsList": "Join requests",
+    "channel.profile.noRequests": "No active requests",
+    "channel.subsWord.one": "subscriber",
+    "channel.subsWord.few": "subscribers",
+    "channel.subsWord.many": "subscribers",
+    "channel.requestWord.one": "request",
+    "channel.requestWord.few": "requests",
+    "channel.requestWord.many": "requests",
+
+    // ---- Channel profile menu ----
+    "channel.menu.edit": "Edit",
+    "channel.menu.delete": "Delete channel",
+
+    // ---- Invites ----
+    "invite.title": "Invite link",
+    "invite.text": "Anyone with the link can subscribe to the channel.",
+    "invite.create": "Create new link",
+    "invite.empty": "No links yet",
+    "invite.open": "Open in this tab",
+    "invite.share": "Forward",
+    "invite.copy": "Copy",
+    "invite.revoke": "Revoke",
+    "invite.revokeTitle": "Revoke link",
+    "invite.revokeText": "The link will stop working. Continue?",
+    "invite.revokeAction": "Revoke",
+
+    // ---- Delete channel ----
+    "channel.delete.title": "Delete channel",
+    "channel.delete.text": "Channel \"{name}\" will be permanently deleted from all subscribers. Continue?",
+    "channel.delete.continue": "Continue",
+    "channel.delete.confirmTitle": "Confirmation",
+    "channel.delete.confirmText": "Enter the channel name \"{name}\" to confirm",
+    "channel.delete.mismatch": "Cancelled",
+    "channel.delete.mismatchText": "Name doesn't match. Channel was not deleted.",
+
+    // ---- Subscribe / requests ----
+    "channel.sub.unsubscribeTitle": "Unsubscribe",
+    "channel.sub.unsubscribeText": "Unsubscribe from channel \"{name}\"?",
+    "channel.sub.unsubscribeAction": "Unsubscribe",
+    "channel.sub.privateTitle": "Private channel",
+    "channel.sub.privateText": "You can only join this channel via an invite link.",
+    "channel.sub.errorSub": "Subscribe error",
+    "channel.sub.errorUnsub": "Unsubscribe error",
+    "channel.sub.onlyAdminsDelete": "Only administrators can delete messages in a channel",
+    "channel.sub.onlyAdminsPin": "Only administrators can pin messages in a channel",
+    "channel.sub.cantWrite": "You are not a subscriber of this channel",
+
+    // ---- Requests (approve/reject) ----
+    "request.approve": "Approve",
+    "request.reject": "Decline",
+
+    // ---- Channel errors ----
+    "channel.err.notFound": "Channel not found",
+    "channel.err.createFail": "Failed to create channel: {msg}",
+    "channel.err.usernameTaken": "Username is already taken",
+    "channel.err.noReactions": "Choose at least one reaction",
+    "channel.err.enterName": "Enter a name",
+    "channel.err.enterUsername": "Enter a username",
+    "channel.err.checkUsername": "Check the username",
+    "channel.err.noRightsOwner": "Only the channel owner can do this",
+    "channel.err.noRightsAdmin": "Only administrators can do this",
+
     // ---- System messages ----
     "msg.gift.youSent": "You sent a gift worth {price} {icon}",
     "msg.gift.sent.male": "{name} sent you a gift worth {price} {icon}",
@@ -967,6 +1199,18 @@ function setLanguage(lang) {
     loadMessages(currentChatId, openSeq).then(() => {
       if (typeof loadReactionsForVisibleMessages === "function") loadReactionsForVisibleMessages();
     }).catch(() => {});
+  }
+  // Если открыт профиль канала — обновим счётчики (там word / hint строятся из t()).
+  const chProfileOverlay = document.getElementById("channel-profile-overlay");
+  if (chProfileOverlay && !chProfileOverlay.classList.contains("hidden")) {
+    if (typeof openChannelProfileDialog === "function" && currentChannelObj) {
+      openChannelProfileDialog();
+    }
+  }
+  // Если открыт редактор канала — перерисуем админов (там роли из t()).
+  const chEditOverlay = document.getElementById("channel-edit-overlay");
+  if (chEditOverlay && !chEditOverlay.classList.contains("hidden")) {
+    if (typeof renderChannelEditAdmins === "function") renderChannelEditAdmins();
   }
 }
 
@@ -4320,7 +4564,13 @@ async function updateChannelSubtitle(chatId) {
   currentChannelSubscribers = Number(data) || 0;
   const el = document.getElementById("chat-subtitle");
   if (el && currentChannelObj && currentChannelObj.id === chatId) {
-    el.textContent = `${currentChannelSubscribers} ${pluralRu(currentChannelSubscribers, "подписчик", "подписчика", "подписчиков")}`;
+    const word = pluralRu(
+      currentChannelSubscribers,
+      t("channel.subsWord.one"),
+      t("channel.subsWord.few"),
+      t("channel.subsWord.many")
+    );
+    el.textContent = `${currentChannelSubscribers} ${word}`;
     el.classList.remove("online");
   }
 }
@@ -4395,7 +4645,7 @@ async function openChannel(chatId) {
 
   const { data: ch } = await supabase.from("channels").select("*").eq("id", chatId).maybeSingle();
   if (mySeq !== openSeq) return;
-  if (!ch) { await showAlertDialog("Ошибка", "Канал не найден"); return; }
+  if (!ch) { await showAlertDialog(t("auth.err.prefix"), t("channel.err.notFound")); return; }
   channelCache.set(chatId, ch);
   currentChannelObj = ch;
   currentOtherUser = null; pendingOtherUser = null;
@@ -5245,7 +5495,7 @@ document.getElementById("chat-list-context-menu").addEventListener("click", asyn
     if (!ch) return;
     const { error } = await supabase.from("chat_members")
       .delete().eq("chat_id", ch.id).eq("user_id", currentUser.id);
-    if (error) { await showAlertDialog("Ошибка", error.message); return; }
+    if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
     // СРАЗУ убираем канал из списка чатов
     removeChatFromList(ch.id);
     if (currentChannelObj && currentChannelObj.id === ch.id) {
@@ -7653,7 +7903,7 @@ async function handleAttachments(files, caption, asFile) {
     const isOwner = currentChannelObj.owner_id === currentUser.id;
     const canWrite = isOwner || (currentChannelIsSubscribed && currentChannelIsAdmin);
     if (!canWrite) {
-      await showAlertDialog("Нельзя", "Вы не являетесь подписчиком канала");
+      await showAlertDialog(t("gifts.error"), t("channel.sub.cantWrite"));
       return;
     }
   }
@@ -7862,7 +8112,7 @@ async function sendMessage(chatId, content) {
     const isOwner = currentChannelObj.owner_id === currentUser.id;
     const canWrite = isOwner || (currentChannelIsSubscribed && currentChannelIsAdmin);
     if (!canWrite) {
-      await showAlertDialog("Нельзя", "Вы не являетесь подписчиком канала");
+      await showAlertDialog(t("gifts.error"), t("channel.sub.cantWrite"));
       return;
     }
   }
@@ -8227,12 +8477,16 @@ function setupChatMenu() {
       openInviteDialog();
     } else if (action === "channel-unsubscribe") {
       if (!currentChannelObj) return;
-      const ok = await showConfirmDialog("Отписаться", `Отписаться от канала «${currentChannelObj.name}»?`, "Отписаться");
+      const ok = await showConfirmDialog(
+        t("channel.sub.unsubscribeTitle"),
+        tFmt("channel.sub.unsubscribeText", { name: currentChannelObj.name }),
+        t("channel.sub.unsubscribeAction")
+      );
       if (!ok) return;
       const chId = currentChannelObj.id;
       const { error } = await supabase.from("chat_members")
         .delete().eq("chat_id", chId).eq("user_id", currentUser.id);
-      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
       currentChannelIsSubscribed = false;
       // СРАЗУ убираем канал из списка чатов
       removeChatFromList(chId);
@@ -9023,7 +9277,7 @@ async function handleDeleteOne(msgId) {
   // В канале удалять могут только админы/владелец
   if (currentChannelObj) {
     if (!currentChannelIsAdmin) {
-      await showAlertDialog("Нельзя", "Только администраторы могут удалять сообщения в канале");
+      await showAlertDialog(t("gifts.error"), t("channel.sub.onlyAdminsDelete"));
       return;
     }
     await deleteMessageForBoth(msgId);
@@ -10878,7 +11132,7 @@ function setupChannelCreate() {
       if (isSubscribed) {
         const { error } = await supabase.from("chat_members")
           .delete().eq("chat_id", chId).eq("user_id", currentUser.id);
-        if (error) { await showAlertDialog("Ошибка отписки", error.message); return; }
+        if (error) { await showAlertDialog(t("channel.sub.errorUnsub"), error.message); return; }
         currentChannelIsSubscribed = false;
         // СРАЗУ убираем канал из списка чатов
         removeChatFromList(chId);
@@ -10896,19 +11150,19 @@ function setupChannelCreate() {
           currentChannelRequestId = null;
         } else {
           const { data: newReqId, error } = await supabase.rpc("submit_join_request", { p_chat_id: chId });
-          if (error) { await showAlertDialog("Ошибка", error.message); return; }
+          if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
           currentChannelHasRequest = true;
           currentChannelRequestId = newReqId || null;
         }
       } else if (vis === "private") {
-        await showAlertDialog("Приватный канал", "В этот канал можно попасть только по ссылке-приглашению.");
+        await showAlertDialog(t("channel.sub.privateTitle"), t("channel.sub.privateText"));
         return;
       } else {
         const { error } = await supabase.from("chat_members").insert({
           chat_id: chId, user_id: currentUser.id,
         });
         if (error && error.code !== "23505") {
-          await showAlertDialog("Ошибка подписки", error.message);
+          await showAlertDialog(t("channel.sub.errorSub"), error.message);
           return;
         }
         currentChannelIsSubscribed = true;
@@ -10920,7 +11174,7 @@ function setupChannelCreate() {
       await refreshChannelRights(chId);
     } catch (ex) {
       console.error(ex);
-      await showAlertDialog("Ошибка", ex.message || String(ex));
+      await showAlertDialog(t("auth.err.prefix"), ex.message || String(ex));
     } finally {
       subBtn.disabled = false;
     }
@@ -11004,15 +11258,15 @@ async function checkChannelUsernameLive(value) {
   const hint = document.getElementById("channel-username-hint");
   const username = value.trim(); channelUsernameValidated = null; updateChannelCreateButton();
   if (!username) { hint.className = "username-hint"; hint.textContent = ""; return; }
-  if (!/^[a-zA-Z0-9_-]+$/.test(username)) { hint.className = "username-hint err"; hint.textContent = "Только английские буквы, цифры, _ и -"; return; }
-  if (username.length < 3) { hint.className = "username-hint err"; hint.textContent = "Минимум 3 символа"; return; }
-  hint.className = "username-hint"; hint.textContent = "Проверяю...";
+  if (!/^[a-zA-Z0-9_-]+$/.test(username)) { hint.className = "username-hint err"; hint.textContent = t("username.onlyLatin"); return; }
+  if (username.length < 3) { hint.className = "username-hint err"; hint.textContent = t("username.tooShort"); return; }
+  hint.className = "username-hint"; hint.textContent = t("username.checking");
 
   const reserved = await isUsernameReservedForOther(username);
   if (reserved) {
     if (document.getElementById("channel-username-input").value.trim() !== username) return;
     hint.className = "username-hint err";
-    hint.textContent = `@${username} зарезервирован`;
+    hint.textContent = tFmt("username.reserved", { username });
     channelUsernameValidated = null;
     updateChannelCreateButton();
     return;
@@ -11024,11 +11278,11 @@ async function checkChannelUsernameLive(value) {
   ]);
 
   if (document.getElementById("channel-username-input").value.trim() !== username) return;
-  if (pRes.error || cRes.error) { hint.className = "username-hint err"; hint.textContent = "Ошибка проверки"; return; }
+  if (pRes.error || cRes.error) { hint.className = "username-hint err"; hint.textContent = t("username.error"); return; }
   if ((pRes.data && pRes.data.length > 0) || (cRes.data && cRes.data.length > 0)) {
-    hint.className = "username-hint err"; hint.textContent = `@${username} уже занят`; channelUsernameValidated = null;
+    hint.className = "username-hint err"; hint.textContent = tFmt("username.taken", { username }); channelUsernameValidated = null;
   } else {
-    hint.className = "username-hint ok"; hint.textContent = `@${username} свободен`; channelUsernameValidated = username;
+    hint.className = "username-hint ok"; hint.textContent = tFmt("username.free", { username }); channelUsernameValidated = username;
   }
   updateChannelCreateButton();
 }
@@ -11038,7 +11292,7 @@ async function createChannel() {
   const username = document.getElementById("channel-username-input").value.trim();
   if (!name || !username || username !== channelUsernameValidated) return;
   const btn = document.getElementById("channel-create-confirm");
-  btn.disabled = true; btn.textContent = "Создаю...";
+  btn.disabled = true; btn.textContent = t("channel.create.creating");
 
   try {
     // Двойная проверка username — на всякий случай
@@ -11047,16 +11301,16 @@ async function createChannel() {
       supabase.from("channels").select("id").ilike("username", username).limit(1),
     ]);
     if ((pRes.data && pRes.data.length) || (cRes.data && cRes.data.length)) {
-      await showAlertDialog("Ошибка", "Юзернейм уже занят");
-      btn.disabled = false; btn.textContent = "Создать канал";
+      await showAlertDialog(t("auth.err.prefix"), t("channel.err.usernameTaken"));
+      btn.disabled = false; btn.textContent = t("channel.create.confirm");
       return;
     }
 
     // 1. Создаём chats
     const { data: newChat, error: chatErr } = await supabase.from("chats").insert({}).select().single();
     if (chatErr || !newChat) {
-      await showAlertDialog("Ошибка", "Не удалось создать канал: " + (chatErr ? chatErr.message : "?"));
-      btn.disabled = false; btn.textContent = "Создать канал";
+      await showAlertDialog(t("auth.err.prefix"), tFmt("channel.err.createFail", { msg: chatErr ? chatErr.message : "?" }));
+      btn.disabled = false; btn.textContent = t("channel.create.confirm");
       return;
     }
 
@@ -11071,8 +11325,8 @@ async function createChannel() {
     });
     if (chanErr) {
       await supabase.from("chats").delete().eq("id", newChat.id);
-      await showAlertDialog("Ошибка", "Не удалось создать канал: " + chanErr.message);
-      btn.disabled = false; btn.textContent = "Создать канал";
+      await showAlertDialog(t("auth.err.prefix"), tFmt("channel.err.createFail", { msg: chanErr.message }));
+      btn.disabled = false; btn.textContent = t("channel.create.confirm");
       return;
     }
 
@@ -11083,7 +11337,7 @@ async function createChannel() {
     if (memErr) console.error("chat_members insert:", memErr);
 
     closeChannelCreateDialog();
-    btn.disabled = false; btn.textContent = "Создать канал";
+    btn.disabled = false; btn.textContent = t("channel.create.confirm");
 
     await addOrUpdateChannelInList(newChat.id, {
       id: newChat.id,
@@ -11095,8 +11349,8 @@ async function createChannel() {
     });
   } catch (ex) {
     console.error(ex);
-    await showAlertDialog("Ошибка", ex.message || String(ex));
-    btn.disabled = false; btn.textContent = "Создать канал";
+    await showAlertDialog(t("auth.err.prefix"), ex.message || String(ex));
+    btn.disabled = false; btn.textContent = t("channel.create.confirm");
   }
 }
 
@@ -11158,12 +11412,12 @@ async function openChannelProfileDialog() {
 
   const { data: cntData } = await supabase.rpc("channel_subscribers_count", { p_chat_id: ch.id });
   const cnt = Number(cntData) || 0;
-  const word = pluralRu(cnt, "подписчик", "подписчика", "подписчиков");
+  const word = pluralRu(cnt, t("channel.subsWord.one"), t("channel.subsWord.few"), t("channel.subsWord.many"));
   document.getElementById("channel-profile-subscribers-status").textContent = `${cnt} ${word}`;
   document.getElementById("channel-profile-subscribers").textContent = String(cnt);
 
   document.getElementById("channel-profile-created").textContent = ch.created_at
-    ? new Date(ch.created_at).toLocaleDateString("ru-RU")
+    ? new Date(ch.created_at).toLocaleDateString(localeId())
     : "—";
 
   const { data: totalViews } = await supabase.rpc("get_channel_total_views", { p_chat_id: ch.id });
@@ -11215,7 +11469,7 @@ function subscribeToChannelProfileUpdates(channelId) {
       if (!row || row.chat_id !== channelId) return;
       const { data: cntData } = await supabase.rpc("channel_subscribers_count", { p_chat_id: channelId });
       const cnt = Number(cntData) || 0;
-      const word = pluralRu(cnt, "подписчик", "подписчика", "подписчиков");
+      const word = pluralRu(cnt, t("channel.subsWord.one"), t("channel.subsWord.few"), t("channel.subsWord.many"));
       const statusEl = document.getElementById("channel-profile-subscribers-status");
       if (statusEl) statusEl.textContent = `${cnt} ${word}`;
       const subsEl = document.getElementById("channel-profile-subscribers");
@@ -11236,26 +11490,26 @@ async function deleteChannelDialog() {
   const ch = currentChannelObj;
 
   const ok1 = await showConfirmDialog(
-    "Удалить канал",
-    `Канал «${ch.name}» будет удалён у всех подписчиков безвозвратно. Продолжить?`,
-    "Продолжить"
+    t("channel.delete.title"),
+    tFmt("channel.delete.text", { name: ch.name }),
+    t("channel.delete.continue")
   );
   if (!ok1) return;
 
   const typed = await showInputDialog(
-    "Подтверждение",
-    `Введите название канала «${ch.name}» для подтверждения`,
+    t("channel.delete.confirmTitle"),
+    tFmt("channel.delete.confirmText", { name: ch.name }),
     ""
   );
   if (typed === null) return;
   if (typed.trim() !== ch.name) {
-    await showAlertDialog("Отменено", "Название не совпало. Канал не удалён.");
+    await showAlertDialog(t("channel.delete.mismatch"), t("channel.delete.mismatchText"));
     return;
   }
 
   const chatId = ch.id;
   const { error } = await supabase.from("chats").delete().eq("id", chatId);
-  if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
 
   channelCache.delete(chatId);
   closeCurrentChat();
@@ -11440,25 +11694,25 @@ async function checkChannelEditUsernameLive(value) {
   if (!username) { hint.className = "username-hint"; hint.textContent = ""; return; }
   if (username === currentChannelObj.username) {
     hint.className = "username-hint ok";
-    hint.textContent = "Это текущий юзернейм";
+    hint.textContent = t("username.current");
     channelEditUsernameValidated = username;
     updateChannelEditSaveButton();
     return;
   }
   if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
-    hint.className = "username-hint err"; hint.textContent = "Только a-z, 0-9, _ и -"; return;
+    hint.className = "username-hint err"; hint.textContent = t("username.onlyLatin"); return;
   }
   if (username.length < 3) {
-    hint.className = "username-hint err"; hint.textContent = "Минимум 3 символа"; return;
+    hint.className = "username-hint err"; hint.textContent = t("username.tooShort"); return;
   }
 
-  hint.className = "username-hint"; hint.textContent = "Проверяю...";
+  hint.className = "username-hint"; hint.textContent = t("username.checking");
 
   const reserved = await isUsernameReservedForOther(username);
   if (reserved) {
     if (document.getElementById("channel-edit-username-input").value.trim() !== username) return;
     hint.className = "username-hint err";
-    hint.textContent = `@${username} зарезервирован`;
+    hint.textContent = tFmt("username.reserved", { username });
     channelEditUsernameValidated = null;
     updateChannelEditSaveButton();
     return;
@@ -11471,13 +11725,13 @@ async function checkChannelEditUsernameLive(value) {
 
   if (document.getElementById("channel-edit-username-input").value.trim() !== username) return;
   if (pRes.error || cRes.error) {
-    hint.className = "username-hint err"; hint.textContent = "Ошибка проверки"; return;
+    hint.className = "username-hint err"; hint.textContent = t("username.error"); return;
   }
   if ((pRes.data && pRes.data.length > 0) || (cRes.data && cRes.data.length > 0)) {
-    hint.className = "username-hint err"; hint.textContent = `@${username} уже занят`;
+    hint.className = "username-hint err"; hint.textContent = tFmt("username.taken", { username });
     channelEditUsernameValidated = null;
   } else {
-    hint.className = "username-hint ok"; hint.textContent = `@${username} свободен`;
+    hint.className = "username-hint ok"; hint.textContent = tFmt("username.free", { username });
     channelEditUsernameValidated = username;
   }
   updateChannelEditSaveButton();
@@ -11491,22 +11745,22 @@ async function saveChannelEdit() {
   const name = document.getElementById("channel-edit-name-input").value.trim();
   const username = document.getElementById("channel-edit-username-input").value.trim();
 
-  if (!name) { await showAlertDialog("Ошибка", "Введите название"); return; }
-  if (!username) { await showAlertDialog("Ошибка", "Введите юзернейм"); return; }
+  if (!name) { await showAlertDialog(t("auth.err.prefix"), t("channel.err.enterName")); return; }
+  if (!username) { await showAlertDialog(t("auth.err.prefix"), t("channel.err.enterUsername")); return; }
   if (username !== channelEditUsernameValidated && username !== ch.username) {
-    await showAlertDialog("Ошибка", "Проверьте юзернейм");
+    await showAlertDialog(t("auth.err.prefix"), t("channel.err.checkUsername"));
     return;
   }
 
   const reactions = [...channelEditReactions];
   if (!reactions.length) {
-    await showAlertDialog("Ошибка", "Выберите хотя бы одну реакцию");
+    await showAlertDialog(t("auth.err.prefix"), t("channel.err.noReactions"));
     return;
   }
 
   btn.disabled = true;
   const oldText = btn.textContent;
-  btn.textContent = "Сохраняю...";
+  btn.textContent = t("channel.edit.saving");
 
   try {
     // Двойная проверка username, если изменился
@@ -11516,7 +11770,7 @@ async function saveChannelEdit() {
         supabase.from("channels").select("id").ilike("username", username).neq("id", ch.id).limit(1),
       ]);
       if ((pRes.data && pRes.data.length) || (cRes.data && cRes.data.length)) {
-        await showAlertDialog("Ошибка", "Юзернейм уже занят");
+        await showAlertDialog(t("auth.err.prefix"), t("channel.err.usernameTaken"));
         btn.disabled = false; btn.textContent = oldText;
         return;
       }
@@ -11532,7 +11786,7 @@ async function saveChannelEdit() {
 
     const { error } = await supabase.from("channels").update(payload).eq("id", ch.id);
     if (error) {
-      await showAlertDialog("Ошибка", error.message);
+      await showAlertDialog(t("auth.err.prefix"), error.message);
       btn.disabled = false; btn.textContent = oldText;
       return;
     }
@@ -11566,7 +11820,7 @@ async function saveChannelEdit() {
     btn.disabled = false; btn.textContent = oldText;
   } catch (ex) {
     console.error(ex);
-    await showAlertDialog("Ошибка", ex.message || String(ex));
+    await showAlertDialog(t("auth.err.prefix"), ex.message || String(ex));
     btn.disabled = false; btn.textContent = oldText;
   }
 }
@@ -11591,7 +11845,7 @@ async function renderChannelEditAdmins() {
   }
 
   if (!profiles.length) {
-    listEl.innerHTML = '<div class="empty" style="padding:10px;font-size:13px;">Нет администраторов</div>';
+    listEl.innerHTML = '<div class="empty" style="padding:10px;font-size:13px;">' + escapeHtml(t("channel.edit.noAdmins")) + '</div>';
   } else {
     listEl.innerHTML = profiles.map((p) => `
       <div class="admin-row" data-user-id="${p.id}">
@@ -11600,8 +11854,8 @@ async function renderChannelEditAdmins() {
           ${escapeHtml(p.display_name)}
           <div class="admin-row-username">@${escapeHtml(p.username)}</div>
         </div>
-        <span class="admin-row-role admin">Админ</span>
-        <button type="button" class="admin-row-remove" data-remove-admin="${p.id}" title="Снять"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
+        <span class="admin-row-role admin">${escapeHtml(t("channel.edit.adminRole"))}</span>
+        <button type="button" class="admin-row-remove" data-remove-admin="${p.id}" title="${escapeHtml(t("channel.edit.removeAdminAction"))}"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
       </div>
     `).join("");
     listEl.querySelectorAll(".admin-row").forEach((row) => {
@@ -11623,7 +11877,7 @@ async function renderChannelEditAdmins() {
         ${escapeHtml(ownerProfile ? ownerProfile.display_name : "—")}
         <div class="admin-row-username">@${escapeHtml(ownerProfile ? ownerProfile.username : "")}</div>
       </div>
-      <span class="admin-row-role owner">Владелец</span>
+      <span class="admin-row-role owner">${escapeHtml(t("channel.edit.ownerRole"))}</span>
     </div>`;
   paintAvatar(ownerEl.querySelector(".avatar"), ownerProfile || { display_name: "?" });
 
@@ -11641,16 +11895,20 @@ async function renderChannelEditAdmins() {
 async function removeChannelAdmin(userId) {
   if (!currentChannelObj) return;
   if (currentChannelObj.owner_id !== currentUser.id) {
-    await showAlertDialog("Нет прав", "Только владелец канала может снимать администраторов");
+    await showAlertDialog(t("auth.err.prefix"), t("channel.err.noRightsOwner"));
     return;
   }
-  const ok = await showConfirmDialog("Снять администратора", "Снять с должности администратора?", "Снять");
+  const ok = await showConfirmDialog(
+    t("channel.edit.removeAdminTitle"),
+    t("channel.edit.removeAdminText"),
+    t("channel.edit.removeAdminAction")
+  );
   if (!ok) return;
   const { error } = await supabase.rpc("remove_channel_admin", {
     p_channel_id: currentChannelObj.id,
     p_user_id: userId,
   });
-  if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
   await renderChannelEditAdmins();
   await refreshChannelRights(currentChannelObj.id);
   // «Сохранить» — только для полей канала, сбрасываем её состояние
@@ -11660,7 +11918,7 @@ async function removeChannelAdmin(userId) {
 async function openAddAdminDialog() {
   if (!currentChannelObj) return;
   if (currentChannelObj.owner_id !== currentUser.id) {
-    await showAlertDialog("Нет прав", "Только владелец канала может назначать администраторов");
+    await showAlertDialog(t("auth.err.prefix"), t("channel.err.noRightsOwner"));
     return;
   }
   const ch = currentChannelObj;
@@ -11669,7 +11927,7 @@ async function openAddAdminDialog() {
     .select("user_id, custom_name").eq("chat_id", ch.id).neq("user_id", currentUser.id);
   const memberIds = (mems || []).map((m) => m.user_id);
   if (!memberIds.length) {
-    await showAlertDialog("Пусто", "В канале нет других подписчиков");
+    await showAlertDialog(t("auth.err.prefix"), t("channel.edit.noMembers"));
     return;
   }
   const customByUser = new Map((mems || []).map((m) => [m.user_id, m.custom_name]));
@@ -11680,7 +11938,7 @@ async function openAddAdminDialog() {
 
   const candidates = memberIds.filter((id) => !adminSet.has(id));
   if (!candidates.length) {
-    await showAlertDialog("Пусто", "Все подписчики уже администраторы");
+    await showAlertDialog(t("auth.err.prefix"), t("channel.edit.allAdmins"));
     return;
   }
 
@@ -11698,11 +11956,11 @@ async function openAddAdminDialog() {
   });
 
   const choice = await showChoiceDialog(
-    "Выбрать администратора",
-    "Кого назначить админом канала? Можно искать по имени или @username.",
+    t("channel.edit.confirmAdd"),
+    t("channel.edit.confirmAddText"),
     opts,
-    "Назначить",
-    { searchable: true, searchPlaceholder: "Поиск по имени или @username" }
+    t("channel.edit.confirmAddAction"),
+    { searchable: true, searchPlaceholder: t("dialog.search.placeholder") }
   );
   if (!choice) return;
 
@@ -11710,7 +11968,7 @@ async function openAddAdminDialog() {
     p_channel_id: ch.id,
     p_user_id: choice,
   });
-  if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
   await renderChannelEditAdmins();
   await refreshChannelRights(ch.id);
   updateChannelEditSaveButton();
@@ -11719,7 +11977,7 @@ async function openAddAdminDialog() {
 async function openTransferOwnerDialog() {
   if (!currentChannelObj) return;
   if (currentChannelObj.owner_id !== currentUser.id) {
-    await showAlertDialog("Нет прав", "Только владелец канала может передать владение");
+    await showAlertDialog(t("auth.err.prefix"), t("channel.err.noRightsOwner"));
     return;
   }
   const ch = currentChannelObj;
@@ -11728,7 +11986,7 @@ async function openTransferOwnerDialog() {
     .select("user_id, custom_name").eq("chat_id", ch.id).neq("user_id", currentUser.id);
   const memberIds = (mems || []).map((m) => m.user_id);
   if (!memberIds.length) {
-    await showAlertDialog("Пусто", "Нет других подписчиков");
+    await showAlertDialog(t("auth.err.prefix"), t("channel.edit.noMembers"));
     return;
   }
   const customByUser = new Map((mems || []).map((m) => [m.user_id, m.custom_name]));
@@ -11747,18 +12005,18 @@ async function openTransferOwnerDialog() {
   });
 
   const choice = await showChoiceDialog(
-    "Передать владение",
-    "Выберите нового владельца. Можно искать по имени или @username. Вы потеряете права владельца.",
+    t("channel.edit.confirmTransfer"),
+    t("channel.edit.confirmTransferText"),
     opts,
-    "Передать",
-    { searchable: true, searchPlaceholder: "Поиск по имени или @username" }
+    t("channel.edit.confirmTransferAction"),
+    { searchable: true, searchPlaceholder: t("dialog.search.placeholder") }
   );
   if (!choice) return;
 
   const confirm = await showConfirmDialog(
-    "Подтверждение",
-    "Точно передать владение? Действие необратимо.",
-    "Передать"
+    t("channel.delete.confirmTitle"),
+    t("channel.edit.confirmTransferConfirm"),
+    t("channel.edit.confirmTransferAction")
   );
   if (!confirm) return;
 
@@ -11766,12 +12024,12 @@ async function openTransferOwnerDialog() {
     p_channel_id: ch.id,
     p_new_owner: choice,
   });
-  if (error) { await showAlertDialog("Ошибка", error.message); return; }
+  if (error) { await showAlertDialog(t("auth.err.prefix"), error.message); return; }
 
   // Пересчитываем права мгновенно, до realtime
   await refreshChannelRights(ch.id);
 
-  await showAlertDialog("Готово", "Владение передано.");
+  await showAlertDialog(t("gifts.error"), t("channel.edit.transferSuccess"));
   closeChannelEditDialog();
   closeChannelProfileDialog();
   updateChannelEditSaveButton();
@@ -11805,13 +12063,13 @@ async function openChannelSubscribersDialog() {
   const titleEl = document.getElementById("channel-subs-title");
   const listEl = document.getElementById("channel-subs-list");
 
-  titleEl.textContent = "Подписчики";
-  listEl.innerHTML = '<div class="empty">Загрузка...</div>';
+  titleEl.textContent = t("channel.profile.subsList");
+  listEl.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
   overlay.classList.remove("hidden");
 
   const { data: subs, error } = await supabase.rpc("get_channel_subscribers", { p_channel_id: ch.id });
-  if (error) { listEl.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
-  if (!subs || !subs.length) { listEl.innerHTML = '<div class="empty">Нет подписчиков</div>'; return; }
+  if (error) { listEl.innerHTML = `<div class="empty">${escapeHtml(t("auth.err.prefix"))}: ${escapeHtml(error.message)}</div>`; return; }
+  if (!subs || !subs.length) { listEl.innerHTML = '<div class="empty">' + escapeHtml(t("channel.profile.noSubs")) + '</div>'; return; }
 
   const profiles = [];
   for (const s of subs) {
@@ -11819,7 +12077,11 @@ async function openChannelSubscribersDialog() {
     if (p) profiles.push({ ...p, _role: s.role });
   }
 
-  const roleLabel = (r) => r === "owner" ? "Владелец" : r === "admin" ? "Админ" : "Подписчик";
+  const roleLabel = (r) => r === "owner"
+    ? t("channel.edit.ownerRole")
+    : r === "admin"
+      ? t("channel.edit.adminRole")
+      : t("channel.edit.subscriberRole");
 
   listEl.innerHTML = profiles.map((p) => `
     <div class="admin-row" data-user-id="${p.id}">
@@ -11989,7 +12251,7 @@ async function handlePinAction(msgId) {
   // === КАНАЛ ===
   if (currentChannelObj) {
     if (!currentChannelIsAdmin) {
-      await showAlertDialog("Нельзя", "Только администраторы могут закреплять сообщения в канале");
+      await showAlertDialog(t("gifts.error"), t("channel.sub.onlyAdminsPin"));
       return;
     }
     const existing = currentPinnedList.find((p) => p.message_id === msgId && p.scope === "shared");
@@ -12170,14 +12432,14 @@ async function openInviteDialog() {
 async function refreshInviteList() {
   const listEl = document.getElementById("invite-list");
   if (!currentChannelObj) return;
-  listEl.innerHTML = '<div class="empty">Загрузка...</div>';
+  listEl.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
   const { data, error } = await supabase.from("channel_invites")
     .select("*").eq("chat_id", currentChannelObj.id).eq("revoked", false)
     .order("created_at", { ascending: false });
-  if (error) { listEl.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
+  if (error) { listEl.innerHTML = `<div class="empty">${escapeHtml(t("auth.err.prefix"))}: ${escapeHtml(error.message)}</div>`; return; }
   currentInvitesList = data || [];
   if (!currentInvitesList.length) {
-    listEl.innerHTML = '<div class="empty">Пока нет ссылок</div>';
+    listEl.innerHTML = '<div class="empty">' + escapeHtml(t("invite.empty")) + '</div>';
     return;
   }
   const baseUrl = window.location.origin + window.location.pathname;
@@ -12186,10 +12448,10 @@ async function refreshInviteList() {
     return `
       <div class="invite-item" data-invite-id="${inv.id}">
         <span class="invite-item-code"><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></span>
-        <button class="invite-item-open" data-open-code="${inv.code}" title="Открыть в этой вкладке"><span class="cell-icon cell-icon-sm" data-icon="external"></span></button>
-        <button class="invite-item-share" data-share-code="${inv.code}" title="Переслать"><span class="cell-icon cell-icon-sm" data-icon="share"></span></button>
-        <button class="invite-item-copy" data-copy-code="${inv.code}" title="Скопировать"><span class="cell-icon cell-icon-sm" data-icon="copyLink"></span></button>
-        <button class="invite-item-revoke" data-revoke-id="${inv.id}" title="Отозвать"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
+        <button class="invite-item-open" data-open-code="${inv.code}" title="${escapeHtml(t("invite.open"))}"><span class="cell-icon cell-icon-sm" data-icon="external"></span></button>
+        <button class="invite-item-share" data-share-code="${inv.code}" title="${escapeHtml(t("invite.share"))}"><span class="cell-icon cell-icon-sm" data-icon="share"></span></button>
+        <button class="invite-item-copy" data-copy-code="${inv.code}" title="${escapeHtml(t("invite.copy"))}"><span class="cell-icon cell-icon-sm" data-icon="copyLink"></span></button>
+        <button class="invite-item-revoke" data-revoke-id="${inv.id}" title="${escapeHtml(t("invite.revoke"))}"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
       </div>`;
   }).join("");
 
@@ -12226,7 +12488,11 @@ async function refreshInviteList() {
   listEl.querySelectorAll("[data-revoke-id]").forEach((btn) => {
     btn.addEventListener("click", async (e) => {
       e.stopPropagation();
-      const ok = await showConfirmDialog("Отозвать ссылку", "Ссылка перестанет работать. Продолжить?", "Отозвать");
+      const ok = await showConfirmDialog(
+        t("invite.revokeTitle"),
+        t("invite.revokeText"),
+        t("invite.revokeAction")
+      );
       if (!ok) return;
       const { error } = await supabase.from("channel_invites")
         .update({ revoked: true }).eq("id", btn.dataset.revokeId);
@@ -12264,15 +12530,15 @@ async function openChannelRequestsDialog() {
   const overlay = document.getElementById("channel-requests-overlay");
   const listEl = document.getElementById("channel-requests-list");
 
-  listEl.innerHTML = '<div class="empty">Загрузка...</div>';
+  listEl.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
   overlay.classList.remove("hidden");
 
   const { data: reqs, error } = await supabase.from("channel_join_requests")
     .select("id, user_id, created_at").eq("chat_id", ch.id)
     .order("created_at", { ascending: true });
-  if (error) { listEl.innerHTML = `<div class="empty">Ошибка: ${error.message}</div>`; return; }
+  if (error) { listEl.innerHTML = `<div class="empty">${escapeHtml(t("auth.err.prefix"))}: ${escapeHtml(error.message)}</div>`; return; }
   if (!reqs || !reqs.length) {
-    listEl.innerHTML = '<div class="empty">Нет активных заявок</div>';
+    listEl.innerHTML = '<div class="empty">' + escapeHtml(t("channel.profile.noRequests")) + '</div>';
     updateChannelRequestsBadge(ch.id);
     return;
   }
@@ -12290,8 +12556,8 @@ async function openChannelRequestsDialog() {
         ${escapeHtml(p.display_name)}
         <div class="admin-row-username">@${escapeHtml(p.username)}</div>
       </div>
-      <button type="button" class="request-approve" data-approve="${p._requestId}" title="Одобрить"><span class="cell-icon cell-icon-sm" data-icon="check"></span></button>
-      <button type="button" class="request-reject" data-reject="${p._requestId}" title="Отклонить"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
+      <button type="button" class="request-approve" data-approve="${p._requestId}" title="${escapeHtml(t("request.approve"))}"><span class="cell-icon cell-icon-sm" data-icon="check"></span></button>
+      <button type="button" class="request-reject" data-reject="${p._requestId}" title="${escapeHtml(t("request.reject"))}"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
     </div>
   `).join("");
 
@@ -12331,9 +12597,9 @@ async function updateChannelRequestsBadge(channelId) {
   const { data: cnt } = await supabase.rpc("count_pending_requests", { p_chat_id: channelId });
   const n = Number(cnt) || 0;
   document.getElementById("channel-profile-requests").textContent = String(n);
-  const word = pluralRu(n, "заявка", "заявки", "заявок");
+  const word = pluralRu(n, t("channel.requestWord.one"), t("channel.requestWord.few"), t("channel.requestWord.many"));
   const sub = requestsRow.querySelector(".pir-label");
-  if (sub) sub.textContent = `${n} ${word} · нажми, чтобы посмотреть`;
+  if (sub) sub.textContent = tFmt("channel.profile.requestsHintPlural", { n, word });
 }
 
 function subscribeToChannelRequests() {

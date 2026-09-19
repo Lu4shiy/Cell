@@ -520,8 +520,8 @@
     <div class="dialog dialog-profile">
       <div class="profile-menu-btn hidden" id="channel-profile-menu-btn"><span class="cell-icon" data-icon="menuVertical"></span></div>
       <div class="profile-menu-dropdown hidden" id="channel-profile-menu">
-        <button data-action="edit">Изменить</button>
-        <button data-action="delete" class="danger">Удалить канал</button>
+        <button data-action="edit" data-i18n="channel.menu.edit">Изменить</button>
+        <button data-action="delete" class="danger" data-i18n="channel.menu.delete">Удалить канал</button>
       </div>
 
       <div class="profile-hero">
@@ -535,75 +535,75 @@
           <span class="pir-icon">@</span>
           <div class="pir-body">
             <div class="pir-value" id="channel-profile-username">—</div>
-            <div class="pir-label">Юзернейм канала</div>
+            <div class="pir-label" data-i18n="channel.profile.username">Юзернейм канала</div>
           </div>
         </div>
         <div class="profile-info-row" id="channel-profile-subs-row" style="cursor:pointer;border-radius:8px;">
           <span class="pir-icon">👥</span>
           <div class="pir-body">
             <div class="pir-value" id="channel-profile-subscribers">0</div>
-            <div class="pir-label">Подписчиков · нажми, чтобы посмотреть список</div>
+            <div class="pir-label" data-i18n="channel.profile.subsHint">Подписчиков · нажми, чтобы посмотреть список</div>
           </div>
         </div>
         <div class="profile-info-row hidden" id="channel-profile-requests-row" style="cursor:pointer;border-radius:8px;">
           <span class="pir-icon">📩</span>
           <div class="pir-body">
             <div class="pir-value" id="channel-profile-requests">0</div>
-            <div class="pir-label">Заявок на вступление · нажми, чтобы посмотреть</div>
+            <div class="pir-label" data-i18n="channel.profile.requestsHint">Заявок на вступление · нажми, чтобы посмотреть</div>
           </div>
         </div>
         <div class="profile-info-row">
           <span class="pir-icon"><span class="cell-icon" data-icon="eye"></span></span>
           <div class="pir-body">
             <div class="pir-value" id="channel-profile-views">0</div>
-            <div class="pir-label">Просмотров за все время</div>
+            <div class="pir-label" data-i18n="channel.profile.views">Просмотров за все время</div>
           </div>
         </div>
         <div class="profile-info-row">
           <span class="pir-icon"><span class="cell-icon" data-icon="calendar"></span></span>
           <div class="pir-body">
             <div class="pir-value" id="channel-profile-created">—</div>
-            <div class="pir-label">Дата создания</div>
+            <div class="pir-label" data-i18n="channel.profile.created">Дата создания</div>
           </div>
         </div>
       </div>
 
       <div class="dialog-actions">
-        <button class="dialog-btn dialog-cancel" id="channel-profile-close">Закрыть</button>
+        <button class="dialog-btn dialog-cancel" id="channel-profile-close" data-i18n="profile.close">Закрыть</button>
       </div>
     </div>
   </div>
 
   <div id="channel-subs-overlay" class="dialog-overlay hidden">
     <div class="dialog dialog-profile">
-      <div class="dialog-title" id="channel-subs-title">Подписчики</div>
+      <div class="dialog-title" id="channel-subs-title" data-i18n="channel.profile.subsList">Подписчики</div>
       <div id="channel-subs-list" class="admins-list" style="max-height:60vh;overflow-y:auto;"></div>
       <div class="dialog-actions">
-        <button class="dialog-btn dialog-cancel" id="channel-subs-close">Закрыть</button>
+        <button class="dialog-btn dialog-cancel" id="channel-subs-close" data-i18n="profile.close">Закрыть</button>
       </div>
     </div>
   </div>
 
   <div id="channel-create-overlay" class="dialog-overlay hidden">
     <div class="dialog dialog-profile">
-      <div class="dialog-title">Создать канал</div>
+      <div class="dialog-title" data-i18n="channel.create.title">Создать канал</div>
 
       <div class="profile-section">
-        <div class="profile-label">Аватар</div>
+        <div class="profile-label" data-i18n="channel.create.avatar">Аватар</div>
         <div class="avatar-preview">
           <div class="avatar avatar-large" id="channel-avatar-preview">К</div>
         </div>
         <div class="avatar-grid" id="channel-avatar-grid"></div>
-        <label class="upload-btn">Загрузить свою<input type="file" id="channel-avatar-upload" accept="image/*" hidden></label>
+        <label class="upload-btn"><span data-i18n="channel.create.uploadOwn">Загрузить свою</span><input type="file" id="channel-avatar-upload" accept="image/*" hidden></label>
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Название</div>
-        <input type="text" id="channel-name-input" placeholder="Название канала" maxlength="25">
+        <div class="profile-label" data-i18n="channel.create.name">Название</div>
+        <input type="text" id="channel-name-input" placeholder="Название канала" data-i18n-placeholder="channel.create.namePlaceholder" maxlength="25">
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Юзернейм канала</div>
+        <div class="profile-label" data-i18n="channel.create.username">Юзернейм канала</div>
         <div class="username-input-wrap">
           <span class="username-prefix">@</span>
           <input type="text" id="channel-username-input" placeholder="username" maxlength="32" autocomplete="off" spellcheck="false">
@@ -612,44 +612,44 @@
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Тип канала</div>
+        <div class="profile-label" data-i18n="channel.create.visibility">Тип канала</div>
         <div class="visibility-toggle" id="channel-visibility-toggle">
-          <button type="button" data-vis="public">Открытый</button>
-          <button type="button" data-vis="request">По заявке</button>
-          <button type="button" data-vis="private">Приватный</button>
+          <button type="button" data-vis="public" data-i18n="channel.create.visibility.public">Открытый</button>
+          <button type="button" data-vis="request" data-i18n="channel.create.visibility.request">По заявке</button>
+          <button type="button" data-vis="private" data-i18n="channel.create.visibility.private">Приватный</button>
         </div>
-        <div class="username-hint" id="channel-visibility-hint">
+        <div class="username-hint" id="channel-visibility-hint" data-i18n="channel.create.visibility.hint">
           Открытый — любой может подписаться. По заявке — нужна одобренная заявка. Приватный — только по ссылке-приглашению.
         </div>
       </div>
 
       <div class="dialog-actions">
-        <button class="dialog-btn dialog-primary" id="channel-create-confirm" disabled>Создать канал</button>
-        <button class="dialog-btn dialog-cancel" id="channel-create-cancel">Отмена</button>
+        <button class="dialog-btn dialog-primary" id="channel-create-confirm" disabled data-i18n="channel.create.confirm">Создать канал</button>
+        <button class="dialog-btn dialog-cancel" id="channel-create-cancel" data-i18n="dialog.cancel">Отмена</button>
       </div>
     </div>
   </div>
 
   <div id="channel-edit-overlay" class="dialog-overlay hidden">
     <div class="dialog dialog-profile">
-      <div class="dialog-title">Изменить канал</div>
+      <div class="dialog-title" data-i18n="channel.edit.title">Изменить канал</div>
 
       <div class="profile-section">
-        <div class="profile-label">Аватар</div>
+        <div class="profile-label" data-i18n="channel.create.avatar">Аватар</div>
         <div class="avatar-preview">
           <div class="avatar avatar-large" id="channel-edit-avatar-preview">К</div>
         </div>
         <div class="avatar-grid" id="channel-edit-avatar-grid"></div>
-        <label class="upload-btn">Загрузить свою<input type="file" id="channel-edit-avatar-upload" accept="image/*" hidden></label>
+        <label class="upload-btn"><span data-i18n="channel.create.uploadOwn">Загрузить свою</span><input type="file" id="channel-edit-avatar-upload" accept="image/*" hidden></label>
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Название</div>
-        <input type="text" id="channel-edit-name-input" placeholder="Название канала" maxlength="25">
+        <div class="profile-label" data-i18n="channel.create.name">Название</div>
+        <input type="text" id="channel-edit-name-input" placeholder="Название канала" data-i18n-placeholder="channel.create.namePlaceholder" maxlength="25">
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Юзернейм канала</div>
+        <div class="profile-label" data-i18n="channel.create.username">Юзернейм канала</div>
         <div class="username-input-wrap">
           <span class="username-prefix">@</span>
           <input type="text" id="channel-edit-username-input" placeholder="username" maxlength="32" autocomplete="off" spellcheck="false">
@@ -658,37 +658,37 @@
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Тип канала</div>
+        <div class="profile-label" data-i18n="channel.create.visibility">Тип канала</div>
         <div class="visibility-toggle" id="channel-edit-visibility-toggle">
-          <button type="button" data-vis="public">Открытый</button>
-          <button type="button" data-vis="request">По заявке</button>
-          <button type="button" data-vis="private">Приватный</button>
+          <button type="button" data-vis="public" data-i18n="channel.create.visibility.public">Открытый</button>
+          <button type="button" data-vis="request" data-i18n="channel.create.visibility.request">По заявке</button>
+          <button type="button" data-vis="private" data-i18n="channel.create.visibility.private">Приватный</button>
         </div>
-        <div class="username-hint" id="channel-edit-visibility-hint">
+        <div class="username-hint" id="channel-edit-visibility-hint" data-i18n="channel.create.visibility.hint">
           Открытый — любой может подписаться. По заявке — нужна одобренная заявка. Приватный — только по ссылке-приглашению.
         </div>
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Доступные реакции</div>
+        <div class="profile-label" data-i18n="channel.edit.reactions">Доступные реакции</div>
         <div class="reactions-grid" id="channel-edit-reactions"></div>
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Администраторы</div>
+        <div class="profile-label" data-i18n="channel.edit.admins">Администраторы</div>
         <div id="channel-edit-admins" class="admins-list"></div>
-        <button type="button" id="channel-edit-add-admin" class="dialog-btn" style="width:100%;margin-top:8px;">+ Добавить администратора</button>
+        <button type="button" id="channel-edit-add-admin" class="dialog-btn" style="width:100%;margin-top:8px;" data-i18n="channel.edit.addAdmin">+ Добавить администратора</button>
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Владелец канала</div>
+        <div class="profile-label" data-i18n="channel.edit.owner">Владелец канала</div>
         <div id="channel-edit-owner" class="admins-list"></div>
-        <button type="button" id="channel-edit-transfer" class="dialog-btn" style="width:100%;margin-top:8px;">Передать владение</button>
+        <button type="button" id="channel-edit-transfer" class="dialog-btn" style="width:100%;margin-top:8px;" data-i18n="channel.edit.transfer">Передать владение</button>
       </div>
 
       <div class="dialog-actions">
-        <button class="dialog-btn dialog-primary" id="channel-edit-save">Сохранить</button>
-        <button class="dialog-btn dialog-cancel" id="channel-edit-cancel">Отмена</button>
+        <button class="dialog-btn dialog-primary" id="channel-edit-save" data-i18n="channel.edit.save">Сохранить</button>
+        <button class="dialog-btn dialog-cancel" id="channel-edit-cancel" data-i18n="dialog.cancel">Отмена</button>
       </div>
     </div>
   </div>
@@ -705,22 +705,22 @@
 
   <div id="invite-overlay" class="dialog-overlay hidden">
     <div class="dialog">
-      <div class="dialog-title">Ссылка-приглашение</div>
-      <div class="dialog-text">По ссылке любой сможет подписаться на канал.</div>
-      <button class="dialog-btn dialog-primary" id="invite-create-btn" style="width:100%;margin-bottom:12px;">Создать новую ссылку</button>
+      <div class="dialog-title" data-i18n="invite.title">Ссылка-приглашение</div>
+      <div class="dialog-text" data-i18n="invite.text">По ссылке любой сможет подписаться на канал.</div>
+      <button class="dialog-btn dialog-primary" id="invite-create-btn" style="width:100%;margin-bottom:12px;" data-i18n="invite.create">Создать новую ссылку</button>
       <div id="invite-list" class="invite-list"></div>
       <div class="dialog-actions">
-        <button class="dialog-btn dialog-cancel" id="invite-close-btn">Закрыть</button>
+        <button class="dialog-btn dialog-cancel" id="invite-close-btn" data-i18n="profile.close">Закрыть</button>
       </div>
     </div>
   </div>
 
   <div id="channel-requests-overlay" class="dialog-overlay hidden">
     <div class="dialog dialog-profile">
-      <div class="dialog-title">Заявки на вступление</div>
+      <div class="dialog-title" data-i18n="channel.profile.requestsList">Заявки на вступление</div>
       <div id="channel-requests-list" class="admins-list" style="max-height:60vh;overflow-y:auto;"></div>
       <div class="dialog-actions">
-        <button class="dialog-btn dialog-cancel" id="channel-requests-close">Закрыть</button>
+        <button class="dialog-btn dialog-cancel" id="channel-requests-close" data-i18n="profile.close">Закрыть</button>
       </div>
     </div>
   </div>
