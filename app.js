@@ -25,8 +25,19 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     storageKey: AUTH_STORAGE_KEY,
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: true,
   },
+});
+
+// Восстановление пароля: Supabase при возврате по ссылке из письма
+// присылает событие PASSWORD_RECOVERY — показываем форму нового пароля.
+let inRecoveryFlow = false;
+supabase.auth.onAuthStateChange((event) => {
+  if (event === "PASSWORD_RECOVERY") {
+    inRecoveryFlow = true;
+    const overlay = document.getElementById("reset-new-overlay");
+    if (overlay) overlay.classList.remove("hidden");
+  }
 });
 
 const ACCENTS = ["orange", "blue", "green", "red", "purple", "pink", "teal", "gray"];
@@ -13937,6 +13948,93 @@ function setupAttachPreviewDialog() {
 }
 
 // ======================================================
+// 44.5. ВОССТАНОВЛЕНИЕ ПАРОЛЯ ПО ПОЧТЕ
+// ======================================================
+
+function setupPasswordReset() {
+  const forgotBtn = document.getElementById("forgot-password-btn");
+  const reqOverlay = document.getElementById("reset-request-overlay");
+  const reqEmail = document.getElementById("reset-email");
+  const reqSubmit = document.getElementById("reset-request-submit");
+  const reqCancel = document.getElementById("reset-request-cancel");
+  const reqErr = document.getElementById("reset-request-error");
+
+  const newOverlay = document.getElementById("reset-new-overlay");
+  const newPw = document.getElementById("reset-new-password");
+  const newPw2 = document.getElementById("reset-new-password2");
+  const newSubmit = document.getElementById("reset-new-submit");
+  const newCancel = document.getElementById("reset-new-cancel");
+  const newErr = document.getElementById("reset-new-error");
+
+  if (forgotBtn && reqOverlay) {
+    forgotBtn.addEventListener("click", () => {
+      reqErr.textContent = "";
+      // Подставляем email из формы входа, если он уже введён
+      const loginEmail = document.getElementById("login-email");
+      reqEmail.value = loginEmail ? loginEmail.value.trim() : "";
+      reqOverlay.classList.remove("hidden");
+      setTimeout(() => reqEmail.focus(), 60);
+    });
+  }
+
+  if (reqCancel) reqCancel.addEventListener("click", () => reqOverlay.classList.add("hidden"));
+
+  if (reqSubmit) {
+    reqSubmit.addEventListener("click", async () => {
+      const email = reqEmail.value.trim();
+      reqErr.textContent = "";
+      if (!email) { reqErr.textContent = t("auth.err.email.required"); return; }
+      reqSubmit.disabled = true;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: "https://lu4shiy.github.io/Cell/",
+      });
+      reqSubmit.disabled = false;
+      if (error) { reqErr.textContent = error.message || t("auth.reset.err"); return; }
+      reqOverlay.classList.add("hidden");
+      await showAlertDialog(t("auth.reset.title"), t("auth.reset.sent"));
+    });
+  }
+
+  if (newCancel) {
+    newCancel.addEventListener("click", async () => {
+      try { await supabase.auth.signOut(); } catch (e) {}
+      inRecoveryFlow = false;
+      newOverlay.classList.add("hidden");
+      try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch (e) {}
+      showAuth();
+    });
+  }
+
+  if (newSubmit) {
+    newSubmit.addEventListener("click", async () => {
+      const p1 = newPw.value;
+      const p2 = newPw2.value;
+      newErr.textContent = "";
+      if (!p1 || p1.length < 10) { newErr.textContent = t("auth.err.password.short"); return; }
+      if (!/[A-ZА-Я]/.test(p1) || !/[a-zа-я]/.test(p1) || !/\d/.test(p1)) {
+        newErr.textContent = t("auth.err.password.complex");
+        return;
+      }
+      if (p1 !== p2) { newErr.textContent = t("auth.reset.mismatch"); return; }
+
+      newSubmit.disabled = true;
+      const { error } = await supabase.auth.updateUser({ password: p1 });
+      newSubmit.disabled = false;
+      if (error) { newErr.textContent = error.message || t("auth.reset.saveErr"); return; }
+
+      newOverlay.classList.add("hidden");
+      inRecoveryFlow = false;
+      try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch (e) {}
+
+      // Разлогиниваем — пусть войдёт с новым паролем (чистый сценарий).
+      try { await supabase.auth.signOut(); } catch (e) {}
+      showAuth();
+      await showAlertDialog(t("auth.reset.newTitle"), t("auth.reset.saved"));
+    });
+  }
+}
+
+// ======================================================
 // 45. АВТОЗАПУСК (в самом конце — чтобы все переменные,
 // включая scrollMode и SCROLL_MODE_KEY, уже были объявлены)
 // ======================================================
@@ -13945,8 +14043,14 @@ function setupAttachPreviewDialog() {
 // Раньше они вешались только в initApp(), а он вызывался после showApp() —
 // т.е. при первой попытке входа с 2FA кнопки на экране были «мёртвые».
 setupMfaUI();
+setupPasswordReset();
 
 (async () => {
   const { data: { session } } = await supabase.auth.getSession();
-  if (session) showApp(session.user);
+  if (session) {
+    // Если мы только что вернулись по ссылке восстановления — не входим
+    // в приложение, пока пользователь не задал новый пароль.
+    if (inRecoveryFlow) return;
+    showApp(session.user);
+  }
 })();
