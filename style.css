@@ -2768,8 +2768,8 @@ mark.search-hl {
 .gift-card:hover { background: var(--bg-hover); border-color: rgba(245, 166, 35, 0.25); }
 
 .gift-card-emoji {
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   border-radius: 10px;
   display: flex;
   align-items: center;

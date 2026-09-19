@@ -10938,6 +10938,28 @@ function giftDisplayImage(cat, ug) {
   return cat ? cat.emoji : "";
 }
 
+// Картинка для каталога (когда ug ещё нет — подарок не куплен).
+// Приоритет:
+//   1. Если у подарка есть models — берём СЛУЧАЙНУЮ модель.
+//   2. Иначе — cat.emoji (emoji-символ или ссылка).
+// Кэшируем результат на 5 сек на объекте cat, чтобы при каждом ре-рендере
+// каталога картинка не мигала.
+function giftCatalogImage(cat) {
+  if (!cat) return "";
+  if (Array.isArray(cat.models) && cat.models.length) {
+    // Если кэш свежий — берём сохранённую
+    const now = Date.now();
+    if (cat._previewCache && now - cat._previewCache.ts < 5000) {
+      return cat._previewCache.url;
+    }
+    const idx = Math.floor(Math.random() * cat.models.length);
+    const url = cat.models[idx].image || cat.emoji || "";
+    cat._previewCache = { url, ts: now };
+    return url;
+  }
+  return cat.emoji || "";
+}
+
 // Шансы фонов (в %) — должны совпадать с buy_gift в Supabase
 const BACKGROUND_CHANCES = {
   // Tier 1 — 0.5%
@@ -11184,7 +11206,7 @@ async function renderCatalog(recipientId) {
     else btnText = `${NECTAR_HTML} ${g.price}`;
     return `
       <div class="gift-card" data-cat-id="${g.id}">
-        <div class="gift-card-emoji" style="background: var(--bg-input);">${renderGiftModel(g.emoji, 28)}</div>
+        <div class="gift-card-emoji" style="background: var(--bg-input);">${renderGiftModel(giftCatalogImage(g), 48)}</div>
         <div class="gift-card-body">
           <div class="gift-card-name">${escapeHtml(g.name)}</div>
           <div class="gift-card-sub gift-rarity-${g.rarity}">${giftRarityLabel(g.rarity)}${g.collection ? " · " + escapeHtml(g.collection) : ""} · ${supplyText}</div>
