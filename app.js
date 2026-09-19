@@ -4831,17 +4831,22 @@ function subscribeToGlobalMessages() {
       // — не показываем, если это открытый сейчас чат И окно в фокусе;
       // — не показываем для замьюченных чатов (muted, см. следующий этап);
       // — не показываем для сервисных сообщений (gift/tokens/attachment с пустым текстом).
+      // 🔴 Уведомления — в самом конце и в try/catch + setTimeout(0).
+      // Даже если что-то упадёт внутри — бейдж и превью в списке чатов
+      // уже обновлены выше, realtime-хендлер не сломается.
       if (!isMine) {
-        const chatEl = document.querySelector(`.user-item[data-chat-id="${m.chat_id}"]`);
-        const isMuted = chatEl && chatEl.dataset.muted === "1";
-        // Не показываем, только если ОТКРЫТ именно этот чат и приложение на экране —
-        // пользователь и так видит сообщение.
-        const isCurrentChatVisible =
-          currentChatId === m.chat_id &&
-          document.visibilityState === "visible";
-        if (!isMuted && !isCurrentChatVisible) {
-          showMessageNotification(m);
-        }
+        try {
+          const chatEl = document.querySelector(`.user-item[data-chat-id="${m.chat_id}"]`);
+          const isMuted = chatEl && chatEl.dataset.muted === "1";
+          const isCurrentChatVisible =
+            currentChatId === m.chat_id &&
+            document.visibilityState === "visible";
+          if (!isMuted && !isCurrentChatVisible) {
+            setTimeout(() => {
+              try { showMessageNotification(m); } catch (e) { console.warn("notify failed:", e); }
+            }, 0);
+          }
+        } catch (e) { /* silent */ }
       }
     }).subscribe();
 }
@@ -4883,9 +4888,13 @@ async function showMessageNotification(m) {
   }
   if (!body) body = t("notif.newMessage");
 
+  // Галочка «Уведомления» в настройках должна глушить ВСЁ —
+  // и тост, и системное уведомление. Иначе это выглядит как баг.
+  if (!areNotificationsEnabled()) return;
+
   const onClick = () => { openChatFromNotification(m).catch(() => {}); };
 
-  // 1) Окно видно — in-app тост
+  // 1) Окно видно — in-app тост (без разрешений, всегда работает)
   if (document.visibilityState === "visible") {
     showInAppToast({
       profile: senderProfile,
