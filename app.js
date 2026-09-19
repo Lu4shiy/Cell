@@ -494,6 +494,25 @@ const I18N = {
     "gifts.notFound": "Не найдено",
     "gifts.error": "Ошибка",
 
+    // ---- Превью в списке чатов ----
+    "preview.gift": "🎁 Подарок",
+    "preview.photo": "📷 Фото",
+    "preview.video": "🎥 Видео",
+    "preview.file": "📎 Файл",
+    "preview.you": "Вы: ",
+    "preview.noMessages": "Нет сообщений",
+    "preview.encrypted": "🔒 Зашифровано",
+
+    // ---- Системные сообщения ----
+    "msg.gift.youSent": "Вы отправили подарок за {price} {icon}",
+    "msg.gift.sent.male": "{name} отправил вам подарок за {price} {icon}",
+    "msg.gift.sent.female": "{name} отправила вам подарок за {price} {icon}",
+    "msg.gift.sent.other": "{name} отправил(а) вам подарок за {price} {icon}",
+    "msg.tokens.youSent": "Вы отправили {amount} {icon}",
+    "msg.tokens.sent.male": "{name} отправил вам {amount} {icon} Nectar",
+    "msg.tokens.sent.female": "{name} отправила вам {amount} {icon} Nectar",
+    "msg.tokens.sent.other": "{name} отправил(а) вам {amount} {icon} Nectar",
+
     // ---- Пустые состояния ----
     "empty.noChats": "У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.",
     "empty.noChatsShort": "У вас пока нет чатов.",
@@ -805,6 +824,25 @@ const I18N = {
     "gifts.notFound": "Not found",
     "gifts.error": "Error",
 
+    // ---- Chat list previews ----
+    "preview.gift": "🎁 Gift",
+    "preview.photo": "📷 Photo",
+    "preview.video": "🎥 Video",
+    "preview.file": "📎 File",
+    "preview.you": "You: ",
+    "preview.noMessages": "No messages",
+    "preview.encrypted": "🔒 Encrypted",
+
+    // ---- System messages ----
+    "msg.gift.youSent": "You sent a gift worth {price} {icon}",
+    "msg.gift.sent.male": "{name} sent you a gift worth {price} {icon}",
+    "msg.gift.sent.female": "{name} sent you a gift worth {price} {icon}",
+    "msg.gift.sent.other": "{name} sent you a gift worth {price} {icon}",
+    "msg.tokens.youSent": "You sent {amount} {icon}",
+    "msg.tokens.sent.male": "{name} sent you {amount} {icon} Nectar",
+    "msg.tokens.sent.female": "{name} sent you {amount} {icon} Nectar",
+    "msg.tokens.sent.other": "{name} sent you {amount} {icon} Nectar",
+
     // ---- Empty states ----
     "empty.noChats": "No chats yet.<br>Type @username above to find someone.",
     "empty.noChatsShort": "No chats yet.",
@@ -866,6 +904,21 @@ function localeId() {
   return currentLang === "en" ? "en-US" : "ru-RU";
 }
 
+// Возвращает текст превью для сообщения в списке чатов.
+// isMine — true, если это наше исходящее сообщение (тогда "Вы: ...").
+function previewTextForMsg(m, isMine) {
+  if (!m) return t("preview.noMessages");
+  if (m.message_type === "tokens") return `🧩 +${m.tokens_amount}`;
+  if (m.message_type === "gift") return t("preview.gift");
+  if (m.message_type === "attachment") {
+    if (m.file_kind === "image") return t("preview.photo");
+    if (m.file_kind === "video") return t("preview.video");
+    return t("preview.file");
+  }
+  if (m.encrypted) return t("preview.encrypted");
+  return (isMine ? t("preview.you") : "") + stripMarkdown(m.content || "");
+}
+
 // Переключить язык и перерисовать все видимые тексты.
 function setLanguage(lang) {
   if (lang !== "ru" && lang !== "en") return;
@@ -903,16 +956,17 @@ function setLanguage(lang) {
   // Если открыто окно подарков — перерисуем текущий экран под новый язык.
   const giftsOverlay = document.getElementById("gifts-overlay");
   if (giftsOverlay && !giftsOverlay.classList.contains("hidden")) {
-    const title = document.getElementById("gifts-title");
-    const backBtn = document.getElementById("gifts-back");
-    if (backBtn && !backBtn.classList.contains("hidden")) {
-      // Мы на каком-то дочернем экране (детали/каталог) — вернёмся к списку.
-      // Это безопаснее, чем пытаться угадать, где мы были.
-      if (typeof renderGiftsMain === "function") renderGiftsMain(currentUser.id);
-    } else {
-      // На главном экране — просто перерисуем его.
-      if (typeof renderGiftsMain === "function") renderGiftsMain(currentUser.id);
-    }
+    if (typeof renderGiftsMain === "function") renderGiftsMain(currentUser.id);
+  }
+  // Перерисуем список чатов — там превью и заголовки.
+  if (typeof loadRecentChats === "function" && currentUser) {
+    loadRecentChats().catch(() => {});
+  }
+  // Если открыт чат — перезагрузим сообщения (системные gift/tokens зависят от t()).
+  if (typeof currentChatId !== "undefined" && currentChatId && typeof loadMessages === "function") {
+    loadMessages(currentChatId, openSeq).then(() => {
+      if (typeof loadReactionsForVisibleMessages === "function") loadReactionsForVisibleMessages();
+    }).catch(() => {});
   }
 }
 
@@ -3827,12 +3881,7 @@ function subscribeToGlobalMessages() {
       const time = new Date(m.created_at).getTime();
       const prev = chatLastMsg.get(m.chat_id) || {};
       const isMine = m.sender_id === currentUser.id;
-      let previewText;
-      if (m.message_type === "tokens") previewText = `🧩 +${m.tokens_amount}`;
-      else if (m.message_type === "gift") previewText = "🎁 Подарок";
-      else if (m.message_type === "attachment") previewText = m.file_kind === "image" ? "📷 Фото" : m.file_kind === "video" ? "🎥 Видео" : "📎 Файл";
-      else if (m.encrypted) previewText = "🔒 Зашифровано";
-      else previewText = (m.content || "");
+      let previewText = previewTextForMsg(m, isMine);
 
       // Если это своё только что отправленное сообщение — сохраняем
       // плейнтекст, который мы уже положили при отправке, и не перетираем
@@ -4023,14 +4072,9 @@ async function loadRecentChats() {
   dmItems.forEach((it) => {
     chatIdByUser.set(it.user_id, it.chat_id);
     chatOtherUserCache.set(it.chat_id, it.user_id);
-    let previewRaw = "";
-    if (it.lastMsg) {
-      if (it.lastMsg.message_type === "tokens") previewRaw = `🧩 +${it.lastMsg.tokens_amount}`;
-      else if (it.lastMsg.message_type === "gift") previewRaw = "🎁 Подарок";
-      else if (it.lastMsg.message_type === "attachment") previewRaw = it.lastMsg.file_kind === "image" ? "📷 Фото" : it.lastMsg.file_kind === "video" ? "🎥 Видео" : "📎 Файл";
-      else if (it.lastMsg.encrypted) previewRaw = "🔒 Зашифровано";
-      else previewRaw = stripMarkdown(it.lastMsg.content || "");
-    }
+    const previewRaw = it.lastMsg
+      ? previewTextForMsg(it.lastMsg, it.lastMsg.sender_id === currentUser.id)
+      : "";
     const preview = previewRaw;
     chatLastMsg.set(it.chat_id, {
       text: preview, time: it.lastTime,
@@ -4046,12 +4090,7 @@ async function loadRecentChats() {
   channelItems.forEach((it) => {
     let preview = "";
     if (it.lastMsg) {
-      const m = it.lastMsg;
-      if (m.message_type === "tokens") preview = `🧩 +${m.tokens_amount}`;
-      else if (m.message_type === "gift") preview = "🎁 Подарок";
-      else if (m.message_type === "attachment") preview = m.file_kind === "image" ? "📷 Фото" : m.file_kind === "video" ? "🎥 Видео" : "📎 Файл";
-      else if (m.encrypted) preview = "🔒 Зашифровано";
-      else preview = stripMarkdown(m.content || "");
+      preview = previewTextForMsg(it.lastMsg, false);
     }
     chatLastMsg.set(it.chat_id, {
       text: preview, time: it.lastTime, senderId: null,
@@ -4075,10 +4114,8 @@ function renderChatItem(it, user) {
   const name = it.customName || user.display_name;
   const time = it.lastTime ? formatChatTime(it.lastTime) : "";
   const preview = it.lastMsg
-    ? (it.lastMsg.message_type === "tokens" ? `🧩 +${it.lastMsg.tokens_amount}`
-      : it.lastMsg.message_type === "gift" ? "🎁 Подарок"
-      : ((it.lastMsg.sender_id === currentUser.id ? "Вы: " : "") + stripMarkdown(it.lastMsg.content || "")))
-    : "Нет сообщений";
+    ? previewTextForMsg(it.lastMsg, it.lastMsg.sender_id === currentUser.id)
+    : t("preview.noMessages");
   const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
   return `
     <div class="user-item" data-user-id="${user.id}" data-chat-id="${it.chat_id}" data-custom-name="${it.customName ? escapeHtml(it.customName) : ""}">
@@ -4143,14 +4180,9 @@ function renderDmItemHtml(it, profileMap) {
   const time = it.lastTime ? formatChatTime(it.lastTime) : "";
   let preview = "";
   if (it.lastMsg) {
-    const m = it.lastMsg;
-    if (m.message_type === "tokens") preview = `🧩 +${m.tokens_amount}`;
-    else if (m.message_type === "gift") preview = "🎁 Подарок";
-    else if (m.message_type === "attachment") preview = m.file_kind === "image" ? "📷 Фото" : m.file_kind === "video" ? "🎥 Видео" : "📎 Файл";
-    else if (m.encrypted) preview = "🔒 Зашифровано";
-    else preview = (m.sender_id === currentUser.id ? "Вы: " : "") + stripMarkdown(m.content || "");
+    preview = previewTextForMsg(it.lastMsg, it.lastMsg.sender_id === currentUser.id);
   } else {
-    preview = "Нет сообщений";
+    preview = t("preview.noMessages");
   }
   const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
   return `
@@ -4174,14 +4206,9 @@ function renderChannelItemHtml(it) {
   const time = it.lastTime ? formatChatTime(it.lastTime) : "";
   let preview = "";
   if (it.lastMsg) {
-    const m = it.lastMsg;
-    if (m.message_type === "tokens") preview = `🧩 +${m.tokens_amount}`;
-    else if (m.message_type === "gift") preview = "🎁 Подарок";
-    else if (m.message_type === "attachment") preview = m.file_kind === "image" ? "📷 Фото" : m.file_kind === "video" ? "🎥 Видео" : "📎 Файл";
-    else if (m.encrypted) preview = "🔒 Зашифровано";
-    else preview = stripMarkdown(m.content || "");
+    preview = previewTextForMsg(it.lastMsg, false);
   } else {
-    preview = "Нет сообщений";
+    preview = t("preview.noMessages");
   }
   const unreadHtml = it.unread > 0 ? `<span class="unread-badge">${it.unread}</span>` : "";
   return `
@@ -5743,41 +5770,53 @@ function renderMsgStatus(msg) {
 async function renderSystemMessage(msg) {
   if (msg.message_type === "tokens") {
     const sender = await getProfile(msg.sender_id);
-    const senderName = msg.sender_id === currentUser.id ? "Вы" : (sender ? sender.display_name : "Кто-то");
+    const senderName = sender ? sender.display_name : "—";
+    const isMine = msg.sender_id === currentUser.id;
+    const g = sender ? sender.gender : null;
+    const gSuffix = (g === "male" || g === "female") ? "." + g : ".other";
     let text;
-    if (msg.sender_id === currentUser.id) {
-      text = `<b>Вы</b> отправили <b>${msg.tokens_amount}</b> ${NECTAR_HTML}`;
+    if (isMine) {
+      text = tFmt("msg.tokens.youSent", {
+        amount: `<b>${msg.tokens_amount}</b>`,
+        icon: NECTAR_HTML,
+      });
     } else {
-      const g = sender ? sender.gender : null;
-      let v;
-      if (g === "female") v = "отправила вам";
-      else if (g === "male") v = "отправил вам";
-      else v = "отправил(а) вам";
-      text = `<b>${escapeHtml(senderName)}</b> ${v} <b>${msg.tokens_amount}</b> ${NECTAR_HTML} Nectar`;
+      text = tFmt("msg.tokens.sent" + gSuffix, {
+        name: `<b>${escapeHtml(senderName)}</b>`,
+        amount: `<b>${msg.tokens_amount}</b>`,
+        icon: NECTAR_HTML,
+      });
     }
     return `<span class="msg-system-text">${text}</span>`;
   }
   if (msg.message_type === "gift") {
     const { data: ug } = await supabase.from("user_gifts").select("*").eq("id", msg.gift_ref_id).maybeSingle();
-    if (!ug) return `<span class="msg-system-text">🎁 Подарок</span>`;
+    if (!ug) return `<span class="msg-system-text">${escapeHtml(t("preview.gift"))}</span>`;
     const catalog = await loadGiftCatalog();
     const cat = catalog.find((c) => c.id === ug.gift_id);
-    if (!cat) return `<span class="msg-system-text">🎁 Подарок</span>`;
+    if (!cat) return `<span class="msg-system-text">${escapeHtml(t("preview.gift"))}</span>`;
     const sender = await getProfile(msg.sender_id);
-    const senderName = msg.sender_id === currentUser.id ? "Вы" : (sender ? sender.display_name : "Кто-то");
-    let verb;
-    if (msg.sender_id === currentUser.id) {
-      verb = "отправили";
+    const senderName = sender ? sender.display_name : "—";
+    const isMine = msg.sender_id === currentUser.id;
+    const g = sender ? sender.gender : null;
+    const gSuffix = (g === "male" || g === "female") ? "." + g : ".other";
+    let sentText;
+    if (isMine) {
+      sentText = tFmt("msg.gift.youSent", {
+        price: `<b>${cat.price}</b>`,
+        icon: NECTAR_HTML,
+      });
     } else {
-      const g = sender ? sender.gender : null;
-      if (g === "female") verb = "отправила вам";
-      else if (g === "male") verb = "отправил вам";
-      else verb = "отправил(а) вам";
+      sentText = tFmt("msg.gift.sent" + gSuffix, {
+        name: `<b>${escapeHtml(senderName)}</b>`,
+        price: `<b>${cat.price}</b>`,
+        icon: NECTAR_HTML,
+      });
     }
     const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
     const patternIcon = cat.rarity === "epic" ? getPatternIcon(ug.pattern_id) : null;
     return `
-      <span class="msg-system-text">${senderName} ${verb} подарок за <b>${cat.price}</b> ${NECTAR_HTML}</span>
+      <span class="msg-system-text">${sentText}</span>
       <div class="gift-card-inline" style="${bg}">
         ${patternIcon ? `<div class="gift-card-inline-pattern" data-icon="${patternIcon}"></div>` : ""}
         <div class="gci-emoji">${renderGiftModel(cat.emoji, 46)}</div>
@@ -7754,7 +7793,7 @@ async function uploadAndSendAttachment(file, chatId, caption, asFile) {
   await appendMessage(data);
   scrollToBottom();
 
-  let preview = kind === "image" ? "📷 Фото" : kind === "video" ? "🎥 Видео" : "📎 Файл";
+  let preview = kind === "image" ? t("preview.photo") : kind === "video" ? t("preview.video") : t("preview.file");
   if (caption) preview = caption.slice(0, 60);
   chatLastMsg.set(chatId, {
     text: preview, time: new Date(data.created_at).getTime(),
