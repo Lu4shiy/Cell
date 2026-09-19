@@ -11312,19 +11312,7 @@ function openGiftPurchase(gift, recipientId) {
       }
     }
 
-    // 1. Всегда фиксируем получателя — если покупаем не себе.
-    //    Это для строки «Подарок для X» в деталях.
-    if (!isSelf && newGiftId) {
-      const rp = profileCache.get(recipientId) || await getProfile(recipientId);
-      const recName = rp ? (rp.display_name || "").trim() : "";
-      if (recName) {
-        await supabase.from("user_gifts")
-          .update({ recipient_id: recipientId, recipient_name: recName })
-          .eq("id", newGiftId);
-      }
-    }
-
-    // 2. Если отмечена галочка «С моим именем» — сохраняем ИМЯ ПОКУПАТЕЛЯ (моё).
+    // Если отмечена галочка «С моим именем» — сохраняем ИМЯ ПОКУПАТЕЛЯ (моё).
     //    Работает одинаково: и когда покупаешь себе, и когда другому.
     if (withName && newGiftId) {
       const myName = (myProfile && myProfile.display_name || "").trim();
@@ -11473,7 +11461,6 @@ async function renderGiftDetail(ownerId, ug) {
       <div class="gift-detail-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
       <div class="gift-detail-sub">${escapeHtml(cat.collection || "—")} · ${giftRarityLabel(cat.rarity)}</div>
 
-      ${recipientHtml}
       ${senderHtml}
 
       <div class="gift-info-table">
@@ -11621,7 +11608,7 @@ async function openGiftSend(ug) {
     const ok = await showConfirmDialog(
       t("gifts.send.confirmTitle"),
       tFmt("gifts.send.confirmText", { price: 25 }),
-      t("gifts.send.confirmAction")
+      tFmt("gifts.send.confirmAction", { price: 25 })
     );
     if (!ok) return;
 
