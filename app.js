@@ -6578,7 +6578,7 @@ async function renderSystemMessage(msg) {
       <span class="msg-system-text">${sentText}</span>
       <div class="gift-card-inline" style="${bg}">
         ${patternIcon ? `<div class="gift-card-inline-pattern" data-icon="${patternIcon}"></div>` : ""}
-        <div class="gci-emoji">${renderGiftModel(displayImg, 46)}</div>
+        <div class="gci-emoji">${renderGiftModel(displayImg, 70)}</div>
         <div class="gci-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
         <div class="gci-sub gift-rarity-${cat.rarity}">${giftRarityLabel(cat.rarity)}${cat.collection ? " · " + escapeHtml(cat.collection) : ""}</div>
       </div>`;
@@ -11084,7 +11084,7 @@ async function renderGiftsMain(userId) {
           ${pinMark}
           <div class="gift-tile-emoji" style="${bg}">
             ${patternIcon ? `<div class="gift-tile-pattern" data-icon="${patternIcon}"></div>` : ""}
-            <span class="gift-tile-emoji-symbol">${renderGiftModel(displayImg, 51)}</span>
+            <span class="gift-tile-emoji-symbol">${renderGiftModel(displayImg, 78)}</span>
           </div>
         </div>`;
     });
