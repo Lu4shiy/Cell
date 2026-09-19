@@ -66,6 +66,7 @@
         <input type="email" id="login-email" placeholder="Email" data-i18n-placeholder="auth.field.email" required>
         <input type="password" id="login-password" placeholder="Пароль" data-i18n-placeholder="auth.field.password" required>
         <button type="submit" class="btn-primary" data-i18n="auth.login.submit">Войти</button>
+        <button type="button" class="auth-link-btn" id="forgot-password-btn" data-i18n="auth.forgotPassword">Забыли пароль?</button>
         <p class="error" id="login-error"></p>
       </form>
 
@@ -77,6 +78,38 @@
         <button type="submit" class="btn-primary" data-i18n="auth.register.submit">Создать аккаунт</button>
         <p class="error" id="register-error"></p>
       </form>
+    </div>
+  </div>
+
+  <!-- ═══════ ВОССТАНОВЛЕНИЕ ПАРОЛЯ: запрос письма ═══════ -->
+  <div id="reset-request-overlay" class="dialog-overlay hidden" style="z-index:9000;">
+    <div class="dialog">
+      <div class="dialog-title" data-i18n="auth.reset.title">Восстановление пароля</div>
+      <div class="dialog-text" data-i18n="auth.reset.text">Введите email, привязанный к аккаунту — мы отправим ссылку для сброса пароля.</div>
+      <input type="email" id="reset-email" placeholder="Email" data-i18n-placeholder="auth.field.email" autocomplete="email"
+             style="width:100%;padding:14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;margin-bottom:12px;">
+      <p class="error" id="reset-request-error" style="margin-bottom:10px;"></p>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="reset-request-submit" data-i18n="auth.reset.send">Отправить ссылку</button>
+        <button class="dialog-btn dialog-cancel" id="reset-request-cancel" data-i18n="dialog.cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ ВОССТАНОВЛЕНИЕ ПАРОЛЯ: новый пароль ═══════ -->
+  <div id="reset-new-overlay" class="dialog-overlay hidden" style="z-index:9500;">
+    <div class="dialog">
+      <div class="dialog-title" data-i18n="auth.reset.newTitle">Новый пароль</div>
+      <div class="dialog-text" data-i18n="auth.reset.newText">Придумайте новый пароль. Требования: минимум 10 символов, заглавная и строчная буквы, цифра.</div>
+      <input type="password" id="reset-new-password" placeholder="Новый пароль" data-i18n-placeholder="auth.field.password.strict" autocomplete="new-password"
+             style="width:100%;padding:14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;margin-bottom:10px;">
+      <input type="password" id="reset-new-password2" placeholder="Повторите пароль" data-i18n-placeholder="auth.reset.repeat" autocomplete="new-password"
+             style="width:100%;padding:14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;margin-bottom:12px;">
+      <p class="error" id="reset-new-error" style="margin-bottom:10px;"></p>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="reset-new-submit" data-i18n="auth.reset.save">Сохранить пароль</button>
+        <button class="dialog-btn dialog-cancel" id="reset-new-cancel" data-i18n="dialog.cancel">Отмена</button>
+      </div>
     </div>
   </div>
 

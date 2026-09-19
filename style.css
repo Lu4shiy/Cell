@@ -318,6 +318,19 @@ input:focus {
   min-height: 16px;
 }
 
+.auth-link-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 4px 0;
+  text-align: center;
+  transition: color 0.15s;
+}
+.auth-link-btn:hover { color: var(--accent); }
+
 /* ====================================================== */
 /* Главный экран                                           */
 /* ====================================================== */
