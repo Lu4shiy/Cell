@@ -259,6 +259,12 @@ const I18N = {
     "auth.localLoginHint": "Аккаунт только на этом устройстве. Без почты и пароля.",
     "auth.localLoginErr": "Не удалось войти локально",
     "auth.localLoginDisabled": "Локальный вход отключён в настройках сервера. Включите Anonymous Sign-Ins в Supabase.",
+    "localSetup.title": "Локальный аккаунт",
+    "localSetup.text": "Это аккаунт только для этого устройства. Никакой почты и пароля не нужно — войти в него с другого устройства нельзя. Придумайте имя и юзернейм.",
+    "localSetup.save": "Начать пользоваться",
+    "localSetup.err.name": "Введите имя",
+    "localSetup.err.username": "Введите юзернейм",
+    "localSetup.err.usernameFormat": "Юзернейм: 3-32 символа, a-z, 0-9, _ и -",
     "auth.reset.title": "Восстановление пароля",
     "auth.reset.text": "Введите email, привязанный к аккаунту — мы отправим ссылку для сброса пароля.",
     "auth.reset.send": "Отправить ссылку",
@@ -981,6 +987,12 @@ const I18N = {
     "auth.localLoginHint": "Account on this device only. No email or password.",
     "auth.localLoginErr": "Local sign-in failed",
     "auth.localLoginDisabled": "Local sign-in is disabled on the server. Enable Anonymous Sign-Ins in Supabase.",
+    "localSetup.title": "Local account",
+    "localSetup.text": "This account lives on this device only. No email or password needed — you can't sign in to it from another device. Choose a name and username.",
+    "localSetup.save": "Start using",
+    "localSetup.err.name": "Enter a name",
+    "localSetup.err.username": "Enter a username",
+    "localSetup.err.usernameFormat": "Username: 3–32 characters, a-z, 0-9, _ and -",
     "auth.reset.title": "Password recovery",
     "auth.reset.text": "Enter the email linked to your account — we'll send a password reset link.",
     "auth.reset.send": "Send link",
@@ -14069,10 +14081,12 @@ async function localLogin() {
   // 3. На всякий случай проверяем, что для нового юзера создан профиль.
   //    Обычный триггер on_auth_user_created может пропускать анонимных
   //    пользователей (нет email).
+  let isFreshProfile = false;
   try {
     const { data: prof } = await supabase.from("profiles")
       .select("id").eq("id", data.user.id).maybeSingle();
     if (!prof) {
+      isFreshProfile = true;
       const rnd = Math.random().toString(36).slice(2, 10);
       await supabase.from("profiles").insert({
         id: data.user.id,
@@ -14081,6 +14095,12 @@ async function localLogin() {
       });
     }
   } catch (e) { console.warn("local profile bootstrap:", e); }
+
+  // 4. Только что создали аккаунт — сразу дадим пользователю выбрать имя,
+  //    юзернейм и аватар. При повторном входе диалог не показываем.
+  if (isFreshProfile) {
+    await openLocalSetupDialog(data.user.id);
+  }
 
   showApp(data.user);
 }
@@ -14092,6 +14112,122 @@ function setupLocalLogin() {
     btn.disabled = true;
     try { await localLogin(); }
     finally { btn.disabled = false; }
+  });
+}
+
+// Показывает диалог первичной настройки локального аккаунта.
+// Возвращает Promise<boolean>: true — сохранено, false — не удалось.
+function openLocalSetupDialog(userId) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById("local-setup-overlay");
+    const nameInput = document.getElementById("local-setup-name");
+    const unameInput = document.getElementById("local-setup-username");
+    const hint = document.getElementById("local-setup-username-hint");
+    const saveBtn = document.getElementById("local-setup-save");
+    if (!overlay) { resolve(false); return; }
+
+    // Дефолт: имя пустое, юзернейм — сгенерированный local_xxxx
+    let avatarUrl = "color:0";
+    nameInput.value = "";
+    unameInput.value = "local_" + Math.random().toString(36).slice(2, 8);
+    hint.className = "username-hint";
+    hint.textContent = "";
+
+    // Сетка аватаров — та же логика, что в настройках профиля
+    const grid = document.getElementById("local-setup-avatar-grid");
+    const preview = document.getElementById("local-setup-avatar-preview");
+    function renderGrid() {
+      const letter = firstChar(nameInput.value || "?");
+      grid.innerHTML = "";
+      BASE_AVATARS.forEach((pair, idx) => {
+        const el = document.createElement("div");
+        el.className = "avatar-option";
+        el.dataset.idx = idx;
+        el.style.background = `linear-gradient(135deg, ${pair[0]}, ${pair[1]})`;
+        el.textContent = letter;
+        if (avatarUrl === "color:" + idx) el.classList.add("selected");
+        el.addEventListener("click", () => {
+          avatarUrl = "color:" + idx;
+          paintAvatar(preview, { display_name: nameInput.value || "?", avatar_url: avatarUrl });
+          renderGrid();
+        });
+        grid.appendChild(el);
+      });
+      paintAvatar(preview, { display_name: nameInput.value || "?", avatar_url: avatarUrl });
+    }
+    renderGrid();
+    nameInput.oninput = renderGrid;
+
+    // Проверка юзернейма на занятость (живая, как в обычном профиле)
+    let unameCheckTimer = null;
+    let unameValidated = unameInput.value;
+    unameInput.oninput = () => {
+      clearTimeout(unameCheckTimer);
+      unameValidated = null;
+      const value = unameInput.value.trim();
+      hint.className = "username-hint";
+      hint.textContent = t("username.checking");
+
+      unameCheckTimer = setTimeout(async () => {
+        if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
+          hint.className = "username-hint err";
+          hint.textContent = t("localSetup.err.usernameFormat");
+          return;
+        }
+        if (value.length < 3) {
+          hint.className = "username-hint err";
+          hint.textContent = t("username.tooShort");
+          return;
+        }
+        // Резерв (RPC is_username_reserved)
+        try {
+          const { data: reserved } = await supabase.rpc("is_username_reserved", { p_username: value });
+          if (reserved) {
+            hint.className = "username-hint err";
+            hint.textContent = tFmt("username.reserved", { username: value });
+            return;
+          }
+        } catch (e) { /* silent */ }
+        // Занят?
+        const { data } = await supabase.from("profiles")
+          .select("id").ilike("username", value).neq("id", userId).limit(1);
+        if (data && data.length) {
+          hint.className = "username-hint err";
+          hint.textContent = tFmt("username.taken", { username: value });
+        } else {
+          hint.className = "username-hint ok";
+          hint.textContent = tFmt("username.free", { username: value });
+          unameValidated = value;
+        }
+      }, 350);
+    };
+    // Стартовая проверка сгенерированного
+    unameInput.dispatchEvent(new Event("input"));
+
+    saveBtn.disabled = false;
+    saveBtn.onclick = async () => {
+      const name = nameInput.value.trim();
+      const uname = unameInput.value.trim();
+      if (!name) { nameInput.focus(); return; }
+      if (!uname || uname !== unameValidated) { unameInput.focus(); return; }
+
+      saveBtn.disabled = true;
+      const { error } = await supabase.from("profiles").update({
+        display_name: name,
+        username: uname,
+        avatar_url: avatarUrl,
+      }).eq("id", userId);
+      if (error) {
+        await showAlertDialog(t("auth.err.prefix"), error.message);
+        saveBtn.disabled = false;
+        return;
+      }
+      overlay.classList.add("hidden");
+      resolve(true);
+    };
+
+    overlay.classList.remove("hidden");
+    setTimeout(() => nameInput.focus(), 80);
   });
 }
 

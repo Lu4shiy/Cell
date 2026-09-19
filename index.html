@@ -120,6 +120,43 @@
     </div>
   </div>
 
+  <!-- ═══════ ПЕРВИЧНАЯ НАСТРОЙКА ЛОКАЛЬНОГО АККАУНТА ═══════ -->
+  <div id="local-setup-overlay" class="dialog-overlay hidden" style="z-index:9200;">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title" data-i18n="localSetup.title">Локальный аккаунт</div>
+      <div class="dialog-text" data-i18n="localSetup.text">
+        Это аккаунт только для этого устройства. Никакой почты и пароля не нужно —
+        войти в него с другого устройства нельзя. Придумайте имя и юзернейм.
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="profile.section.avatar">Аватар</div>
+        <div class="avatar-preview">
+          <div class="avatar avatar-large" id="local-setup-avatar-preview">?</div>
+        </div>
+        <div class="avatar-grid" id="local-setup-avatar-grid"></div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="profile.section.name">Имя</div>
+        <input type="text" id="local-setup-name" placeholder="Ваше имя" data-i18n-placeholder="profile.name.placeholder" maxlength="25" autocomplete="off">
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="profile.section.username">Имя пользователя</div>
+        <div class="username-input-wrap">
+          <span class="username-prefix">@</span>
+          <input type="text" id="local-setup-username" placeholder="username" maxlength="32" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="username-hint" id="local-setup-username-hint"></div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="local-setup-save" data-i18n="localSetup.save">Начать пользоваться</button>
+      </div>
+    </div>
+  </div>
+
   <div id="app-screen" class="app hidden">
 
     <aside class="sidebar">
