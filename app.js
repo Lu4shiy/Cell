@@ -254,6 +254,11 @@ const I18N = {
     "auth.err.register.checkEmail": "Проверь почту и подтверди email.",
     "auth.err.login.tooManyAttempts": "Слишком много попыток. Подожди 5 минут.",
     "auth.forgotPassword": "Забыли пароль?",
+    "auth.or": "или",
+    "auth.localLogin": "Войти локально",
+    "auth.localLoginHint": "Аккаунт только на этом устройстве. Без почты и пароля.",
+    "auth.localLoginErr": "Не удалось войти локально",
+    "auth.localLoginDisabled": "Локальный вход отключён в настройках сервера. Включите Anonymous Sign-Ins в Supabase.",
     "auth.reset.title": "Восстановление пароля",
     "auth.reset.text": "Введите email, привязанный к аккаунту — мы отправим ссылку для сброса пароля.",
     "auth.reset.send": "Отправить ссылку",
@@ -971,6 +976,11 @@ const I18N = {
     "auth.err.register.checkEmail": "Check your email and confirm the address.",
     "auth.err.login.tooManyAttempts": "Too many attempts. Wait 5 minutes.",
     "auth.forgotPassword": "Forgot password?",
+    "auth.or": "or",
+    "auth.localLogin": "Local sign-in",
+    "auth.localLoginHint": "Account on this device only. No email or password.",
+    "auth.localLoginErr": "Local sign-in failed",
+    "auth.localLoginDisabled": "Local sign-in is disabled on the server. Enable Anonymous Sign-Ins in Supabase.",
     "auth.reset.title": "Password recovery",
     "auth.reset.text": "Enter the email linked to your account — we'll send a password reset link.",
     "auth.reset.send": "Send link",
@@ -1941,6 +1951,29 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
     );
     return;
   }
+
+  // Локальный (анонимный) аккаунт: НЕ отзываем refresh-токен на сервере,
+  // а сохраняем его, чтобы вернуться при следующем «Войти локально».
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && user.is_anonymous) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          }));
+        }
+      } catch (e) { /* silent */ }
+      // scope: "local" — очищаем только localStorage, сервер не трогаем
+      await supabase.auth.signOut({ scope: "local" });
+      showAuth();
+      return;
+    }
+  } catch (e) { /* silent */ }
+
+  // Обычный аккаунт — прежняя логика
   await supabase.auth.signOut();
   showAuth();
 });
@@ -13969,6 +14002,83 @@ function setupAttachPreviewDialog() {
 // 44.5. ВОССТАНОВЛЕНИЕ ПАРОЛЯ ПО ПОЧТЕ
 // ======================================================
 
+// ======================================================
+// ЛОКАЛЬНЫЙ ВХОД (anonymous sign-in)
+// ======================================================
+// Аккаунт создаётся в Supabase как обычный пользователь (auth.uid()
+// есть, RLS работает, чаты/сообщения/подарки — всё как у всех),
+// но без email и пароля. Войти можно ТОЛЬКО с этого устройства:
+// refresh-токен хранится в localStorage.
+//
+// При выходе мы НЕ отзываем refresh-токен на сервере (scope: "local"),
+// а откладываем его в отдельный ключ cell_local_session. При следующем
+// «Войти локально» — восстанавливаем сессию через setSession(),
+// и все данные на месте.
+const LOCAL_SESSION_KEY = "cell_local_session";
+
+async function localLogin() {
+  // 1. Пробуем восстановить сохранённую сессию (если был logout)
+  try {
+    const raw = localStorage.getItem(LOCAL_SESSION_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (saved && saved.access_token && saved.refresh_token) {
+        const { data, error } = await supabase.auth.setSession({
+          access_token: saved.access_token,
+          refresh_token: saved.refresh_token,
+        });
+        if (!error && data && data.session) {
+          // Успех — возвращаемся в свой аккаунт
+          showApp(data.session.user);
+          return;
+        }
+      }
+      // Токены не сработали (истёк/отозван) — чистим и создаём новый
+      localStorage.removeItem(LOCAL_SESSION_KEY);
+    }
+  } catch (e) { /* silent */ }
+
+  // 2. Первый вход — создаём анонимный аккаунт в Supabase
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error) {
+    const msg = String(error.message || "");
+    if (/anonymous/i.test(msg) && /disabled|not.*enabled/i.test(msg)) {
+      await showAlertDialog(t("auth.err.prefix"), t("auth.localLoginDisabled"));
+    } else {
+      await showAlertDialog(t("auth.localLoginErr"), msg);
+    }
+    return;
+  }
+
+  // 3. На всякий случай проверяем, что для нового юзера создан профиль.
+  //    Обычный триггер on_auth_user_created может пропускать анонимных
+  //    пользователей (нет email).
+  try {
+    const { data: prof } = await supabase.from("profiles")
+      .select("id").eq("id", data.user.id).maybeSingle();
+    if (!prof) {
+      const rnd = Math.random().toString(36).slice(2, 10);
+      await supabase.from("profiles").insert({
+        id: data.user.id,
+        username: "local_" + rnd,
+        display_name: "Локальный",
+      });
+    }
+  } catch (e) { console.warn("local profile bootstrap:", e); }
+
+  showApp(data.user);
+}
+
+function setupLocalLogin() {
+  const btn = document.getElementById("local-login-btn");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try { await localLogin(); }
+    finally { btn.disabled = false; }
+  });
+}
+
 function setupPasswordReset() {
   const forgotBtn = document.getElementById("forgot-password-btn");
   const reqOverlay = document.getElementById("reset-request-overlay");
@@ -14070,6 +14180,7 @@ function setupPasswordReset() {
 // т.е. при первой попытке входа с 2FA кнопки на экране были «мёртвые».
 setupMfaUI();
 setupPasswordReset();
+setupLocalLogin();
 
 (async () => {
   const { data: { session } } = await supabase.auth.getSession();
