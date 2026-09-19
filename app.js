@@ -4896,6 +4896,7 @@ async function showMessageNotification(m) {
 
   // 1) Окно видно — in-app тост (без разрешений, всегда работает)
   if (document.visibilityState === "visible") {
+    playNotificationSound();
     showInAppToast({
       profile: senderProfile,
       title: senderName,
@@ -5472,6 +5473,7 @@ async function openChannel(chatId) {
   currentChatId = chatId;
   restoreDraftFor(chatId);
   enterMobileChat();
+  highlightChatInList(chatId);
 
   // Фаза 4: если я владелец/админ и E2EE разблокирована —
   // синхронизируем ключ канала (создание, раздача подписчикам).
@@ -6422,6 +6424,7 @@ async function openChatWith(otherUser) {
   currentChatId = chatId;
   restoreDraftFor(chatId);
   enterMobileChat();
+  highlightChatInList(chatId);
   await loadMessages(chatId, mySeq);
   if (mySeq !== openSeq) return;
   await loadReactionsForVisibleMessages();
@@ -6431,6 +6434,17 @@ async function openChatWith(otherUser) {
   setWheelSelected(chatId);
   buildChatTimeline();
   updateE2eeComposerHint();
+}
+
+// Подсвечивает активный чат в списке. Работает независимо от того,
+// как чат был открыт — кликом, уведомлением, палитрой.
+function highlightChatInList(chatId) {
+  if (!chatId) return;
+  const listEl = document.getElementById("users-list");
+  if (!listEl) return;
+  listEl.querySelectorAll(".user-item").forEach((x) => x.classList.remove("active"));
+  const el = listEl.querySelector(`.user-item[data-chat-id="${chatId}"]`);
+  if (el) el.classList.add("active");
 }
 
 async function createChatWith(otherUserId) {
@@ -14275,6 +14289,56 @@ function showAppNotification(title, opts) {
   } catch (e) {
     console.warn("Notification failed:", e);
   }
+}
+
+// ======================================================
+// ЗВУК УВЕДОМЛЕНИЯ
+// ======================================================
+// Короткий двухнотный «блип» через Web Audio API — без файлов.
+// iOS/Android требуют, чтобы AudioContext был создан/разбужен
+// после жеста пользователя (тап/клик) — иначе звук молчит.
+let _notifAudioCtx = null;
+let _notifAudioUnlocked = false;
+
+function unlockNotificationAudio() {
+  try {
+    if (!_notifAudioCtx) {
+      _notifAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (_notifAudioCtx.state === "suspended") _notifAudioCtx.resume();
+    _notifAudioUnlocked = true;
+  } catch (e) { /* silent */ }
+}
+
+// Разблокируем звук при первом же клике/тапе в приложении.
+document.addEventListener("pointerdown", unlockNotificationAudio, { once: true, passive: true });
+document.addEventListener("keydown", unlockNotificationAudio, { once: true });
+
+function playNotificationSound() {
+  try {
+    if (!_notifAudioCtx) {
+      _notifAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (_notifAudioCtx.state === "suspended") _notifAudioCtx.resume();
+
+    const now = _notifAudioCtx.currentTime;
+    const osc = _notifAudioCtx.createOscillator();
+    const gain = _notifAudioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(_notifAudioCtx.destination);
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, now);          // A5
+    osc.frequency.setValueAtTime(1245, now + 0.09);   // D#6
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.22, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.16, now + 0.10);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.30);
+
+    osc.start(now);
+    osc.stop(now + 0.32);
+  } catch (e) { /* silent */ }
 }
 
 // ======================================================
