@@ -492,7 +492,7 @@ const I18N = {
     "gifts.send.subtitle": "Выбери получателя из своих контактов",
     "gifts.send.confirm": "Подарить",
     "gifts.send.confirmTitle": "Передать подарок",
-    "gifts.send.confirmText": "Передача стоит {price} Nectar. Продолжить?",
+    "gifts.send.confirmText": "Передача стоит {price}. Продолжить?",
     "gifts.send.confirmAction": "Передать за {price}",
     "gifts.send.notEnough": "Недостаточно Nectar",
     "gifts.send.notEnoughText": "Для передачи нужно {need} Nectar, у вас {have}.",
@@ -1193,7 +1193,7 @@ const I18N = {
     "gifts.send.subtitle": "Pick a recipient from your contacts",
     "gifts.send.confirm": "Give",
     "gifts.send.confirmTitle": "Transfer gift",
-    "gifts.send.confirmText": "Transfer costs {price} Nectar. Continue?",
+    "gifts.send.confirmText": "Transfer costs {price}. Continue?",
     "gifts.send.confirmAction": "Transfer for {price}",
     "gifts.send.notEnough": "Not enough Nectar",
     "gifts.send.notEnoughText": "You need {need} Nectar to transfer, you have {have}.",
@@ -3725,15 +3725,24 @@ function showAlertDialog(title, text) {
   });
 }
 
-function showConfirmDialog(title, text, confirmLabel) {
+function showConfirmDialog(title, text, confirmLabel, opts) {
+  opts = opts || {};
   return new Promise((resolve) => {
     const overlay = document.getElementById("dialog-overlay");
     const optionsEl = document.getElementById("dialog-options");
     const confirmBtn = document.getElementById("dialog-confirm");
     const cancelBtn = document.getElementById("dialog-cancel");
     document.getElementById("dialog-title").textContent = title;
-    document.getElementById("dialog-text").textContent = text || "";
-    confirmBtn.textContent = confirmLabel || t("dialog.yes"); confirmBtn.disabled = false;
+    // opts.html — разрешает HTML в тексте и на кнопке (для вставки <img> Nectar).
+    // Используется ТОЛЬКО с нашими собственными строками — не с пользовательскими.
+    if (opts.html) {
+      document.getElementById("dialog-text").innerHTML = text || "";
+      confirmBtn.innerHTML = confirmLabel || t("dialog.yes");
+    } else {
+      document.getElementById("dialog-text").textContent = text || "";
+      confirmBtn.textContent = confirmLabel || t("dialog.yes");
+    }
+    confirmBtn.disabled = false;
     optionsEl.innerHTML = ""; cancelBtn.style.display = "";
     overlay.classList.remove("hidden");
     function cleanup() { overlay.classList.add("hidden"); confirmBtn.onclick = null; cancelBtn.onclick = null; }
@@ -11605,10 +11614,12 @@ async function openGiftSend(ug) {
       return;
     }
 
+    const priceWithIcon = `25 ${NECTAR_HTML}`;
     const ok = await showConfirmDialog(
       t("gifts.send.confirmTitle"),
-      tFmt("gifts.send.confirmText", { price: 25 }),
-      tFmt("gifts.send.confirmAction", { price: 25 })
+      tFmt("gifts.send.confirmText", { price: priceWithIcon }),
+      tFmt("gifts.send.confirmAction", { price: priceWithIcon }),
+      { html: true }
     );
     if (!ok) return;
 
