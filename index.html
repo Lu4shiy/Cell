@@ -181,7 +181,7 @@
 
         <div id="block-banner" class="block-banner hidden">
           <span id="block-banner-text"></span>
-          <button id="unblock-btn" class="hidden">Разблокировать</button>
+          <button id="unblock-btn" class="hidden" data-i18n="block.unblockAction">Разблокировать</button>
         </div>
 
         <div id="pin-bar" class="pin-bar hidden">
@@ -252,7 +252,7 @@
       <div id="dialog-options" class="dialog-options"></div>
       <div class="dialog-actions">
         <button class="dialog-btn dialog-primary" id="dialog-confirm" disabled>Подтвердить</button>
-        <button class="dialog-btn dialog-cancel" id="dialog-cancel">Отмена</button>
+        <button class="dialog-btn dialog-cancel" id="dialog-cancel" data-i18n="dialog.cancel">Отмена</button>
       </div>
     </div>
   </div>
@@ -337,13 +337,13 @@
   </div>
 
   <div id="chat-list-context-menu" class="context-menu hidden">
-    <button data-action="profile">Профиль</button>
-    <button data-action="rename">Переименовать</button>
-    <button data-action="clear">Очистить чат</button>
-    <button data-action="delete">Удалить чат</button>
-    <button data-action="block" class="danger">Заблокировать</button>
-    <button data-action="channel-profile" class="hidden">Профиль канала</button>
-    <button data-action="channel-unsubscribe" class="hidden danger">Отписаться</button>
+    <button data-action="profile" data-i18n="ctx.chat.profile">Профиль</button>
+    <button data-action="rename" data-i18n="ctx.chat.rename">Переименовать</button>
+    <button data-action="clear" data-i18n="ctx.chat.clear">Очистить чат</button>
+    <button data-action="delete" data-i18n="ctx.chat.delete">Удалить чат</button>
+    <button data-action="block" class="danger" data-i18n="ctx.chat.block">Заблокировать</button>
+    <button data-action="channel-profile" class="hidden" data-i18n="ctx.chat.channelProfile">Профиль канала</button>
+    <button data-action="channel-unsubscribe" class="hidden danger" data-i18n="ctx.chat.channelUnsubscribe">Отписаться</button>
   </div>
 
   <div id="user-profile-overlay" class="dialog-overlay hidden">
@@ -737,59 +737,59 @@
         </div>
       </div>
 
-      <div class="profile-section">
-        <div class="profile-label">Цвет приложения</div>
+      <div class="profile-section" id="settings-accent-section">
+        <div class="profile-label" data-i18n="settings.accent.label">Цвет приложения</div>
         <div class="accent-grid" id="accent-grid"></div>
       </div>
 
-      <div class="profile-section">
-        <div class="profile-label">Режим списка чатов</div>
+      <div class="profile-section" id="settings-scroll-mode-section">
+        <div class="profile-label" data-i18n="settings.scrollMode.label">Режим списка чатов</div>
         <div class="visibility-toggle" id="settings-scroll-mode">
-          <button type="button" data-mode="classic">Обычный</button>
-          <button type="button" data-mode="wheel">Современный</button>
+          <button type="button" data-mode="classic" data-i18n="settings.scrollMode.classic">Обычный</button>
+          <button type="button" data-mode="wheel" data-i18n="settings.scrollMode.wheel">Современный</button>
         </div>
-        <div class="username-hint">
+        <div class="username-hint" data-i18n="settings.scrollMode.hint">
           Обычный — привычный список. Современный — колесо с центрированием и плавным переходом.
         </div>
       </div>
 
-      <div class="profile-section">
-        <div class="profile-label">Быстрая реакция</div>
-        <div class="username-hint" style="margin-bottom:8px;">
+      <div class="profile-section" id="settings-quick-reaction-section">
+        <div class="profile-label" data-i18n="settings.quickReaction.label">Быстрая реакция</div>
+        <div class="username-hint" style="margin-bottom:8px;" data-i18n="settings.quickReaction.hint">
           Двойной тап по сообщению поставит эту реакцию.
         </div>
         <div class="quick-reaction-grid" id="quick-reaction-grid"></div>
       </div>
 
       <div class="profile-section" id="settings-app-icon-section">
-        <div class="profile-label">Иконка приложения</div>
-        <div class="username-hint" style="margin-bottom:8px;">
+        <div class="profile-label" data-i18n="settings.appIcon.label">Иконка приложения</div>
+        <div class="username-hint" style="margin-bottom:8px;" data-i18n="settings.appIcon.hint">
           Выбери иконку — она применится к установленному приложению. На iPhone иконку сменить нельзя — это ограничение iOS.
         </div>
         <div class="app-icon-grid" id="app-icon-grid"></div>
       </div>
 
       <div class="profile-section" id="settings-grandma-section">
-        <div class="profile-label">Режим «Бабушка»</div>
-        <div class="username-hint" style="margin-bottom:10px;">
+        <div class="profile-label" data-i18n="settings.grandma.label">Режим «Бабушка»</div>
+        <div class="username-hint" style="margin-bottom:10px;" data-i18n="settings.grandma.hint">
           Упрощает интерфейс: убирает 2FA, шифрование, выход из аккаунта и лишние пункты меню.
           Отключить можно долгим нажатием на аватар в боковом меню (1.5 сек).
         </div>
-        <button type="button" class="dialog-btn" id="grandma-toggle-btn" style="width:100%;">
+        <button type="button" class="dialog-btn" id="grandma-toggle-btn" style="width:100%;" data-i18n="settings.grandma.enable">
           Включить режим «Бабушка»
         </button>
       </div>
 
-      <div class="profile-section">
-        <div class="profile-label">Двухфакторная аутентификация</div>
+      <div class="profile-section" id="settings-mfa-section">
+        <div class="profile-label" data-i18n="settings.mfa.label">Двухфакторная аутентификация</div>
         <div id="mfa-status-row" style="font-size:13px;color:var(--text-sub);margin-bottom:10px;"></div>
-        <button type="button" class="dialog-btn" id="mfa-manage-btn" style="width:100%;">Управлять 2FA</button>
+        <button type="button" class="dialog-btn" id="mfa-manage-btn" style="width:100%;" data-i18n="settings.mfa.manage">Управлять 2FA</button>
       </div>
 
-      <div class="profile-section">
-        <div class="profile-label">Шифрование</div>
+      <div class="profile-section" id="settings-e2ee-section">
+        <div class="profile-label" data-i18n="settings.e2ee.label">Шифрование</div>
         <div id="e2ee-status-row" style="font-size:13px;color:var(--text-sub);margin-bottom:10px;"></div>
-        <button type="button" class="dialog-btn" id="e2ee-manage-btn" style="width:100%;">Управлять шифрованием</button>
+        <button type="button" class="dialog-btn" id="e2ee-manage-btn" style="width:100%;" data-i18n="settings.e2ee.manage">Управлять шифрованием</button>
       </div>
 
       <div class="dialog-actions">

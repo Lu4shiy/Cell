@@ -312,6 +312,36 @@ const I18N = {
     // ---- Баннер блокировки ----
     "block.youBlocked": "Ты заблокировал(а) @{username}.",
     "block.theyBlocked": "@{username} заблокировал(а) тебя.",
+    "block.unblockAction": "Разблокировать",
+
+    // ---- ПКМ-меню на чате в списке ----
+    "ctx.chat.profile": "Профиль",
+    "ctx.chat.rename": "Переименовать",
+    "ctx.chat.clear": "Очистить чат",
+    "ctx.chat.delete": "Удалить чат",
+    "ctx.chat.block": "Заблокировать",
+    "ctx.chat.unblock": "Разблокировать",
+    "ctx.chat.channelProfile": "Профиль канала",
+    "ctx.chat.channelUnsubscribe": "Отписаться",
+
+    // ---- Секции настроек ----
+    "settings.accent.label": "Цвет приложения",
+    "settings.scrollMode.label": "Режим списка чатов",
+    "settings.scrollMode.classic": "Обычный",
+    "settings.scrollMode.wheel": "Современный",
+    "settings.scrollMode.hint": "Обычный — привычный список. Современный — колесо с центрированием и плавным переходом.",
+    "settings.quickReaction.label": "Быстрая реакция",
+    "settings.quickReaction.hint": "Двойной тап по сообщению поставит эту реакцию.",
+    "settings.appIcon.label": "Иконка приложения",
+    "settings.appIcon.hint": "Выбери иконку — она применится к установленному приложению. На iPhone иконку сменить нельзя — это ограничение iOS.",
+    "settings.grandma.label": "Режим «Бабушка»",
+    "settings.grandma.hint": "Упрощает интерфейс: убирает 2FA, шифрование, выход из аккаунта и лишние пункты меню. Отключить можно долгим нажатием на аватар в боковом меню (1.5 сек).",
+    "settings.grandma.enable": "Включить режим «Бабушка»",
+    "settings.grandma.disable": "Отключить режим «Бабушка»",
+    "settings.mfa.label": "Двухфакторная аутентификация",
+    "settings.mfa.manage": "Управлять 2FA",
+    "settings.e2ee.label": "Шифрование",
+    "settings.e2ee.manage": "Управлять шифрованием",
 
     // ---- Пустые состояния ----
     "empty.noChats": "У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.",
@@ -442,6 +472,36 @@ const I18N = {
     // ---- Block banner ----
     "block.youBlocked": "You blocked @{username}.",
     "block.theyBlocked": "@{username} blocked you.",
+    "block.unblockAction": "Unblock",
+
+    // ---- Right-click menu on chat in list ----
+    "ctx.chat.profile": "Profile",
+    "ctx.chat.rename": "Rename",
+    "ctx.chat.clear": "Clear chat",
+    "ctx.chat.delete": "Delete chat",
+    "ctx.chat.block": "Block",
+    "ctx.chat.unblock": "Unblock",
+    "ctx.chat.channelProfile": "Channel profile",
+    "ctx.chat.channelUnsubscribe": "Unsubscribe",
+
+    // ---- Settings sections ----
+    "settings.accent.label": "App color",
+    "settings.scrollMode.label": "Chat list mode",
+    "settings.scrollMode.classic": "Classic",
+    "settings.scrollMode.wheel": "Modern",
+    "settings.scrollMode.hint": "Classic — a familiar list. Modern — a wheel with centering and smooth transition.",
+    "settings.quickReaction.label": "Quick reaction",
+    "settings.quickReaction.hint": "Double-tap a message to set this reaction.",
+    "settings.appIcon.label": "App icon",
+    "settings.appIcon.hint": "Pick an icon — it will apply to the installed app. On iPhone the icon cannot be changed — this is an iOS limitation.",
+    "settings.grandma.label": "Grandma mode",
+    "settings.grandma.hint": "Simplifies the interface: removes 2FA, encryption, sign-out and extra menu items. Can be disabled by long-pressing the avatar in the sidebar (1.5 sec).",
+    "settings.grandma.enable": "Enable Grandma mode",
+    "settings.grandma.disable": "Disable Grandma mode",
+    "settings.mfa.label": "Two-factor authentication",
+    "settings.mfa.manage": "Manage 2FA",
+    "settings.e2ee.label": "Encryption",
+    "settings.e2ee.manage": "Manage encryption",
 
     // ---- Empty states ----
     "empty.noChats": "No chats yet.<br>Type @username above to find someone.",
@@ -512,6 +572,11 @@ function setLanguage(lang) {
     if (searchInput && searchInput.value.trim()) titleEl.textContent = t("sidebar.section.search");
     else titleEl.textContent = t("sidebar.section.chats");
   }
+  // Текст кнопки «Бабушка» управляется JS — обновим через applyGrandmaModeUI.
+  if (typeof applyGrandmaModeUI === "function") applyGrandmaModeUI();
+  // Если открыт чат — обновим заголовок баннера блокировки (там текст
+  // зависит от текущего языка).
+  if (typeof updateBlockUI === "function") updateBlockUI();
 }
 
 // Применяет переводы к статическому HTML:
@@ -4732,7 +4797,7 @@ function openChatListContextMenu(ev, user, el) {
     if (b) b.classList.add("hidden");
   });
   const blockBtn = menu.querySelector('button[data-action="block"]');
-  blockBtn.textContent = isBlockedByMe(user.id) ? "Разблокировать" : "Заблокировать";
+  blockBtn.textContent = isBlockedByMe(user.id) ? t("ctx.chat.unblock") : t("ctx.chat.block");
   menu.classList.remove("hidden");
   menu.style.left = "0px"; menu.style.top = "0px";
   const rect = menu.getBoundingClientRect();
@@ -11900,16 +11965,17 @@ function applyGrandmaModeUI() {
   const createChannelBtn = document.getElementById("create-channel-btn");
   if (createChannelBtn) createChannelBtn.classList.toggle("hidden", on);
 
-  // 2. Секции настроек
-  const sectionsToHide = [
-    "Двухфакторная аутентификация",
-    "Шифрование",
-    "Быстрая реакция",
-    "Иконка приложения",
-    "Режим списка чатов",
+  // 2. Секции настроек. Ищем по ID, а не по тексту — иначе сломается
+  //    при переключении языка.
+  const sectionIds = [
+    "settings-mfa-section",
+    "settings-e2ee-section",
+    "settings-quick-reaction-section",
+    "settings-app-icon-section",
+    "settings-scroll-mode-section",
   ];
-  sectionsToHide.forEach((label) => {
-    const sec = findSettingsSectionByLabel(label);
+  sectionIds.forEach((id) => {
+    const sec = document.getElementById(id);
     if (sec) sec.classList.toggle("hidden", on);
   });
 
@@ -11920,7 +11986,7 @@ function applyGrandmaModeUI() {
 
   // 4. Кнопка-переключатель (если режим всё-таки виден — обновим текст)
   const btn = document.getElementById("grandma-toggle-btn");
-  if (btn) btn.textContent = on ? "Отключить режим «Бабушка»" : "Включить режим «Бабушка»";
+  if (btn) btn.textContent = on ? t("settings.grandma.disable") : t("settings.grandma.enable");
 }
 
 async function enableGrandmaMode() {
