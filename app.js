@@ -464,6 +464,7 @@ const I18N = {
     "gifts.detail.rarity": "Редкость",
     "gifts.detail.background": "Фон",
     "gifts.detail.pattern": "Паттерн",
+    "gifts.detail.model": "Модель",
     "gifts.detail.quantity": "Количество",
     "gifts.detail.value": "Ценность",
     "gifts.detail.caption": "Подпись",
@@ -1157,6 +1158,7 @@ const I18N = {
     "gifts.detail.rarity": "Rarity",
     "gifts.detail.background": "Background",
     "gifts.detail.pattern": "Pattern",
+    "gifts.detail.model": "Model",
     "gifts.detail.quantity": "Quantity",
     "gifts.detail.value": "Value",
     "gifts.detail.caption": "Caption",
@@ -6571,11 +6573,12 @@ async function renderSystemMessage(msg) {
     }
     const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
     const patternIcon = cat.rarity === "epic" ? getPatternIcon(ug.pattern_id) : null;
+    const displayImg = giftDisplayImage(cat, ug);
     return `
       <span class="msg-system-text">${sentText}</span>
       <div class="gift-card-inline" style="${bg}">
         ${patternIcon ? `<div class="gift-card-inline-pattern" data-icon="${patternIcon}"></div>` : ""}
-        <div class="gci-emoji">${renderGiftModel(cat.emoji, 46)}</div>
+        <div class="gci-emoji">${renderGiftModel(displayImg, 46)}</div>
         <div class="gci-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
         <div class="gci-sub gift-rarity-${cat.rarity}">${giftRarityLabel(cat.rarity)}${cat.collection ? " · " + escapeHtml(cat.collection) : ""}</div>
       </div>`;
@@ -10894,6 +10897,47 @@ function rollPatternForEpic(collectionId) {
   return pool[pool.length - 1].id;
 }
 
+// ======================================================
+// МОДЕЛИ ЭПИЧЕСКИХ ПОДАРКОВ
+// ======================================================
+// Модели хранятся прямо в строке gift_catalog.models — как JSONB-массив:
+//   [ { id, name, image, chance }, ... ]
+// При покупке эпического подарка роллится одна модель по весам chance.
+// id и name сохраняются в user_gifts.model_id / model_name.
+//
+// Если у подарка нет models — ролл ничего не делает, всё работает как раньше.
+
+// Роллит модель по весам. Возвращает {id, name} или null.
+function rollModelForGift(gift) {
+  const models = gift && Array.isArray(gift.models) ? gift.models : [];
+  if (!models.length) return null;
+  const total = models.reduce((s, m) => s + (Number(m.chance) || 0), 0);
+  if (total <= 0) return null;
+  let r = Math.random() * total;
+  for (const m of models) {
+    r -= Number(m.chance) || 0;
+    if (r <= 0) return { id: m.id, name: m.name || m.id };
+  }
+  const last = models[models.length - 1];
+  return { id: last.id, name: last.name || last.id };
+}
+
+// Возвращает id модели по её id в каталоге подарка (для поиска картинки).
+function findGiftModel(cat, modelId) {
+  if (!cat || !modelId || !Array.isArray(cat.models)) return null;
+  return cat.models.find((m) => m.id === modelId) || null;
+}
+
+// Возвращает URL картинки подарка с учётом модели.
+// Если модель есть и у неё есть image — берём её. Иначе — базовый cat.emoji.
+function giftDisplayImage(cat, ug) {
+  if (ug && ug.model_id) {
+    const m = findGiftModel(cat, ug.model_id);
+    if (m && m.image) return m.image;
+  }
+  return cat ? cat.emoji : "";
+}
+
 // Шансы фонов (в %) — должны совпадать с buy_gift в Supabase
 const BACKGROUND_CHANCES = {
   // Tier 1 — 0.5%
@@ -11033,13 +11077,14 @@ async function renderGiftsMain(userId) {
         : "";
       const patternIcon = cat.rarity === "epic" ? getPatternIcon(ug.pattern_id) : null;
       const inProfileClass = (isMe && ug.in_profile) ? " in-profile" : "";
+      const displayImg = giftDisplayImage(cat, ug);
       html += `
         <div class="gift-tile${inProfileClass}" data-gift-ug-id="${ug.id}" data-pinned="${ug.pinned_at ? "1" : "0"}" data-in-profile="${ug.in_profile ? "1" : "0"}">
           ${ribbon}
           ${pinMark}
           <div class="gift-tile-emoji" style="${bg}">
             ${patternIcon ? `<div class="gift-tile-pattern" data-icon="${patternIcon}"></div>` : ""}
-            <span class="gift-tile-emoji-symbol">${renderGiftModel(cat.emoji, 51)}</span>
+            <span class="gift-tile-emoji-symbol">${renderGiftModel(displayImg, 51)}</span>
           </div>
         </div>`;
     });
@@ -11209,15 +11254,25 @@ function openGiftPurchase(gift, recipientId) {
       return;
     }
 
-    // Роллим паттерн для epic-подарка
+    // Роллим модель + паттерн для epic-подарка
     if (gift.rarity === "epic" && newGiftId) {
+      const updatePayload = {};
+      // Модель — если у подарка заданы models
+      const model = rollModelForGift(gift);
+      if (model) {
+        updatePayload.model_id = model.id;
+        updatePayload.model_name = model.name;
+      }
+      // Паттерн — как было
       const patternId = rollPatternForEpic(gift.collection || null);
-      if (patternId) {
+      if (patternId) updatePayload.pattern_id = patternId;
+
+      if (Object.keys(updatePayload).length) {
         try {
           await supabase.from("user_gifts")
-            .update({ pattern_id: patternId })
+            .update(updatePayload)
             .eq("id", newGiftId);
-        } catch (e) { console.warn("pattern roll:", e); }
+        } catch (e) { console.warn("gift roll:", e); }
       }
     }
 
@@ -11316,6 +11371,17 @@ async function renderGiftDetail(ownerId, ug) {
       </div>`
     : "";
 
+  // Модель — только если у подарка есть models и в ug записан model_id
+  const currentModel = ug.model_id ? findGiftModel(cat, ug.model_id) : null;
+  const modelChance = currentModel && typeof currentModel.chance === "number"
+    ? `<span class="gir-badge">${currentModel.chance}%</span>` : "";
+  const modelRow = currentModel
+    ? `<div class="gift-info-row">
+        <span class="gir-label">${escapeHtml(t("gifts.detail.model"))}</span>
+        <span class="gir-value">${escapeHtml(ug.model_name || currentModel.name || ug.model_id)}${modelChance}</span>
+      </div>`
+    : "";
+
   // Паттерн — рендерим асинхронно, чтобы не блокировать открытие окна
   const patternStyle = "display:none;";
 
@@ -11343,7 +11409,7 @@ async function renderGiftDetail(ownerId, ug) {
     <div class="gift-detail">
       <div class="gift-hero" style="${bg}">
         <div class="gift-hero-pattern" style="${patternStyle}"></div>
-        <div class="gift-hero-emoji">${renderGiftModel(cat.emoji, 96)}</div>
+        <div class="gift-hero-emoji">${renderGiftModel(giftDisplayImage(cat, ug), 96)}</div>
       </div>
 
       <div class="gift-detail-name">${escapeHtml(cat.name)} #${ug.serial_number}</div>
@@ -11361,6 +11427,7 @@ async function renderGiftDetail(ownerId, ug) {
           <span class="gir-label">${escapeHtml(t("gifts.detail.rarity"))}</span>
           <span class="gir-value">${giftRarityLabel(cat.rarity)}</span>
         </div>
+        ${modelRow}
         ${ug.background_name ? `
         <div class="gift-info-row">
           <span class="gir-label">${escapeHtml(t("gifts.detail.background"))}</span>
