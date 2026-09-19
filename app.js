@@ -4834,10 +4834,11 @@ function subscribeToGlobalMessages() {
       if (!isMine) {
         const chatEl = document.querySelector(`.user-item[data-chat-id="${m.chat_id}"]`);
         const isMuted = chatEl && chatEl.dataset.muted === "1";
+        // Не показываем, только если ОТКРЫТ именно этот чат и приложение на экране —
+        // пользователь и так видит сообщение.
         const isCurrentChatVisible =
           currentChatId === m.chat_id &&
-          document.visibilityState === "visible" &&
-          document.hasFocus();
+          document.visibilityState === "visible";
         if (!isMuted && !isCurrentChatVisible) {
           showMessageNotification(m);
         }
@@ -4846,20 +4847,28 @@ function subscribeToGlobalMessages() {
 }
 
 // Формирует и показывает уведомление о новом сообщении.
+// Логика:
+//  — окно в фокусе → красивый in-app тост;
+//  — окно свёрнуто/в фоне → системное уведомление (с аватаркой-иконкой).
 async function showMessageNotification(m) {
   if (!m) return;
-  // Имя отправителя: из profileCache (заполняется при загрузке списка чатов).
-  let senderName = "Cell";
-  try {
-    const p = profileCache.get(m.sender_id);
-    if (p && p.display_name) senderName = p.display_name;
-    else {
-      const { data } = await supabase.from("profiles")
-        .select("display_name").eq("id", m.sender_id).maybeSingle();
-      if (data && data.display_name) senderName = data.display_name;
-    }
-  } catch (e) { /* silent */ }
 
+  // Профиль отправителя (для аватарки и имени)
+  let senderProfile = profileCache.get(m.sender_id);
+  if (!senderProfile) {
+    try {
+      const { data } = await supabase.from("profiles")
+        .select("id, username, display_name, avatar_url")
+        .eq("id", m.sender_id).maybeSingle();
+      if (data) {
+        senderProfile = data;
+        profileCache.set(m.sender_id, data);
+      }
+    } catch (e) { /* silent */ }
+  }
+  const senderName = (senderProfile && senderProfile.display_name) || "Cell";
+
+  // Текст уведомления
   let body = "";
   if (m.message_type === "tokens") body = t("preview.gift");
   else if (m.message_type === "gift") body = t("preview.gift");
@@ -4872,11 +4881,52 @@ async function showMessageNotification(m) {
   } else {
     body = stripMarkdown(m.content || "").slice(0, 140);
   }
+  if (!body) body = t("notif.newMessage");
 
+  const onClick = () => { openChatFromNotification(m).catch(() => {}); };
+
+  // 1) Окно видно — in-app тост
+  if (document.visibilityState === "visible") {
+    showInAppToast({
+      profile: senderProfile,
+      title: senderName,
+      body: body,
+      tag: "cell-chat-" + m.chat_id,
+      onClick,
+    });
+    return;
+  }
+
+  // 2) Окно в фоне — системное уведомление
+  const iconUrl = await getNotificationIcon(senderProfile);
   showAppNotification(senderName, {
-    body: body || t("notif.newMessage"),
+    body: body,
     tag: "cell-chat-" + m.chat_id,
+    icon: iconUrl,
+    onClick,
   });
+}
+
+// Открывает чат/канал, к которому относится сообщение из уведомления.
+async function openChatFromNotification(m) {
+  if (!m || !m.chat_id) return;
+  // Канал
+  if (channelCache.has(m.chat_id)) {
+    await openChannel(m.chat_id);
+    return;
+  }
+  // DM — ищем собеседника
+  let otherId = chatOtherUserCache.get(m.chat_id);
+  if (!otherId) {
+    try {
+      const { data: others } = await supabase.from("chat_members")
+        .select("user_id").eq("chat_id", m.chat_id).neq("user_id", currentUser.id);
+      if (others && others[0]) otherId = others[0].user_id;
+    } catch (e) { /* silent */ }
+  }
+  if (!otherId) return;
+  const p = profileCache.get(otherId) || await getProfile(otherId);
+  if (p) await openChatWith(p);
 }
 
 function updateUserEverywhere(profile) {
@@ -14187,36 +14237,141 @@ async function requestNotificationPermission() {
   }
 }
 
-// Показывает уведомление. Тихо игнорируется, если:
+// Показывает СИСТЕМНОЕ уведомление. Тихо игнорируется, если:
 //  — выключено в настройках,
 //  — браузер не поддерживает Notification API,
 //  — вкладка/окно в фокусе (пользователь и так видит).
-// opts: { body, tag, silent }.
+// opts: { body, tag, silent, icon, onClick }.
 function showAppNotification(title, opts) {
   opts = opts || {};
   if (!areNotificationsEnabled()) return;
   if (!("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
-
-  // Не показываем, если вкладка в фокусе и активна — пользователь и так видит сообщение.
   if (document.visibilityState === "visible" && document.hasFocus()) return;
 
   try {
-    const iconUrl = "icon-192.png";
+    const iconUrl = opts.icon || "icon-192.png";
     const n = new Notification(title, {
       body: opts.body || "",
       tag: opts.tag || "cell-message",
       icon: iconUrl,
-      badge: iconUrl,
+      badge: "icon-192.png",
       silent: !!opts.silent,
     });
     n.onclick = () => {
       try { window.focus(); n.close(); } catch (e) {}
+      if (opts.onClick) { try { opts.onClick(); } catch (e) {} }
     };
     setTimeout(() => { try { n.close(); } catch (e) {} }, 8000);
   } catch (e) {
     console.warn("Notification failed:", e);
   }
+}
+
+// ======================================================
+// IN-APP ТОСТЫ — кастомные уведомления внутри страницы
+// ======================================================
+// Показываются, когда приложение видно (в фокусе или просто на экране).
+// Содержат аватарку, имя, текст. Клик — переход в чат.
+
+function showInAppToast(opts) {
+  opts = opts || {};
+  const cont = document.getElementById("toast-container");
+  if (!cont) return;
+
+  // Не плодим одинаковые тосты для одного и того же чата —
+  // старый того же tag удаляем перед добавлением нового.
+  if (opts.tag) {
+    cont.querySelectorAll(`.toast[data-tag="${opts.tag}"]`).forEach((el) => el.remove());
+  }
+
+  const el = document.createElement("div");
+  el.className = "toast";
+  if (opts.tag) el.dataset.tag = opts.tag;
+
+  const av = document.createElement("div");
+  av.className = "avatar";
+  el.appendChild(av);
+
+  const body = document.createElement("div");
+  body.className = "toast-body";
+  const titleEl = document.createElement("div");
+  titleEl.className = "toast-title";
+  titleEl.textContent = opts.title || "";
+  const textEl = document.createElement("div");
+  textEl.className = "toast-text";
+  textEl.textContent = opts.body || "";
+  body.appendChild(titleEl);
+  body.appendChild(textEl);
+  el.appendChild(body);
+
+  // Аватар — через общий paintAvatar (понимает data:, color:, seed)
+  const userObj = opts.profile || { display_name: opts.title || "?", avatar_url: opts.avatar_url };
+  paintAvatar(av, userObj);
+
+  el.addEventListener("click", () => {
+    closeInAppToast(el);
+    if (opts.onClick) { try { opts.onClick(); } catch (e) {} }
+  });
+
+  cont.appendChild(el);
+  // Авто-закрытие через 6 секунд
+  setTimeout(() => closeInAppToast(el), 6000);
+}
+
+function closeInAppToast(el) {
+  if (!el || !el.parentNode) return;
+  el.style.opacity = "0";
+  el.style.transform = "translateX(28px)";
+  setTimeout(() => { try { el.remove(); } catch (e) {} }, 220);
+}
+
+// Кэш dataURL-иконок для СИСТЕМНЫХ уведомлений (рисуем аватар в canvas).
+const _notifIconCache = new Map();
+
+async function getNotificationIcon(profile) {
+  if (!profile) return "icon-192.png";
+  if (_notifIconCache.has(profile.id)) return _notifIconCache.get(profile.id);
+
+  let iconUrl = "icon-192.png";
+  const av = profile.avatar_url;
+
+  // Загруженная картинка — используем как есть
+  if (av && typeof av === "string" && av.startsWith("data:")) {
+    iconUrl = av;
+  } else {
+    // Цветной (color:N) или seed-аватар — рисуем canvas 128×128
+    try {
+      let c1, c2;
+      if (av && av.startsWith("color:")) {
+        const idx = parseInt(av.split(":")[1], 10) || 0;
+        [c1, c2] = BASE_AVATARS[idx % BASE_AVATARS.length];
+      } else {
+        const seed = profile.id || profile.username || "anon";
+        const idx = hashCode(seed) % BASE_AVATARS.length;
+        [c1, c2] = BASE_AVATARS[idx];
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = 128; canvas.height = 128;
+      const ctx = canvas.getContext("2d");
+      const grad = ctx.createLinearGradient(0, 0, 128, 128);
+      grad.addColorStop(0, c1);
+      grad.addColorStop(1, c2);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(64, 64, 64, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#15110d";
+      ctx.font = "bold 60px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(firstChar(profile.display_name || "?"), 64, 68);
+      iconUrl = canvas.toDataURL("image/png");
+    } catch (e) { /* silent */ }
+  }
+
+  _notifIconCache.set(profile.id, iconUrl);
+  return iconUrl;
 }
 
 // ======================================================
