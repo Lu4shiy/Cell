@@ -1952,11 +1952,21 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
     return;
   }
 
-  // Локальный (анонимный) аккаунт: НЕ отзываем refresh-токен на сервере,
-  // а сохраняем его, чтобы вернуться при следующем «Войти локально».
+  // Локальный (анонимный) аккаунт: НЕ вызываем signOut — он отзывает
+  // refresh-токен на сервере (даже со scope:"local"), и вернуться потом
+  // уже нельзя. Вместо этого сохраняем токены в отдельный ключ,
+  // стираем ключ сессии supabase и перезагружаем страницу.
+  // После reload supabase-js создастся с пустым localStorage → экран входа.
+  // Refresh-токен на сервере остаётся валидным — при следующем
+  // «Войти локально» мы поднимем ту же самую сессию через setSession().
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (user && user.is_anonymous) {
+    const isLocal = user && (
+      user.is_anonymous === true ||
+      !user.email ||
+      (user.app_metadata && user.app_metadata.provider === "anonymous")
+    );
+    if (isLocal) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
@@ -1966,9 +1976,10 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
           }));
         }
       } catch (e) { /* silent */ }
-      // scope: "local" — очищаем только localStorage, сервер не трогаем
-      await supabase.auth.signOut({ scope: "local" });
-      showAuth();
+      // Очищаем ТОЛЬКО ключ сессии supabase, не трогая cell_local_session
+      try { localStorage.removeItem(AUTH_STORAGE_KEY); } catch (e) {}
+      // Перезагрузка — гарантирует, что in-memory состояние supabase-js тоже сбросится
+      window.location.reload();
       return;
     }
   } catch (e) { /* silent */ }
@@ -14032,8 +14043,13 @@ async function localLogin() {
           showApp(data.session.user);
           return;
         }
+        // Ошибка сети/времени — токен НЕ чистим, пусть попробует в следующий раз
+        if (error && /network|fetch|timeout/i.test(String(error.message || ""))) {
+          await showAlertDialog(t("auth.localLoginErr"), String(error.message || ""));
+          return;
+        }
       }
-      // Токены не сработали (истёк/отозван) — чистим и создаём новый
+      // Токены реально отвергнуты сервером (истёк/отозван) — чистим и создаём новый
       localStorage.removeItem(LOCAL_SESSION_KEY);
     }
   } catch (e) { /* silent */ }
