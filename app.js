@@ -30,15 +30,27 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 // Восстановление пароля: Supabase при возврате по ссылке из письма
-// присылает событие PASSWORD_RECOVERY — показываем форму нового пароля.
-let inRecoveryFlow = false;
+// присылает событие PASSWORD_RECOVERY — показываем форму нового пароля
+// и ПРЯЧЕМ приложение (иначе на фоне видны чаты чужого аккаунта).
 supabase.auth.onAuthStateChange((event) => {
   if (event === "PASSWORD_RECOVERY") {
     inRecoveryFlow = true;
+    // Скрываем приложение и показываем экран входа как фон
+    const appEl = document.getElementById("app-screen");
+    const authEl = document.getElementById("auth-screen");
+    if (appEl) appEl.classList.add("hidden");
+    if (authEl) authEl.classList.remove("hidden");
+    // Поверх всего — форма нового пароля
     const overlay = document.getElementById("reset-new-overlay");
     if (overlay) overlay.classList.remove("hidden");
   }
 });
+
+// Восстановление пароля. Проверяем hash СИНХРОННО, до того, как
+// supabase-js успеет создать сессию и показать приложение.
+// Формат ссылки: #access_token=...&type=recovery
+const IS_RECOVERY_URL = /(?:[#&?])type=recovery(?:&|$)/.test(window.location.hash);
+let inRecoveryFlow = IS_RECOVERY_URL;
 
 const ACCENTS = ["orange", "blue", "green", "red", "purple", "pink", "teal", "gray"];
 const ACCENT_COLORS = { orange:"#ff8c42",blue:"#2196f3",green:"#4caf50",red:"#f44336",purple:"#9c27b0",pink:"#e91e63",teal:"#009688",gray:"#607d8b" };
@@ -254,6 +266,9 @@ const I18N = {
     "auth.reset.saved": "Пароль обновлён. Теперь можно войти.",
     "auth.reset.mismatch": "Пароли не совпадают",
     "auth.reset.saveErr": "Не удалось сохранить пароль",
+    "auth.reset.sameAsOld": "Новый пароль должен отличаться от старого.",
+    "auth.reset.newPlaceholder": "Новый пароль (мин. 10, A-Z, a-z, 0-9)",
+    "auth.reset.repeatPlaceholder": "Повторите пароль",
 
     // ---- Сайдбар ----
     "sidebar.menu.createChannel": "Создать канал",
@@ -968,6 +983,9 @@ const I18N = {
     "auth.reset.saved": "Password updated. You can log in now.",
     "auth.reset.mismatch": "Passwords do not match",
     "auth.reset.saveErr": "Failed to save password",
+    "auth.reset.sameAsOld": "New password must be different from the old one.",
+    "auth.reset.newPlaceholder": "New password (min. 10, A-Z, a-z, 0-9)",
+    "auth.reset.repeatPlaceholder": "Repeat password",
 
     // ---- Sidebar ----
     "sidebar.menu.createChannel": "Create channel",
@@ -14020,7 +14038,15 @@ function setupPasswordReset() {
       newSubmit.disabled = true;
       const { error } = await supabase.auth.updateUser({ password: p1 });
       newSubmit.disabled = false;
-      if (error) { newErr.textContent = error.message || t("auth.reset.saveErr"); return; }
+      if (error) {
+        const msg = String(error.message || "");
+        if (/different from the old password/i.test(msg)) {
+          newErr.textContent = t("auth.reset.sameAsOld");
+        } else {
+          newErr.textContent = msg || t("auth.reset.saveErr");
+        }
+        return;
+      }
 
       newOverlay.classList.add("hidden");
       inRecoveryFlow = false;
@@ -14048,9 +14074,17 @@ setupPasswordReset();
 (async () => {
   const { data: { session } } = await supabase.auth.getSession();
   if (session) {
-    // Если мы только что вернулись по ссылке восстановления — не входим
-    // в приложение, пока пользователь не задал новый пароль.
-    if (inRecoveryFlow) return;
+    // Возврат по ссылке восстановления — сразу показываем форму нового пароля,
+    // минуя showApp() (иначе на фоне мелькнут чаты).
+    if (inRecoveryFlow) {
+      const appEl = document.getElementById("app-screen");
+      const authEl = document.getElementById("auth-screen");
+      if (appEl) appEl.classList.add("hidden");
+      if (authEl) authEl.classList.remove("hidden");
+      const overlay = document.getElementById("reset-new-overlay");
+      if (overlay) overlay.classList.remove("hidden");
+      return;
+    }
     showApp(session.user);
   }
 })();
