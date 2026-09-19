@@ -470,6 +470,8 @@ const I18N = {
     "gifts.detail.caption": "Подпись",
     "gifts.detail.limit": "лимит {n}",
     "gifts.detail.recipient": "Подарок для {name}",
+    "gifts.detail.sender": "От {name}",
+    "gifts.purchase.saveSenderFail": "Не удалось сохранить имя отправителя",
     "gifts.detail.notOwner": "Подарок принадлежит другому пользователю",
     "gifts.action.addToProfile": "Добавить в профиль",
     "gifts.action.hideFromProfile": "Скрыть из профиля",
@@ -489,6 +491,11 @@ const I18N = {
     "gifts.purchase.buying": "Покупаю...",
     "gifts.send.subtitle": "Выбери получателя из своих контактов",
     "gifts.send.confirm": "Подарить",
+    "gifts.send.confirmTitle": "Передать подарок",
+    "gifts.send.confirmText": "Передача стоит {price} Nectar. Продолжить?",
+    "gifts.send.confirmAction": "Передать за {price}",
+    "gifts.send.notEnough": "Недостаточно Nectar",
+    "gifts.send.notEnoughText": "Для передачи нужно {need} Nectar, у вас {have}.",
     "gifts.sell.title": "Продать подарок",
     "gifts.sell.text": "Продать за {price} Nectar (комиссия 15%)?",
     "gifts.sell.confirm": "Продать",
@@ -1164,6 +1171,8 @@ const I18N = {
     "gifts.detail.caption": "Caption",
     "gifts.detail.limit": "limit {n}",
     "gifts.detail.recipient": "Gift for {name}",
+    "gifts.detail.sender": "From {name}",
+    "gifts.purchase.saveSenderFail": "Failed to save sender name",
     "gifts.detail.notOwner": "This gift belongs to another user",
     "gifts.action.addToProfile": "Add to profile",
     "gifts.action.hideFromProfile": "Hide from profile",
@@ -1183,6 +1192,11 @@ const I18N = {
     "gifts.purchase.buying": "Buying...",
     "gifts.send.subtitle": "Pick a recipient from your contacts",
     "gifts.send.confirm": "Give",
+    "gifts.send.confirmTitle": "Transfer gift",
+    "gifts.send.confirmText": "Transfer costs {price} Nectar. Continue?",
+    "gifts.send.confirmAction": "Transfer for {price}",
+    "gifts.send.notEnough": "Not enough Nectar",
+    "gifts.send.notEnoughText": "You need {need} Nectar to transfer, you have {have}.",
     "gifts.sell.title": "Sell gift",
     "gifts.sell.text": "Sell for {price} Nectar (15% fee)?",
     "gifts.sell.confirm": "Sell",
@@ -11256,7 +11270,7 @@ function openGiftPurchase(gift, recipientId) {
     if (captionCounter) captionCounter.textContent = `${captionInput.value.length} / 25`;
   };
   if (withNameCb) withNameCb.checked = false;
-  if (withNameLabel) withNameLabel.textContent = isSelf ? t("gifts.purchase.withName.self") : t("gifts.purchase.withName.other");
+  if (withNameLabel) withNameLabel.textContent = t("gifts.purchase.withName.self");
   overlay.classList.remove("hidden");
 
   confirmBtn.onclick = async () => {
@@ -11298,20 +11312,33 @@ function openGiftPurchase(gift, recipientId) {
       }
     }
 
-    // Замораживаем имя получателя на момент покупки
+    // 1. Всегда фиксируем получателя — если покупаем не себе.
+    //    Это для строки «Подарок для X» в деталях.
+    if (!isSelf && newGiftId) {
+      const rp = profileCache.get(recipientId) || await getProfile(recipientId);
+      const recName = rp ? (rp.display_name || "").trim() : "";
+      if (recName) {
+        await supabase.from("user_gifts")
+          .update({ recipient_id: recipientId, recipient_name: recName })
+          .eq("id", newGiftId);
+      }
+    }
+
+    // 2. Если отмечена галочка «С моим именем» — сохраняем ИМЯ ПОКУПАТЕЛЯ (моё).
+    //    Работает одинаково: и когда покупаешь себе, и когда другому.
     if (withName && newGiftId) {
-      const rp = isSelf
-        ? myProfile
-        : (profileCache.get(recipientId) || await getProfile(recipientId));
-      const freezeName = rp ? (rp.display_name || "").trim() : "";
-      if (freezeName) {
+      const myName = (myProfile && myProfile.display_name || "").trim();
+      if (myName) {
         const { error: upErr } = await supabase
           .from("user_gifts")
-          .update({ recipient_id: recipientId, recipient_name: freezeName })
+          .update({ sender_id: currentUser.id, sender_name: myName })
           .eq("id", newGiftId);
         if (upErr) {
-          console.error("Не удалось сохранить 'Подарок для':", upErr);
-          await showAlertDialog("Внимание", "Подарок куплен, но имя получателя сохранить не удалось: " + upErr.message);
+          console.error("Не удалось сохранить имя отправителя:", upErr);
+          await showAlertDialog(
+            t("gifts.error"),
+            t("gifts.purchase.saveSenderFail") + ": " + upErr.message
+          );
         }
       }
     }
@@ -11427,6 +11454,15 @@ async function renderGiftDetail(ownerId, ug) {
       })}</div>`
     : "";
 
+  // Кто подарил (галочка «С моим именем»)
+  const senderHtml = ug.sender_name
+    ? `<div class="gift-recipient-caption">${tFmt("gifts.detail.sender", {
+        name: ug.sender_id
+          ? `<a href="#" class="gift-recipient-link" data-uid="${ug.sender_id}">${escapeHtml(ug.sender_name)}</a>`
+          : escapeHtml(ug.sender_name)
+      })}</div>`
+    : "";
+
   content.innerHTML = `
     <div class="gift-detail">
       <div class="gift-hero" style="${bg}">
@@ -11438,6 +11474,7 @@ async function renderGiftDetail(ownerId, ug) {
       <div class="gift-detail-sub">${escapeHtml(cat.collection || "—")} · ${giftRarityLabel(cat.rarity)}</div>
 
       ${recipientHtml}
+      ${senderHtml}
 
       <div class="gift-info-table">
         ${captionHtml}
@@ -11570,8 +11607,29 @@ async function openGiftSend(ug) {
   document.getElementById("gift-send-cancel").onclick = () => overlay.classList.add("hidden");
   document.getElementById("gift-send-confirm").onclick = async () => {
     if (!selectedId) return;
+
+    // Проверяем баланс ПЕРЕД подтверждением
+    const balNow = (myProfile && myProfile.imagi_tokens) || 0;
+    if (balNow < 25) {
+      await showAlertDialog(
+        t("gifts.send.notEnough"),
+        tFmt("gifts.send.notEnoughText", { need: 25, have: balNow })
+      );
+      return;
+    }
+
+    const ok = await showConfirmDialog(
+      t("gifts.send.confirmTitle"),
+      tFmt("gifts.send.confirmText", { price: 25 }),
+      t("gifts.send.confirmAction")
+    );
+    if (!ok) return;
+
     const { error } = await supabase.rpc("transfer_gift", { p_gift_id: ug.id, p_new_owner: selectedId });
     if (error) { await showAlertDialog("Ошибка", error.message); return; }
+
+    // Обновляем баланс в UI — RPC уже списал Nectar
+    await refreshBalance();
 
     // Отправляем системное сообщение о подарке в чат с получателем
     const chatId = chatIdByUser.get(selectedId);
