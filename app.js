@@ -2,8 +2,23 @@
 // Imaginer
 // ======================================================
 
-const SUPABASE_URL = "https://uiktqkxfsoewjpgjpizf.supabase.co";
+// Трафик идёт через Cloudflare Worker (cell-proxy.zelenski-ivan10.workers.dev),
+// чтобы обходить блокировки провайдеров. Воркер прозрачно проксирует
+// REST + Auth + Storage + Realtime (WebSocket) в оригинальный Supabase.
+const SUPABASE_URL = "https://cell-proxy.zelenski-ivan10.workers.dev";
+// Оригинальный домен Supabase — нужен, чтобы переписывать ссылки из ответов
+// (signed URLs storage приходят с оригинального домена, а не с воркера).
+const SUPABASE_ORIGIN = "https://uiktqkxfsoewjpgjpizf.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpa3Rxa3hmc29ld2pwZ2pwaXpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyODY5MjksImV4cCI6MjEwNDg2MjkyOX0.2OC3vrfusHK6Lqv1Yh5KfZ42Ypm02sE1XAloTSUxo2k";
+
+// Переписывает URL с оригинального Supabase на наш воркер.
+// Применяется ко всем signed URL из Storage — иначе они пойдут
+// напрямую в Supabase и могут быть заблокированы провайдером.
+function rewriteSupabaseUrl(u) {
+  if (!u || typeof u !== "string") return u;
+  if (u.startsWith(SUPABASE_ORIGIN)) return SUPABASE_URL + u.slice(SUPABASE_ORIGIN.length);
+  return u;
+}
 
 // Разделяем сессии: обычная вкладка браузера и установленное PWA-приложение
 // должны иметь независимые входы. Иначе они делят один localStorage и
@@ -6623,7 +6638,10 @@ async function loadMessages(chatId, mySeq) {
       const now = Date.now();
       (data || []).forEach((item, i) => {
         if (item && item.signedUrl) {
-          signedUrlCache.set(pathsToSign[i], { url: item.signedUrl, expiresAt: now + 55 * 60 * 1000 });
+          signedUrlCache.set(pathsToSign[i], {
+            url: rewriteSupabaseUrl(item.signedUrl),
+            expiresAt: now + 55 * 60 * 1000,
+          });
         }
       });
     } catch (e) { /* silent */ }
@@ -8565,8 +8583,9 @@ async function getSignedUrl(url) {
       .from("attachments")
       .createSignedUrl(path, 3600); // 1 час
     if (error || !data || !data.signedUrl) return url;
-    signedUrlCache.set(path, { url: data.signedUrl, expiresAt: now + 55 * 60 * 1000 });
-    return data.signedUrl;
+    const signedUrl = rewriteSupabaseUrl(data.signedUrl);
+    signedUrlCache.set(path, { url: signedUrl, expiresAt: now + 55 * 60 * 1000 });
+    return signedUrl;
   } catch (e) {
     return url;
   }
