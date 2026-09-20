@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-v75";
+const CACHE_VERSION = "cell-v76";
 
 const CACHE_FILES = [
   "./",
@@ -146,16 +146,26 @@ self.addEventListener("push", (event) => {
     try { data = { body: event.data && event.data.text() }; } catch (e2) {}
   }
 
-  // 🔴 Формат уведомления: тело — "{отправитель}: {текст}", а заголовок
-  // оставляем пустым. Тогда Android подставит имя приложения сверху сам,
-  // и системная приписка «от {app}» не появится.
-  // От Edge Function приходит: data.title = имя отправителя (custom_name либо
-  // display_name), data.body = текст сообщения.
+  // 🔴 Формат уведомления:
+  //   title = имя отправителя (кастомное или display_name)
+  //   body  = текст сообщения
+  // Android сам рисует имя приложения "Cell" самой верхней строчкой
+  // (берёт из manifest.json). Поэтому дублировать "Cell" в title не нужно —
+  // иначе Android покажет "от Cell" второй строкой.
+  //
+  // Совместимость: если Edge Function по старой версии прислал
+  // title="Cell" и body="Ваня: текст" — распознаём и разбираем.
   const rawTitle = data.title || "";
   const rawBody = data.body || "";
-  const senderName = (rawTitle && rawTitle !== "Cell") ? rawTitle : "";
-  const title = " "; // пробел — не пустая строка (некоторые браузеры падают на "")
-  const body = senderName ? (rawBody ? `${senderName}: ${rawBody}` : senderName) : rawBody;
+  let title, body;
+  if (rawTitle === "Cell" && rawBody.indexOf(": ") !== -1) {
+    const idx = rawBody.indexOf(": ");
+    title = rawBody.slice(0, idx);
+    body = rawBody.slice(idx + 2);
+  } else {
+    title = rawTitle || "Cell";
+    body = rawBody;
+  }
   const chatId = data.chatId || null;
   const tag = data.tag || ("cell-chat-" + (chatId || "unknown"));
   const iconUrl = data.icon || "icon-192.png";
