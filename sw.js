@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-v71";
+const CACHE_VERSION = "cell-v72";
 
 const CACHE_FILES = [
   "./",
@@ -128,6 +128,16 @@ self.addEventListener("fetch", (event) => {
 // Срабатывает, когда наша Edge Function (в Supabase) отправит push
 // на endpoint браузера. Браузер будит Service Worker и передаёт event
 // с payload — мы показываем системное уведомление.
+// Какой чат сейчас активен в открытом окне Cell.
+// Обновляется через postMessage({type: "ACTIVE_CHAT", chatId}).
+let activeChatId = null;
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "ACTIVE_CHAT") {
+    activeChatId = event.data.chatId || null;
+  }
+});
+
 self.addEventListener("push", (event) => {
   let data = {};
   try {
@@ -151,7 +161,19 @@ self.addEventListener("push", (event) => {
     data: { chatId: chatId, url: data.url || "/" },
   };
 
-  event.waitUntil(self.registration.showNotification(title, notifOptions));
+  event.waitUntil((async () => {
+    // Если этот же чат открыт в окне Cell и оно сфокусировано — не показываем.
+    // Клиент сам покажет in-app тост.
+    try {
+      if (chatId && chatId === activeChatId) {
+        const wins = await clients.matchAll({ type: "window", includeUncontrolled: true });
+        const visible = wins.some((w) => w.visibilityState === "visible" && w.focused);
+        if (visible) return;
+      }
+    } catch (e) { /* silent */ }
+
+    await self.registration.showNotification(title, notifOptions);
+  })());
 });
 
 // Срабатывает при клике на уведомление.

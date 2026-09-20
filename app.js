@@ -2540,9 +2540,12 @@ function enterMobileChat() {
 }
 function exitMobileChat() {
   document.getElementById("app-screen").classList.remove("mobile-chat-open");
-  // Снимаем подсветку со всех чатов — мы вышли из переписки,
-  // ничего не должно оставаться «выбранным».
+  // Снимаем подсветку со всех чатов — мы вышли из переписки.
   document.querySelectorAll(".user-item.active").forEach((el) => el.classList.remove("active"));
+  // 🔴 ПОЛНОСТЬЮ закрываем чат. Иначе currentChatId остаётся, и при входящем
+  // realtime-обработчик вызовет markChatRead, будто мы всё ещё в чате.
+  if (currentChatId) closeCurrentChat();
+  notifySwActiveChat(null);
 }
 // Кэш «chatId → userId собеседника» для DM. Нужен, чтобы расшифровывать
 // превью последних сообщений в списке чатов (не только в открытом чате).
@@ -3724,6 +3727,20 @@ async function initApp() {
   document.addEventListener("mousemove", throttledLastSeen, { passive: true });
   document.addEventListener("keydown", throttledLastSeen);
   document.addEventListener("click", throttledLastSeen);
+
+  // Каждые 30 секунд обновляем индикатор «в сети» во всех DM-чатах.
+  // Проходимся по DOM и профилям в кэше — дёшево, без запросов к серверу.
+  setInterval(() => {
+    if (!currentUser) return;
+    document.querySelectorAll(`.user-item[data-chat-type="dm"]`).forEach((el) => {
+      const uid = el.dataset.userId;
+      if (!uid) return;
+      const p = profileCache.get(uid);
+      const avEl = el.querySelector(".avatar");
+      if (!avEl) return;
+      avEl.classList.toggle("online", !!(p && isUserOnline(p)));
+    });
+  }, 30000);
 
   // Обновлять статус собеседника
   otherUserInterval = setInterval(async () => {
@@ -5241,7 +5258,9 @@ function renderChatListUnified(items, profileMap) {
       const userId = el.dataset.userId;
       const user = profileMap.get(userId) || profileCache.get(userId);
       if (!user) return;
-      paintAvatar(el.querySelector(".avatar"), user);
+      const avEl = el.querySelector(".avatar");
+      paintAvatar(avEl, user);
+      if (avEl) avEl.classList.toggle("online", isUserOnline(user));
       bindChatItemEvents(el, user);
     }
   });
@@ -5540,6 +5559,7 @@ async function openChannel(chatId) {
   restoreDraftFor(chatId);
   enterMobileChat();
   highlightChatInList(chatId);
+  notifySwActiveChat(chatId);
 
   // Фаза 4: если я владелец/админ и E2EE разблокирована —
   // синхронизируем ключ канала (создание, раздача подписчикам).
@@ -6557,6 +6577,7 @@ async function openChatWith(otherUser) {
   restoreDraftFor(chatId);
   enterMobileChat();
   highlightChatInList(chatId);
+  notifySwActiveChat(chatId);
   await loadMessages(chatId, mySeq);
   if (mySeq !== openSeq) return;
   await loadReactionsForVisibleMessages();
@@ -9599,6 +9620,7 @@ function closeCurrentChat() {
   if (reactionsChannel) { supabase.removeChannel(reactionsChannel); reactionsChannel = null; }
   cancelReply(); cancelEdit(); exitSelectionMode(); closeReactionPicker();
   closeChatSearch();
+  notifySwActiveChat(null);
   const sbBtn = document.getElementById("scroll-bottom-btn");
   if (sbBtn) sbBtn.classList.remove("visible");
   document.getElementById("chat-content").classList.add("hidden");
@@ -14422,7 +14444,7 @@ async function subscribeToWebPush() {
       auth: json.keys.auth,
       user_agent: (navigator.userAgent || "").slice(0, 200),
       updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id,endpoint" });
+    }, { onConflict: "endpoint" });
     if (error) {
       console.warn("push_subscriptions upsert:", error);
       return { ok: false, reason: "db" };
@@ -14449,6 +14471,32 @@ async function unsubscribeFromWebPush() {
           .eq("user_id", currentUser.id)
           .eq("endpoint", endpoint);
       }
+    }
+  } catch (e) { /* silent */ }
+}
+
+// Сообщаем Service Worker'у, какой чат сейчас активен.
+// SW хранит это значение и не показывает push для активного чата
+// (клиент сам покажет in-app тост).
+function notifySwActiveChat(chatId) {
+  try {
+    if (!("serviceWorker" in navigator)) return;
+    const controller = navigator.serviceWorker.controller;
+    if (controller) {
+      controller.postMessage({ type: "ACTIVE_CHAT", chatId: chatId || null });
+    }
+  } catch (e) { /* silent */ }
+}
+
+// Сообщаем Service Worker'у, какой чат сейчас активен.
+// SW не будет показывать push для этого чата, если окно в фокусе —
+// клиент сам покажет in-app тост.
+function notifySwActiveChat(chatId) {
+  try {
+    if (!("serviceWorker" in navigator)) return;
+    const controller = navigator.serviceWorker.controller;
+    if (controller) {
+      controller.postMessage({ type: "ACTIVE_CHAT", chatId: chatId || null });
     }
   } catch (e) { /* silent */ }
 }

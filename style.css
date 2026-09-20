@@ -588,7 +588,22 @@ input:focus {
 
 .user-item:hover { background: var(--bg-hover); }
 .user-item.active { background: var(--bg-active); }
-.user-item .avatar { width: 46px; height: 46px; font-size: 17px; }
+.user-item .avatar { width: 46px; height: 46px; font-size: 17px; position: relative; }
+
+/* Индикатор «в сети» — маленькая точка справа снизу от аватарки.
+   Только для DM-чатов (у каналов online бессмыслен). */
+.user-item[data-chat-type="dm"] .avatar.online::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-side);
+  pointer-events: none;
+}
 
 .user-item-body { flex: 1; min-width: 0; }
 .user-item-row1 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
