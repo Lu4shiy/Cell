@@ -3734,6 +3734,7 @@ async function initApp() {
   setupSettings(); applyScrollMode();
   setupChatSearch(); setupScrollBottomButton();
   setupMessagesScrollPagination();
+  setupMessagesResizeObserver();
   setupVerifiedTooltip();
   setupChatPins(); setupInviteUI();
   setupMessagesDelegates();
@@ -6754,6 +6755,8 @@ async function markChatRead(chatId) {
 // ======================= 14. СООБЩЕНИЯ =======================
 async function loadMessages(chatId, mySeq) {
   const box = document.getElementById("messages");
+  // При открытии нового чата всегда хотим быть у низа.
+  stickToBottom = true;
   box.innerHTML = '<div class="empty">Загрузка...</div>';
   msgCache.clear(); hiddenMsgIds = new Set(); reactionsCache.clear();
   currentChannelViewsMap = new Map();
@@ -7972,15 +7975,54 @@ async function openChatByUsername(username) {
   }
 }
 
+// 🔴 Флаг: пользователь хочет оставаться у низа чата. Пока true — любое
+// изменение высоты контента (подгрузка картинок, расшифровка файлов,
+// метаданные видео) автоматически прокручивает контейнер вниз.
+// Снимается, когда пользователь сам отскроллил вверх.
+let stickToBottom = true;
+let messagesResizeObserver = null;
+// Защита от race-condition: пока мы программно скроллим, scroll-событие
+// не должно сбрасывать stickToBottom.
+let programmaticScroll = false;
+
+function scrollMessagesToBottomNow(box) {
+  if (!box) return;
+  programmaticScroll = true;
+  box.scrollTop = box.scrollHeight;
+  requestAnimationFrame(() => { programmaticScroll = false; });
+}
+
+// Инициализирует ResizeObserver на #messages один раз. Любое изменение
+// высоты контейнера → если stickToBottom, скроллим вниз.
+function setupMessagesResizeObserver() {
+  const box = document.getElementById("messages");
+  if (!box || messagesResizeObserver) return;
+
+  messagesResizeObserver = new ResizeObserver(() => {
+    if (!stickToBottom) return;
+    scrollMessagesToBottomNow(box);
+  });
+  messagesResizeObserver.observe(box);
+
+  // Пользователь сам скроллит: если ушёл наверх — снимаем флаг,
+  // если вернулся вниз — ставим обратно.
+  box.addEventListener("scroll", () => {
+    if (programmaticScroll) return;
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+    stickToBottom = nearBottom;
+  }, { passive: true });
+}
+
 function scrollToBottom() {
   const box = document.getElementById("messages");
   if (!box) return;
-  box.scrollTop = box.scrollHeight;
+  stickToBottom = true;
+  scrollMessagesToBottomNow(box);
   // Пересчёт после того, как подгрузятся картинки/видео/файлы —
   // без этого чат при перезагрузке остаётся чуть выше низа
   const adjust = () => {
-    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 220;
-    if (nearBottom) box.scrollTop = box.scrollHeight;
+    if (!stickToBottom) return;
+    scrollMessagesToBottomNow(box);
   };
   requestAnimationFrame(adjust);
   box.querySelectorAll("img:not([data-scrollbound]), video:not([data-scrollbound])").forEach((el) => {
@@ -7994,10 +8036,13 @@ function scrollToBottom() {
       el.addEventListener("loadeddata", adjust, { once: true });
     }
   });
-  // Резервные таймеры — на случай очень медленной сети
+  // Резервные таймеры — на случай очень медленной сети и ленивой
+  // расшифровки E2EE-вложений.
   setTimeout(adjust, 120);
   setTimeout(adjust, 400);
   setTimeout(adjust, 900);
+  setTimeout(adjust, 1800);
+  setTimeout(adjust, 3000);
 }
 
 function setupScrollBottomButton() {
