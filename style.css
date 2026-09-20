@@ -4629,3 +4629,40 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   flex-shrink: 0;
 }
 .e2ee-unlock-banner button:hover { background: rgba(var(--accent-rgb), 0.15); }
+
+/* ====================================================== */
+/* ФИЛЬТР ПОДАРКОВ В ПРОФИЛЕ                               */
+/* ====================================================== */
+
+.gifts-filter-bar {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+  margin-bottom: 10px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.gifts-filter-bar::-webkit-scrollbar { display: none; }
+
+.gift-filter-chip {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-sub);
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.gift-filter-chip:hover { border-color: var(--accent); color: var(--text); }
+.gift-filter-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #15110d;
+  font-weight: 700;
+}

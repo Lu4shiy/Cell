@@ -526,6 +526,14 @@ const I18N = {
     "gifts.rarity.common": "Обычный",
     "gifts.rarity.rare": "Редкий",
     "gifts.rarity.epic": "Эпический",
+    "gifts.filter.all": "Все",
+    "gifts.filter.common": "Обычные",
+    "gifts.filter.rare": "Редкие",
+    "gifts.filter.epic": "Эпические",
+    "gifts.filter.pinned": "Закреплённые",
+    "gifts.filter.unpinned": "Незакреплённые",
+    "gifts.filter.inProfile": "В профиле",
+    "gifts.filter.notInProfile": "Не в профиле",
     "gifts.title.mine": "Мои подарки",
     "gifts.title.user": "Подарки: {name}",
     "gifts.title.detail": "Подарок",
@@ -749,6 +757,10 @@ const I18N = {
     "msgCtx.pin": "Закрепить",
     "msgCtx.unpin": "Открепить",
     "msgCtx.copy": "Копировать",
+    "msgCtx.copyImage": "Копировать изображение",
+    "msgCtx.save": "Сохранить",
+    "msgCtx.saveErr": "Не удалось сохранить файл",
+    "msgCtx.copyErr": "Не удалось скопировать изображение",
     "msgCtx.edit": "Изменить",
     "msgCtx.fwd": "Переслать",
     "msgCtx.del": "Удалить",
@@ -1268,6 +1280,14 @@ const I18N = {
     "gifts.rarity.common": "Common",
     "gifts.rarity.rare": "Rare",
     "gifts.rarity.epic": "Epic",
+    "gifts.filter.all": "All",
+    "gifts.filter.common": "Common",
+    "gifts.filter.rare": "Rare",
+    "gifts.filter.epic": "Epic",
+    "gifts.filter.pinned": "Pinned",
+    "gifts.filter.unpinned": "Unpinned",
+    "gifts.filter.inProfile": "In profile",
+    "gifts.filter.notInProfile": "Not in profile",
     "gifts.title.mine": "My gifts",
     "gifts.title.user": "Gifts: {name}",
     "gifts.title.detail": "Gift",
@@ -1491,6 +1511,10 @@ const I18N = {
     "msgCtx.pin": "Pin",
     "msgCtx.unpin": "Unpin",
     "msgCtx.copy": "Copy",
+    "msgCtx.copyImage": "Copy image",
+    "msgCtx.save": "Save",
+    "msgCtx.saveErr": "Failed to save file",
+    "msgCtx.copyErr": "Failed to copy image",
     "msgCtx.edit": "Edit",
     "msgCtx.fwd": "Forward",
     "msgCtx.del": "Delete",
@@ -2596,6 +2620,7 @@ let contextChannelForMenu = null;
 let channelAdminsChannel = null;
 let usernameCheckTimeout = null, validatedUsername = null, reactionsRefreshTimer = null;
 let giftCatalogCache = [];
+let giftFilter = "all"; // all | common | rare | epic | pinned | unpinned | inProfile | notInProfile
 let lastSeenInterval = null, otherUserInterval = null, statusPollInterval = null, deliveredInterval = null;
 // Throttle для last_seen — не чаще одного раза в 25 секунд.
 // Порог «в сети» у собеседника — 45 сек (см. isUserOnline), так что 25 сек безопасно.
@@ -6053,6 +6078,49 @@ function setupMobileBackButton() {
   btn.onclick = () => {
     exitMobileChat();
   };
+  setupSwipeBackGesture();
+}
+
+// 🔴 Свайп вправо по экрану чата на телефоне — вернуться к списку чатов.
+// Работает, только когда мы в мобильном режиме и чат открыт.
+// Порог: сдвиг вправо > 100px и вертикальный сдвиг < 60px.
+function setupSwipeBackGesture() {
+  const chatContent = document.getElementById("chat-content");
+  if (!chatContent) return;
+  let startX = 0, startY = 0;
+  let tracking = false, fired = false;
+
+  chatContent.addEventListener("touchstart", (e) => {
+    if (!isMobileView()) return;
+    if (e.touches.length !== 1) return;
+    // Не срабатываем, если тап был по интерактивным элементам,
+    // которые сами умеют свайпать (медиа-вьюер отсекается отдельно).
+    const t = e.touches[0];
+    startX = t.clientX;
+    startY = t.clientY;
+    tracking = true;
+    fired = false;
+  }, { passive: true });
+
+  chatContent.addEventListener("touchmove", (e) => {
+    if (!tracking || fired) return;
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    // Свайп вправо: dx > 100, |dy| < 60, и движение горизонтальное
+    if (dx > 100 && Math.abs(dy) < Math.abs(dx) * 0.6) {
+      fired = true;
+      exitMobileChat();
+    }
+  }, { passive: true });
+
+  chatContent.addEventListener("touchend", () => {
+    tracking = false;
+  });
+  chatContent.addEventListener("touchcancel", () => {
+    tracking = false;
+  });
 }
 
 // ============ Меню сайдбара (бургер) ============
@@ -9645,6 +9713,75 @@ function closeCurrentChat() {
   document.getElementById("chat-placeholder").classList.remove("hidden");
 }
 
+// Возвращает актуальный URL медиа для отображения (учитывая E2EE).
+async function getMediaDisplayUrl(msg) {
+  if (!msg) return null;
+  if (msg.file_key_enc && msg.file_iv) {
+    return await getDecryptedFileUrl(msg);
+  }
+  return await getSignedUrl(msg.image_url);
+}
+
+// Сохранить фото/видео/файл из сообщения.
+// Тянем blob и отдаём через blob:URL — так обходим CORS и «download» работает.
+async function saveMediaFromMessage(msgId) {
+  const msg = msgCache.get(msgId);
+  if (!msg || msg.message_type !== "attachment") return;
+  const url = await getMediaDisplayUrl(msg);
+  if (!url) {
+    await showAlertDialog(t("alert.error"), t("msgCtx.saveErr"));
+    return;
+  }
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = msg.file_name || ("cell-" + Date.now());
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => { try { URL.revokeObjectURL(blobUrl); } catch (e) {} }, 5000);
+  } catch (e) {
+    await showAlertDialog(t("alert.error"), t("msgCtx.saveErr") + ": " + (e.message || e));
+  }
+}
+
+// Скопировать изображение в буфер обмена.
+async function copyImageFromMessage(msgId) {
+  const msg = msgCache.get(msgId);
+  if (!msg || msg.message_type !== "attachment" || msg.file_kind !== "image") return;
+  if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
+    await showAlertDialog(t("alert.error"), t("msgCtx.copyErr"));
+    return;
+  }
+  const url = await getMediaDisplayUrl(msg);
+  if (!url) {
+    await showAlertDialog(t("alert.error"), t("msgCtx.copyErr"));
+    return;
+  }
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    let pngBlob = blob;
+    // Clipboard API принимает только PNG в большинстве браузеров —
+    // конвертируем через canvas, если исходник другого формата.
+    if (blob.type !== "image/png") {
+      const bmp = await createImageBitmap(blob);
+      const canvas = document.createElement("canvas");
+      canvas.width = bmp.width;
+      canvas.height = bmp.height;
+      canvas.getContext("2d").drawImage(bmp, 0, 0);
+      pngBlob = await new Promise((r) => canvas.toBlob(r, "image/png"));
+    }
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
+  } catch (e) {
+    await showAlertDialog(t("alert.error"), t("msgCtx.copyErr"));
+  }
+}
+
 // ======================================================
 // 20. ПКМ ПО СООБЩЕНИЮ
 // ======================================================
@@ -9677,6 +9814,8 @@ function setupMessageMenu() {
     if (action === "reply") startReply(id);
     else if (action === "pin") await handlePinAction(id);
     else if (action === "copy") copyMessageText(id).catch(() => {});
+    else if (action === "copy-image") await copyImageFromMessage(id);
+    else if (action === "save") await saveMediaFromMessage(id);
     else if (action === "edit") startEdit(id);
     else if (action === "fwd") await handleForwardOne(id);
     else if (action === "del") await handleDeleteOne(id);
@@ -9738,10 +9877,29 @@ function setupMessageMenu() {
       inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + "px";
     });
 
-    // Вставка — только чистый текст
+    // Вставка: если в буфере картинка — открываем диалог вложений, как
+    // будто её выбрали через «Прикрепить файл». Иначе — чистый текст.
     inputEl.addEventListener("paste", (e) => {
+      const cd = e.clipboardData || window.clipboardData;
+      if (!cd) return;
+      const items = cd.items;
+      if (items && items.length) {
+        const files = [];
+        for (const item of items) {
+          if (item.kind === "file") {
+            const f = item.getAsFile();
+            if (f) files.push(f);
+          }
+        }
+        if (files.length) {
+          e.preventDefault();
+          openAttachmentDialog(files);
+          return;
+        }
+      }
+      // Обычный текст
       e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData("text/plain");
+      const text = cd.getData("text/plain");
       document.execCommand("insertText", false, text);
     });
 
@@ -9961,8 +10119,17 @@ function openMsgContextMenu(e, msgId) {
   if (replyBtn) replyBtn.classList.add("hidden");
   if (pinBtn)   pinBtn.classList.add("hidden");
   if (delBtn)   delBtn.classList.add("hidden");
+  const saveBtn  = document.querySelector('#msg-context-menu button[data-action="save"]');
+  const copyImgBtn = document.querySelector('#msg-context-menu button[data-action="copy-image"]');
+  const copyBtn  = document.querySelector('#msg-context-menu button[data-action="copy"]');
+  if (saveBtn)     saveBtn.classList.add("hidden");
+  if (copyImgBtn)  copyImgBtn.classList.add("hidden");
 
   const isChanAdmin = isChannelMsg && currentChannelIsAdmin;
+  const isAttachment = msg && msg.message_type === "attachment";
+  const isPhoto = isAttachment && msg.file_kind === "image";
+  const isVideo = isAttachment && msg.file_kind === "video";
+  const isMine = msg && msg.sender_id === currentUser.id && !msg.forwarded_from_name;
 
   if (isChannelMsg) {
     // Пересылать из канала можно всем
@@ -9973,20 +10140,36 @@ function openMsgContextMenu(e, msgId) {
       if (replyBtn) replyBtn.classList.remove("hidden");
       if (pinBtn) pinBtn.classList.remove("hidden");
       if (delBtn) delBtn.classList.remove("hidden");
-      if (editBtn && msg && msg.sender_id === currentUser.id && !msg.forwarded_from_name) editBtn.classList.remove("hidden");
+      // Вложения админ может сохранить/копировать как обычный пользователь
+      if (isPhoto || isVideo) {
+        if (saveBtn) saveBtn.classList.remove("hidden");
+        if (isPhoto && copyImgBtn) copyImgBtn.classList.remove("hidden");
+        if (copyBtn) copyBtn.classList.add("hidden");
+      }
+      if (editBtn && isMine) editBtn.classList.remove("hidden");
     }
   } else if (isGift) {
     if (replyBtn) replyBtn.classList.remove("hidden");
     if (delBtn)   delBtn.classList.remove("hidden");
   } else if (isTokens) {
     if (delBtn)   delBtn.classList.remove("hidden");
+  } else if (isPhoto || isVideo) {
+    // 🔴 Специальное меню для фото/видео в DM
+    if (replyBtn) replyBtn.classList.remove("hidden");
+    if (pinBtn)   pinBtn.classList.remove("hidden");
+    if (fwdBtn)   fwdBtn.classList.remove("hidden");
+    if (delBtn)   delBtn.classList.remove("hidden");
+    if (saveBtn) saveBtn.classList.remove("hidden");
+    if (isPhoto && copyImgBtn) copyImgBtn.classList.remove("hidden");
+    if (copyBtn) copyBtn.classList.add("hidden"); // текстовое «Копировать» не нужно для медиа
+    if (editBtn && isMine) editBtn.classList.remove("hidden");
   } else {
     // Обычный DM
     if (replyBtn) replyBtn.classList.remove("hidden");
     if (fwdBtn)   fwdBtn.classList.remove("hidden");
     if (pinBtn)   pinBtn.classList.remove("hidden");
     if (delBtn)   delBtn.classList.remove("hidden");
-    if (editBtn && msg && msg.sender_id === currentUser.id && !msg.forwarded_from_name && msg.message_type !== "attachment") {
+    if (editBtn && isMine && msg.message_type !== "attachment") {
       editBtn.classList.remove("hidden");
     }
   }
@@ -11566,13 +11749,46 @@ async function renderGiftsMain(userId) {
     : tFmt("gifts.buy.buttonFor", { name: (profileCache.get(userId) || {}).display_name || "" });
   html += `<button class="gift-card-button" style="width:100%;padding:12px;margin-bottom:12px;" id="open-catalog-btn"><span class="cell-icon cell-icon-sm" data-icon="shop" style="vertical-align:-3px;margin-right:6px;"></span>${escapeHtml(buyLabel)}</button>`;
 
+  // 🔴 Фильтр подарков. Чипсы горизонтально скроллятся, если не влезают.
+  const filterChips = [
+    { id: "all",        label: t("gifts.filter.all") },
+    { id: "common",     label: t("gifts.filter.common") },
+    { id: "rare",       label: t("gifts.filter.rare") },
+    { id: "epic",       label: t("gifts.filter.epic") },
+    { id: "pinned",     label: t("gifts.filter.pinned") },
+    { id: "unpinned",   label: t("gifts.filter.unpinned") },
+    { id: "inProfile",  label: t("gifts.filter.inProfile") },
+    { id: "notInProfile", label: t("gifts.filter.notInProfile") },
+  ];
+  html += `<div class="gifts-filter-bar">` +
+    filterChips.map((c) =>
+      `<button type="button" class="gift-filter-chip${giftFilter === c.id ? " active" : ""}" data-gift-filter="${c.id}">${escapeHtml(c.label)}</button>`
+    ).join("") +
+    `</div>`;
+
   if (!gifts.length) {
     html += isMe
       ? `<div class="empty">${escapeHtml(t("gifts.empty.mine"))}</div>`
       : `<div class="empty">${escapeHtml(t("gifts.empty.other"))}</div>`;
   } else {
+    // Применяем фильтр к списку подарков
+    const filtered = gifts.filter((ug) => {
+      if (giftFilter === "all") return true;
+      const cat = catalogMap.get(ug.gift_id);
+      if (giftFilter === "common" || giftFilter === "rare" || giftFilter === "epic") {
+        return cat && cat.rarity === giftFilter;
+      }
+      if (giftFilter === "pinned") return !!ug.pinned_at;
+      if (giftFilter === "unpinned") return !ug.pinned_at;
+      if (giftFilter === "inProfile") return !!ug.in_profile;
+      if (giftFilter === "notInProfile") return !ug.in_profile;
+      return true;
+    });
+    if (!filtered.length) {
+      html += `<div class="empty">${escapeHtml(t("gifts.empty.mine"))}</div>`;
+    } else {
     html += `<div class="gifts-grid">`;
-    gifts.forEach((ug) => {
+    filtered.forEach((ug) => {
       const cat = catalogMap.get(ug.gift_id);
       if (!cat) return;
       const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
@@ -11595,12 +11811,22 @@ async function renderGiftsMain(userId) {
         </div>`;
     });
     html += `</div>`;
+    }
   }
 
   content.innerHTML = html;
 
   const openBtn = document.getElementById("open-catalog-btn");
   if (openBtn) openBtn.addEventListener("click", () => renderCatalog(userId));
+
+  // Обработчики фильтр-чипсов
+  content.querySelectorAll("[data-gift-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const f = btn.dataset.giftFilter;
+      giftFilter = (giftFilter === f && f !== "all") ? "all" : f;
+      renderGiftsMain(userId);
+    });
+  });
 
   // Асинхронно дорисовываем паттерны на плитках
   content.querySelectorAll(".gift-tile-pattern[data-icon]").forEach((el) => {
