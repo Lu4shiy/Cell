@@ -245,6 +245,7 @@ const I18N = {
     // ---- Настройки ----
     "settings.title": "Настройки",
     "settings.close": "Закрыть",
+    "settings.back": "Назад",
     "settings.language.label": "Язык",
     "settings.language.hint": "Язык интерфейса. Ники, названия каналов и подписи подарков не переводятся.",
     "settings.notifications.label": "Уведомления",
@@ -1003,6 +1004,7 @@ const I18N = {
     // ---- Settings ----
     "settings.title": "Settings",
     "settings.close": "Close",
+    "settings.back": "Back",
     "settings.language.label": "Language",
     "settings.language.hint": "Interface language. Nicknames, channel names and gift captions are not translated.",
     "settings.notifications.label": "Notifications",
@@ -11291,6 +11293,10 @@ function setupGiftsUI() {
       }
     });
     document.addEventListener("pointerdown", (e) => {
+      // 🔴 Только левая кнопка мыши / обычный тап. ПКМ (button=2) не
+      // должен закрывать меню — иначе он глотает следующее событие
+      // contextmenu, и меню «не открывается».
+      if (e.button !== undefined && e.button !== 0) return;
       if (giftMenu.classList.contains("hidden")) return;
       if (giftMenu.contains(e.target)) return;
       if (justLongPressed()) return;
@@ -11819,6 +11825,10 @@ function setupGiftFilterUI() {
 function closeGiftsOverlay() {
   const el = document.getElementById("gifts-overlay");
   if (el) el.classList.add("hidden");
+  // 🔴 Закрываем контекстное меню подарка — иначе оно остаётся
+  // висеть поверх чата (position: fixed, привязан к окну).
+  const gm = document.getElementById("gift-context-menu");
+  if (gm) gm.classList.add("hidden");
 }
 
 async function renderGiftsMain(userId) {

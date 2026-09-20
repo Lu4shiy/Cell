@@ -1537,10 +1537,14 @@ input:focus {
   border-radius: 8px;
   font-size: 14px;
   font-family: inherit;
-  /* Не даём выделять текст на кнопках long-press'ом */
+  /* Не даём выделять текст на кнопках long-press'ом и не даём
+     браузеру на Android показать свой "текстовый" toolbar. */
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .context-menu button:hover { background: var(--bg-hover); }
 
