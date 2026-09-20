@@ -11215,6 +11215,7 @@ const GIFT_PATTERNS = [
   { id: "Strawberry",         icon: "https://i.ibb.co/pvmhb5xW/icons8-strawberry-100.png",       tier: 2, collection: null },
   { id: "Raspberry",          icon: "https://i.ibb.co/R4MKW7Wg/icons8-raspberry-100.png",        tier: 2, collection: null },
   { id: "Maple Leaves",       icon: "https://i.ibb.co/jkX6gBkf/icons8-autumn-100.png",           tier: 2, collection: null },
+  { id: "Poop",               icon: "https://i.ibb.co/jkfgWpPx/icons8-100.png",                  tier: 2, collection: null },
   // Tier 3 — 🟨 (2% каждый)
   { id: "Pizza",              icon: "https://i.ibb.co/35DsZYKS/icons8-salami-pizza-100.png",     tier: 3, collection: null },
   { id: "Champion's Trophey", icon: "https://i.ibb.co/HJ7cKK7/icons8-trophy-100.png",            tier: 3, collection: null },
@@ -11225,6 +11226,7 @@ const GIFT_PATTERNS = [
   { id: "Bear Footprint",     icon: "https://i.ibb.co/9kgxhz33/icons8-bear-footprint-100.png",   tier: 3, collection: null },
   { id: "Bull",               icon: "https://i.ibb.co/7NVw2wr7/icons8-bull-100.png",             tier: 3, collection: null },
   { id: "Unicorn",            icon: "https://i.ibb.co/m5zthc0B/icons8-unicorn-100.png",          tier: 3, collection: null },
+  { id: "Dirty Prank",        icon: "https://i.ibb.co/0y1HSJvR/icons8-100.png",                  tier: 3, collection: null },
   // Tier 4 — 🟧 (3% каждый)
   { id: "Compass",            icon: "https://i.ibb.co/39JNnHLp/icons8-adventures-100.png",       tier: 4, collection: null },
   { id: "Crescent",           icon: "https://i.ibb.co/zTcHnrst/icons8-crescent-moon-100.png",    tier: 4, collection: null },
@@ -11236,6 +11238,8 @@ const GIFT_PATTERNS = [
   { id: "Bugs",               icon: "https://i.ibb.co/dnQt6CS/icons8-bug-100.png",               tier: 4, collection: null },
   { id: "Grapes",             icon: "https://i.ibb.co/99dNQQxJ/icons8-grapes-100.png",           tier: 4, collection: null },
   { id: "King's Guard",       icon: "https://i.ibb.co/3mBWW1MD/icons8-queen-s-guard-100.png",    tier: 4, collection: null },
+  { id: "Toilet Paper",       icon: "https://i.ibb.co/wrQb3pV8/icons8-100.png",                  tier: 4, collection: null },
+  { id: "Toilet",             icon: "https://i.ibb.co/35P7d21m/icons8-100.png",                  tier: 4, collection: null },
   // Tier 5 — 🟥 (4% каждый)
   { id: "Happy Ice Cream",    icon: "https://i.ibb.co/mCJycjJZ/icons8-kawaii-ice-cream-100.png", tier: 5, collection: null },
   { id: "Wolf",               icon: "https://i.ibb.co/cK67rPXt/icons8-wolf-100.png",             tier: 5, collection: null },
