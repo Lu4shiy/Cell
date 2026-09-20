@@ -1,1 +1,1269 @@
+<!DOCTYPE html>
+<html lang="ru" style="touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%;">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Cell</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ibb.co https://cdn.jsdelivr.net https://upload.wikimedia.org https://wsrv.nl https://*.supabase.co; media-src 'self' blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://wsrv.nl; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
 
+  <!-- PWA: манифест создаётся инлайн-скриптом, чтобы Chrome сразу получил правильный манифест.
+       Если поставить статический <link rel="manifest" href="manifest.json">, Chrome
+       прочитает его раньше, чем выполнится app.js — и иконка не сменится при переустановке. -->
+  <script>
+    (function () {
+      var map = {
+        classic:    "manifest.json",
+        monochrome: "manifest-monochrome.json",
+        sea:        "manifest-sea.json",
+        fury:       "manifest-fury.json",
+        inverse:    "manifest-inverse.json",
+        gradient:   "manifest-gradient.json"
+      };
+      var href = "manifest.json";
+      try {
+        var saved = localStorage.getItem("cell_app_icon");
+        if (saved && map[saved]) href = map[saved];
+      } catch (e) { /* silent */ }
+      var link = document.createElement("link");
+      link.rel = "manifest";
+      link.href = href;
+      link.id = "app-manifest-link";
+      document.head.appendChild(link);
+    })();
+  </script>
+  <meta name="theme-color" content="#1d1712">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Cell">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpolygon points='50,5 93,27 93,73 50,95 7,73 7,27' fill='%23f5a623'/%3E%3Ccircle cx='50' cy='50' r='13' fill='%2315110d'/%3E%3C/svg%3E">
+</head>
+<body>
+
+  <div id="auth-screen" class="screen">
+    <div class="auth-card">
+      <div class="logo-wrap">
+        <svg class="logo-cell" viewBox="0 0 100 100" width="72" height="72" aria-hidden="true">
+          <polygon points="50,5 93,27 93,73 50,95 7,73 7,27" fill="currentColor"/>
+          <circle cx="50" cy="50" r="13" fill="var(--bg-side)"/>
+        </svg>
+      </div>
+      <h1 class="logo">Cell</h1>
+      <p class="tagline" data-i18n="auth.tagline">Собираемся по кусочкам</p>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="login" data-i18n="auth.tab.login">Вход</button>
+        <button class="tab" data-tab="register" data-i18n="auth.tab.register">Регистрация</button>
+      </div>
+
+      <form id="login-form" class="form" novalidate>
+        <input type="email" id="login-email" placeholder="Email" data-i18n-placeholder="auth.field.email" required>
+        <input type="password" id="login-password" placeholder="Пароль" data-i18n-placeholder="auth.field.password" required>
+        <button type="submit" class="btn-primary" data-i18n="auth.login.submit">Войти</button>
+        <button type="button" class="auth-link-btn" id="forgot-password-btn" data-i18n="auth.forgotPassword">Забыли пароль?</button>
+        <p class="error" id="login-error"></p>
+      </form>
+
+      <form id="register-form" class="form hidden" novalidate>
+        <input type="text" id="reg-username" placeholder="Юзернейм" data-i18n-placeholder="auth.field.username" required>
+        <input type="text" id="reg-displayname" placeholder="Имя" data-i18n-placeholder="auth.field.displayname" required>
+        <input type="email" id="reg-email" placeholder="Email" data-i18n-placeholder="auth.field.email" required>
+        <input type="password" id="reg-password" placeholder="Пароль (мин. 10, A-Z, a-z, 0-9)" data-i18n-placeholder="auth.field.password.strict" required minlength="10">
+        <button type="submit" class="btn-primary" data-i18n="auth.register.submit">Создать аккаунт</button>
+        <p class="error" id="register-error"></p>
+      </form>
+
+      <div class="auth-divider"><span data-i18n="auth.or">или</span></div>
+
+      <button type="button" class="btn-local-login" id="local-login-btn">
+        <span data-i18n="auth.localLogin">Войти локально</span>
+        <span class="btn-local-login-sub" data-i18n="auth.localLoginHint">Аккаунт только на этом устройстве. Без почты и пароля.</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════ ВОССТАНОВЛЕНИЕ ПАРОЛЯ: запрос письма ═══════ -->
+  <div id="reset-request-overlay" class="dialog-overlay hidden" style="z-index:9000;">
+    <div class="dialog">
+      <div class="dialog-title" data-i18n="auth.reset.title">Восстановление пароля</div>
+      <div class="dialog-text" data-i18n="auth.reset.text">Введите email, привязанный к аккаунту — мы отправим ссылку для сброса пароля.</div>
+      <input type="email" id="reset-email" placeholder="Email" data-i18n-placeholder="auth.field.email" autocomplete="email"
+             style="width:100%;padding:14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;margin-bottom:12px;">
+      <p class="error" id="reset-request-error" style="margin-bottom:10px;"></p>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="reset-request-submit" data-i18n="auth.reset.send">Отправить ссылку</button>
+        <button class="dialog-btn dialog-cancel" id="reset-request-cancel" data-i18n="dialog.cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ ВОССТАНОВЛЕНИЕ ПАРОЛЯ: новый пароль ═══════ -->
+  <div id="reset-new-overlay" class="dialog-overlay hidden" style="z-index:9500;">
+    <div class="dialog">
+      <div class="dialog-title" data-i18n="auth.reset.newTitle">Новый пароль</div>
+      <div class="dialog-text" data-i18n="auth.reset.newText">Придумайте новый пароль. Требования: минимум 10 символов, заглавная и строчная буквы, цифра.</div>
+      <input type="password" id="reset-new-password" placeholder="Новый пароль (мин. 10, A-Z, a-z, 0-9)" data-i18n-placeholder="auth.reset.newPlaceholder" autocomplete="new-password"
+             style="width:100%;padding:14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;margin-bottom:10px;">
+      <input type="password" id="reset-new-password2" placeholder="Повторите пароль" data-i18n-placeholder="auth.reset.repeatPlaceholder" autocomplete="new-password"
+             style="width:100%;padding:14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;margin-bottom:12px;">
+      <p class="error" id="reset-new-error" style="margin-bottom:10px;"></p>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="reset-new-submit" data-i18n="auth.reset.save">Сохранить пароль</button>
+        <button class="dialog-btn dialog-cancel" id="reset-new-cancel" data-i18n="dialog.cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ ПЕРВИЧНАЯ НАСТРОЙКА ЛОКАЛЬНОГО АККАУНТА ═══════ -->
+  <div id="local-setup-overlay" class="dialog-overlay hidden" style="z-index:9200;">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title" data-i18n="localSetup.title">Локальный аккаунт</div>
+      <div class="dialog-text" data-i18n="localSetup.text">
+        Это аккаунт только для этого устройства. Никакой почты и пароля не нужно —
+        войти в него с другого устройства нельзя. Придумайте имя и юзернейм.
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="profile.section.avatar">Аватар</div>
+        <div class="avatar-preview">
+          <div class="avatar avatar-large" id="local-setup-avatar-preview">?</div>
+        </div>
+        <div class="avatar-grid" id="local-setup-avatar-grid"></div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="profile.section.name">Имя</div>
+        <input type="text" id="local-setup-name" placeholder="Ваше имя" data-i18n-placeholder="profile.name.placeholder" maxlength="25" autocomplete="off">
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="profile.section.username">Имя пользователя</div>
+        <div class="username-input-wrap">
+          <span class="username-prefix">@</span>
+          <input type="text" id="local-setup-username" placeholder="username" maxlength="32" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="username-hint" id="local-setup-username-hint"></div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="local-setup-save" data-i18n="localSetup.save">Начать пользоваться</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="app-screen" class="app hidden">
+
+    <aside class="sidebar">
+      <header class="sidebar-header">
+        <div class="me-info" id="me-info-btn" title="Профиль">
+          <div class="avatar" id="me-avatar">?</div>
+          <div class="me-text">
+            <div class="me-name" id="me-name">Загрузка...</div>
+            <div class="me-username" id="me-username">@...</div>
+          </div>
+        </div>
+        <div class="sidebar-actions">
+          <button id="sidebar-menu-btn" class="icon-btn" title="Меню" type="button"><span class="cell-icon" data-icon="menu"></span></button>
+        </div>
+      </header>
+
+      <div id="sidebar-menu-drawer" class="sidebar-menu-drawer">
+<button id="create-channel-btn" class="drawer-btn" type="button">
+  <span class="cell-icon" data-icon="plus"></span>
+  <span data-i18n="sidebar.menu.createChannel">Создать канал</span>
+</button>
+<button id="settings-btn" class="drawer-btn" type="button">
+  <span class="cell-icon" data-icon="settings"></span>
+  <span data-i18n="sidebar.menu.settings">Настройки</span>
+</button>
+<button id="about-btn" class="drawer-btn" type="button">
+  <span class="cell-icon" data-icon="info"></span>
+  <span data-i18n="sidebar.menu.about">О приложении</span>
+</button>
+<button id="logout-btn" class="drawer-btn" type="button">
+  <span class="cell-icon" data-icon="logout"></span>
+  <span data-i18n="sidebar.menu.logout">Выйти</span>
+</button>
+      </div>
+
+      <div class="search-wrap">
+        <input type="text" id="search-input" placeholder="Поиск по имени или @username" data-i18n-placeholder="sidebar.search.placeholder">
+        <button id="search-clear" class="search-clear hidden" title="Очистить поиск" data-i18n-title="sidebar.search.clear" type="button"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
+      </div>
+
+      <div id="birthday-banner" class="birthday-banner hidden">
+        <span class="birthday-icon"><span class="cell-icon cell-icon-sm" data-icon="birthday"></span></span>
+        <span id="birthday-banner-text" style="flex:1;"></span>
+        <button class="birthday-close" id="birthday-close" title="Скрыть">✕</button>
+      </div>
+
+      <div class="section-title" id="section-title" data-i18n="sidebar.section.chats">Чаты</div>
+      <div class="wheel-wrap" id="wheel-wrap">
+        <div class="wheel-arrow wheel-arrow-top hidden" aria-hidden="true">▴</div>
+        <div class="wheel-fade wheel-fade-top"></div>
+        <div id="users-list" class="users-list">
+          <div class="empty">Загрузка...</div>
+        </div>
+        <div class="wheel-fade wheel-fade-bottom"></div>
+        <div class="wheel-arrow wheel-arrow-bottom hidden" aria-hidden="true">▾</div>
+      </div>
+    </aside>
+
+    <main class="chat-area" id="chat-area">
+      <div class="chat-placeholder" id="chat-placeholder">
+        <svg class="chat-placeholder-icon" viewBox="0 0 100 100" width="72" height="72" aria-hidden="true">
+          <polygon points="50,5 93,27 93,73 50,95 7,73 7,27" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+          <circle cx="50" cy="50" r="9" fill="currentColor"/>
+        </svg>
+        <p>Выберите чат для начала переписки</p>
+      </div>
+
+      <div id="chat-content" class="chat-content hidden">
+        <header class="chat-header">
+          <button id="mobile-back-btn" class="mobile-back-btn" type="button" aria-label="Назад" data-i18n-title="chat.back"><span class="cell-icon" data-icon="left"></span></button>
+          <div class="avatar" id="chat-avatar">?</div>
+          <div class="chat-header-text clickable" id="chat-header-text">
+            <div class="chat-title" id="chat-title">Имя</div>
+            <div class="chat-subtitle" id="chat-subtitle">@username</div>
+          </div>
+          <button id="chat-search-btn" class="icon-btn" title="Поиск в чате" data-i18n-title="chat.search.open"><span class="cell-icon" data-icon="search"></span></button>
+          <button id="chat-pin-btn" class="icon-btn" title="Закреплённые" data-i18n-title="chat.pins.open"><span class="cell-icon" data-icon="pin"></span><span class="pin-count-badge hidden" id="pin-count-badge">0</span></button>
+          <button id="chat-menu-btn" class="icon-btn" title="Меню" data-i18n-title="chat.menu.open"><span class="cell-icon" data-icon="menuVertical"></span></button>
+          <div id="chat-menu" class="menu hidden">
+            <button data-action="tokens" data-i18n="chat.menu.tokens">Отправить Nectar</button>
+            <button data-action="clear" data-i18n="chat.menu.clear">Очистить чат</button>
+            <button data-action="delete" data-i18n="chat.menu.delete">Удалить чат</button>
+            <button data-action="block" id="menu-block" class="danger" data-i18n="chat.menu.block">Заблокировать</button>
+            <button data-action="channel-profile" class="hidden" data-i18n="chat.menu.channel.profile">Профиль канала</button>
+            <button data-action="channel-invite" class="hidden" data-i18n="chat.menu.channel.invite">Пригласить по ссылке</button>
+            <button data-action="channel-configure" class="hidden" data-i18n="chat.menu.channel.configure">Настроить канал</button>
+            <button data-action="channel-unsubscribe" class="hidden danger" data-i18n="chat.menu.channel.unsubscribe">Отписаться</button>
+            <button data-action="channel-delete" class="hidden danger" data-i18n="chat.menu.channel.delete">Удалить канал</button>
+          </div>
+        </header>
+
+        <div id="chat-search-bar" class="chat-search-bar hidden">
+          <input type="text" id="chat-search-input" placeholder="Поиск в чате..." data-i18n-placeholder="chat.search.placeholder" autocomplete="off">
+          <span class="chat-search-count" id="chat-search-count"></span>
+          <button class="chat-search-nav" id="chat-search-prev" title="Предыдущее" data-i18n-title="chat.search.prev" type="button"><span class="cell-icon cell-icon-sm" data-icon="up"></span></button>
+          <button class="chat-search-nav" id="chat-search-next" title="Следующее" data-i18n-title="chat.search.next" type="button"><span class="cell-icon cell-icon-sm" data-icon="down"></span></button>
+          <button class="chat-search-nav" id="chat-search-close" title="Закрыть" data-i18n-title="chat.search.close" type="button"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
+        </div>
+
+        <div id="block-banner" class="block-banner hidden">
+          <span id="block-banner-text"></span>
+          <button id="unblock-btn" class="hidden" data-i18n="block.unblockAction">Разблокировать</button>
+        </div>
+
+        <div id="pin-bar" class="pin-bar hidden">
+          <span class="pin-bar-icon"><span class="cell-icon" data-icon="pin"></span></span>
+          <div class="pin-bar-content">
+            <div class="pin-bar-title" id="pin-bar-title" data-i18n="chat.pin.title">Закреплённое сообщение</div>
+            <div class="pin-bar-text" id="pin-bar-text"></div>
+          </div>
+          <button class="pin-bar-list-btn" id="pin-bar-list" title="Все закрепы" data-i18n-title="chat.pin.list.open" type="button"><span class="cell-icon" data-icon="menuVertical"></span></button>
+        </div>
+        <div class="messages" id="messages"></div>
+        <div id="date-float" class="date-float hidden"></div>
+        <div id="chat-timeline" class="chat-timeline hidden"></div>
+        <button id="scroll-bottom-btn" class="scroll-bottom-btn" title="Вниз" data-i18n-title="chat.scroll.down"><span class="cell-icon" data-icon="down"></span></button>
+
+        <div id="reply-bar" class="reply-bar hidden">
+          <div class="reply-bar-icon" id="reply-bar-icon">↩</div>
+          <div class="reply-bar-content">
+            <div class="reply-bar-title" id="reply-bar-title" data-i18n="chat.reply.title">Ответ</div>
+            <div class="reply-bar-text" id="reply-bar-text"></div>
+          </div>
+          <button id="reply-bar-close" class="reply-bar-close" title="Отмена" data-i18n-title="chat.reply.cancel"><span class="cell-icon cell-icon-sm" data-icon="cancel"></span></button>
+        </div>
+
+        <div id="e2ee-unlock-banner" class="e2ee-unlock-banner hidden">
+          <span class="cell-icon" data-icon="lock"></span> <span data-i18n="e2ee.banner.text">Сообщения в этом чате зашифрованы.</span>
+          <button type="button" id="e2ee-unlock-banner-btn" data-i18n="e2ee.banner.unlock">Разблокировать</button>
+        </div>
+
+        <div id="e2ee-composer-hint" class="e2ee-composer-hint hidden">
+          <span class="cell-icon cell-icon-sm" data-icon="lock"></span> <span id="e2ee-composer-hint-text" data-i18n="e2ee.composer.hint">Зашифровано</span>
+        </div>
+
+        <form class="composer" id="composer">
+          <button type="button" id="attach-btn" class="attach-btn" title="Прикрепить файл" data-i18n-title="composer.attach"><span class="cell-icon" data-icon="attach"></span></button>
+          <input type="file" id="attach-input" multiple hidden>
+          <div id="message-input" class="message-input" contenteditable="true" data-placeholder="Написать сообщение..." data-i18n-data-placeholder="composer.placeholder" role="textbox" spellcheck="false"></div>
+          <button type="button" id="emoji-btn" class="emoji-btn" title="Эмодзи" data-i18n-title="composer.emoji"><span class="cell-icon" data-icon="happy"></span></button>
+          <button type="submit" class="send-btn" id="send-btn" title="Отправить" data-i18n-title="composer.send"><span class="cell-icon" data-icon="sent"></span></button>
+        </form>
+
+        <div id="emoji-picker" class="emoji-picker hidden">
+          <div class="emoji-picker-tabs" id="emoji-picker-tabs"></div>
+          <div class="emoji-picker-grid" id="emoji-picker-grid"></div>
+        </div>
+
+        <div id="channel-action-bar" class="channel-action-bar hidden">
+          <button id="channel-subscribe-btn" class="channel-action-btn" data-i18n="channel.action.subscribe">Подписаться</button>
+        </div>
+
+        <div id="selection-toolbar" class="selection-toolbar hidden">
+          <span id="selection-count">Выбрано: 0</span>
+          <div>
+            <button id="sel-delete" data-i18n="selection.delete">Удалить</button>
+            <button id="sel-forward" data-i18n="selection.forward">Переслать</button>
+            <button id="sel-cancel" data-i18n="selection.cancel">Отмена</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <div id="dialog-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" id="dialog-title"></div>
+      <div class="dialog-text" id="dialog-text"></div>
+      <div id="dialog-options" class="dialog-options"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="dialog-confirm" disabled>Подтвердить</button>
+        <button class="dialog-btn dialog-cancel" id="dialog-cancel" data-i18n="dialog.cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="profile-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title" data-i18n="profile.title">Профиль</div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="profile.section.avatar">Аватар</div>
+        <div class="avatar-preview">
+          <div class="avatar avatar-large" id="profile-avatar-preview">?</div>
+        </div>
+        <div class="avatar-grid" id="avatar-grid"></div>
+        <label class="upload-btn"><span data-i18n="profile.upload">Загрузить свою</span><input type="file" id="avatar-upload" accept="image/*" hidden></label>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="profile.section.name">Имя</div>
+        <input type="text" id="profile-displayname" placeholder="Ваше имя" data-i18n-placeholder="profile.name.placeholder" maxlength="25" autocomplete="off">
+        <div class="profile-name-counter" id="profile-displayname-counter">0 / 25</div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="profile.section.bio">О себе</div>
+        <textarea id="profile-bio" class="profile-bio-input" placeholder="Пара слов о себе..." data-i18n-placeholder="profile.bio.placeholder" maxlength="200" rows="3"></textarea>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="profile.section.gender">Пол</div>
+        <div class="gender-toggle" id="gender-toggle">
+          <button data-gender="male" data-i18n="profile.gender.male">Мужской</button>
+          <button data-gender="female" data-i18n="profile.gender.female">Женский</button>
+          <button data-gender="unset" data-i18n="profile.gender.unset">Не выбрано</button>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="profile.section.username">Имя пользователя</div>
+        <div class="username-input-wrap">
+          <span class="username-prefix">@</span>
+          <input type="text" id="profile-username" placeholder="username" maxlength="32" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="username-hint" id="username-hint"></div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="profile.section.birthday">День рождения</div>
+        <div class="birthday-input-wrap">
+          <input type="text" id="profile-birthday" placeholder="ДД.ММ или ДД.ММ.ГГГГ" data-i18n-placeholder="profile.birthday.placeholder" maxlength="10" autocomplete="off">
+          <button type="button" id="profile-birthday-calendar" class="birthday-calendar-btn" title="Выбрать дату" data-i18n-title="profile.birthday.calendar"><span class="cell-icon" data-icon="calendar"></span></button>
+          <div id="birthday-calendar" class="birthday-calendar hidden">
+            <div class="bc-header">
+              <button type="button" class="bc-nav" data-bc="prev-year" title="Год назад" data-i18n-title="calendar.prevYear">«</button>
+              <button type="button" class="bc-nav" data-bc="prev-month" title="Месяц назад" data-i18n-title="calendar.prevMonth">‹</button>
+              <div class="bc-title" id="bc-title">—</div>
+              <button type="button" class="bc-nav" data-bc="next-month" title="Месяц вперёд" data-i18n-title="calendar.nextMonth">›</button>
+              <button type="button" class="bc-nav" data-bc="next-year" title="Год вперёд" data-i18n-title="calendar.nextYear">»</button>
+            </div>
+            <div class="bc-days-head">
+              <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+            </div>
+            <div class="bc-days" id="bc-days"></div>
+            <div class="bc-footer">
+              <button type="button" class="bc-btn" id="bc-today" data-i18n="calendar.today">Сегодня</button>
+              <button type="button" class="bc-btn" id="bc-clear" data-i18n="calendar.clear">Очистить</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="profile-gifts-btn" id="profile-gifts-btn">
+        <span style="display:flex;align-items:center;gap:8px;"><span class="cell-icon" data-icon="gift"></span><span data-i18n="profile.gifts">Подарки</span></span>
+        <span class="gifts-count-badge" id="profile-gifts-count">0</span>
+      </button>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="profile-apply" disabled data-i18n="profile.apply">Применить изменения</button>
+        <button class="dialog-btn dialog-cancel" id="profile-close" data-i18n="profile.close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="chat-list-context-menu" class="context-menu hidden">
+    <button data-action="profile" data-i18n="ctx.chat.profile">Профиль</button>
+    <button data-action="rename" data-i18n="ctx.chat.rename">Переименовать</button>
+    <button data-action="mute" id="ctx-chat-mute-btn" data-i18n="ctx.chat.mute">Отключить звук</button>
+    <button data-action="clear" data-i18n="ctx.chat.clear">Очистить чат</button>
+    <button data-action="delete" data-i18n="ctx.chat.delete">Удалить чат</button>
+    <button data-action="block" class="danger" data-i18n="ctx.chat.block">Заблокировать</button>
+    <button data-action="channel-profile" class="hidden" data-i18n="ctx.chat.channelProfile">Профиль канала</button>
+    <button data-action="channel-unsubscribe" class="hidden danger" data-i18n="ctx.chat.channelUnsubscribe">Отписаться</button>
+  </div>
+
+  <div id="user-profile-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-profile">
+      <button type="button" class="profile-back-btn hidden" id="user-profile-back" title="Назад" data-i18n-title="userProfile.back"><span class="cell-icon" data-icon="left"></span></button>
+      <div class="profile-hero">
+        <div class="avatar avatar-large" id="user-profile-avatar">?</div>
+        <div class="profile-hero-name" id="user-profile-name">—</div>
+        <div class="profile-hero-status" id="user-profile-status">—</div>
+        <div class="profile-hero-bio hidden" id="user-profile-bio"></div>
+      </div>
+
+      <div class="profile-info-list">
+        <div class="profile-info-row">
+          <span class="pir-icon">@</span>
+          <div class="pir-body">
+            <div class="pir-value" id="user-profile-username">—</div>
+            <div class="pir-label" data-i18n="userProfile.username">Имя пользователя</div>
+          </div>
+        </div>
+        <div class="profile-info-row">
+          <span class="pir-icon"><span class="cell-icon" data-icon="birthday"></span></span>
+          <div class="pir-body">
+            <div class="pir-value" id="user-profile-birthday">—</div>
+            <div class="pir-label" data-i18n="userProfile.birthday">День рождения</div>
+          </div>
+        </div>
+        <div class="profile-info-row">
+          <span class="pir-icon"><span class="cell-icon" data-icon="typing"></span></span>
+          <div class="pir-body">
+            <div class="pir-value" id="user-profile-msgcount">0</div>
+            <div class="pir-label" data-i18n="userProfile.msgcount">Сообщений в чате</div>
+          </div>
+        </div>
+        <div class="profile-info-row">
+          <span class="pir-icon"><span class="cell-icon" data-icon="calendar"></span></span>
+          <div class="pir-body">
+            <div class="pir-value" id="user-profile-created">—</div>
+            <div class="pir-label" data-i18n="userProfile.created">Дата регистрации аккаунта</div>
+          </div>
+        </div>
+      </div>
+
+      <button class="profile-gifts-btn" id="user-profile-gifts-btn">
+        <span style="display:flex;align-items:center;gap:8px;"><span class="cell-icon" data-icon="gift"></span><span data-i18n="userProfile.gifts">Подарки</span></span>
+        <span class="gifts-count-badge" id="user-profile-gifts-count">0</span>
+      </button>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="user-profile-close" data-i18n="userProfile.close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="format-context-menu" class="context-menu hidden">
+    <button data-format="bold" data-i18n="fmt.bold">Жирный</button>
+    <button data-format="underline" data-i18n="fmt.underline">Подчёркнутый</button>
+    <button data-format="italic" data-i18n="fmt.italic">Курсив</button>
+    <button data-format="strike" data-i18n="fmt.strike">Зачёркнутый</button>
+    <button data-format="quote" data-i18n="fmt.quote">Цитата</button>
+    <button data-format="mono" data-i18n="fmt.mono">Моноширный</button>
+    <button data-format="spoiler" data-i18n="fmt.spoiler">Скрытый</button>
+  </div>
+
+  <div id="msg-context-menu" class="context-menu msg-context-with-reactions hidden">
+    <div class="msg-reactions-bar" id="msg-reactions-bar"></div>
+    <div class="msg-context-divider"></div>
+    <button data-action="reply" data-i18n="msgCtx.reply">Ответить</button>
+    <button data-action="pin" data-i18n="msgCtx.pin">Закрепить</button>
+    <button data-action="save" class="hidden" data-i18n="msgCtx.save">Сохранить</button>
+    <button data-action="copy-image" class="hidden" data-i18n="msgCtx.copyImage">Копировать изображение</button>
+    <button data-action="copy" data-i18n="msgCtx.copy">Копировать</button>
+    <button data-action="edit" data-i18n="msgCtx.edit">Изменить</button>
+    <button data-action="fwd" data-i18n="msgCtx.fwd">Переслать</button>
+    <button data-action="del" data-i18n="msgCtx.del">Удалить</button>
+    <button data-action="sel" data-i18n="msgCtx.sel">Выбрать</button>
+  </div>
+
+  <div id="reaction-picker" class="reaction-picker hidden"></div>
+
+  <div id="media-viewer" class="media-viewer hidden">
+    <button class="media-viewer-close" id="media-viewer-close" title="Закрыть"><span class="cell-icon" data-icon="cancel"></span></button>
+    <button class="media-viewer-nav media-viewer-prev hidden" id="media-viewer-prev" title="Предыдущее"><span class="cell-icon cell-icon-lg" data-icon="back"></span></button>
+    <div class="media-viewer-body" id="media-viewer-body">
+      <div id="media-viewer-content" class="media-viewer-content"></div>
+    </div>
+    <button class="media-viewer-nav media-viewer-next hidden" id="media-viewer-next" title="Следующее"><span class="cell-icon cell-icon-lg" data-icon="forward"></span></button>
+  </div>
+
+  <div id="input-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" id="input-title"></div>
+      <div class="dialog-text" id="input-text"></div>
+      <input type="text" id="input-field">
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="input-confirm">ОК</button>
+        <button class="dialog-btn dialog-cancel" id="input-cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="forward-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" data-i18n="forward.title">Переслать</div>
+      <div class="dialog-text" id="forward-info" data-i18n="forward.pickChats">Выбери чаты</div>
+      <div id="forward-list" class="forward-list"></div>
+      <label class="toggle-row">
+        <input type="checkbox" id="forward-hide-sender">
+        <span data-i18n="forward.hideSender">Скрыть отправителя</span>
+      </label>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="forward-send" data-i18n="forward.send">Переслать</button>
+        <button class="dialog-btn dialog-cancel" id="forward-cancel" data-i18n="dialog.cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="gifts-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-gifts">
+      <div class="gifts-header">
+        <button class="gifts-back-btn hidden" id="gifts-back"><span class="cell-icon" data-icon="left"></span></button>
+        <div class="gifts-title" id="gifts-title">Подарки</div>
+        <div class="gifts-balance"><img class="nectar-icon" src="https://i.ibb.co/MkfVPGwZ/icons8-100.png" alt="Nectar" draggable="false"><span id="gifts-balance">0</span></div>
+      </div>
+      <div id="gifts-content" class="gifts-content"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="gifts-close" data-i18n="profile.close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="gift-purchase-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" id="gift-purchase-title">Купить подарок</div>
+      <div class="dialog-text" id="gift-purchase-info"></div>
+      <input type="text" id="gift-purchase-caption" placeholder="Подпись (необязательно)" data-i18n-placeholder="gifts.purchase.caption" maxlength="25">
+      <div class="gift-caption-counter" id="gift-caption-counter">0 / 25</div>
+      <label class="toggle-row" style="padding:4px 0 10px;">
+        <input type="checkbox" id="gift-purchase-with-name">
+        <span id="gift-purchase-with-name-label">С моим именем</span>
+      </label>
+      <div class="dialog-text" id="gift-purchase-cost" style="text-align:center;font-weight:600;color:var(--accent);"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="gift-purchase-confirm" data-i18n="gifts.purchase.buy">Купить</button>
+        <button class="dialog-btn dialog-cancel" id="gift-purchase-cancel" data-i18n="dialog.cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="gift-send-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" data-i18n="gifts.title.send">Подарить подарок</div>
+      <div class="dialog-text" data-i18n="gifts.send.subtitle">Выбери получателя из своих контактов</div>
+      <div id="gift-send-list" class="forward-list"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="gift-send-confirm" data-i18n="gifts.send.confirm">Подарить</button>
+        <button class="dialog-btn dialog-cancel" id="gift-send-cancel" data-i18n="dialog.cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tokens-send-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" data-i18n="tokens.title">Отправить Nectar</div>
+      <div class="dialog-text" id="tokens-send-to">Кому: —</div>
+      <input type="number" id="tokens-send-amount" placeholder="Сумма" data-i18n-placeholder="tokens.amountPlaceholder" min="1" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none;margin-bottom:12px;">
+      <div class="dialog-text" id="tokens-send-balance" style="text-align:center;"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="tokens-send-confirm" disabled data-i18n="tokens.send">Отправить</button>
+        <button class="dialog-btn dialog-cancel" id="tokens-send-cancel" data-i18n="dialog.cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="channel-profile-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-profile">
+      <div class="profile-menu-btn hidden" id="channel-profile-menu-btn"><span class="cell-icon" data-icon="menuVertical"></span></div>
+      <div class="profile-menu-dropdown hidden" id="channel-profile-menu">
+        <button data-action="edit" data-i18n="channel.menu.edit">Изменить</button>
+        <button data-action="delete" class="danger" data-i18n="channel.menu.delete">Удалить канал</button>
+      </div>
+
+      <div class="profile-hero">
+        <div class="avatar avatar-large" id="channel-profile-avatar">?</div>
+        <div class="profile-hero-name" id="channel-profile-name">—</div>
+        <div class="profile-hero-status" id="channel-profile-subscribers-status">—</div>
+      </div>
+
+      <div class="profile-info-list">
+        <div class="profile-info-row">
+          <span class="pir-icon">@</span>
+          <div class="pir-body">
+            <div class="pir-value" id="channel-profile-username">—</div>
+            <div class="pir-label" data-i18n="channel.profile.username">Юзернейм канала</div>
+          </div>
+        </div>
+        <div class="profile-info-row" id="channel-profile-subs-row" style="cursor:pointer;border-radius:8px;">
+          <span class="pir-icon">👥</span>
+          <div class="pir-body">
+            <div class="pir-value" id="channel-profile-subscribers">0</div>
+            <div class="pir-label" data-i18n="channel.profile.subsHint">Подписчиков · нажми, чтобы посмотреть список</div>
+          </div>
+        </div>
+        <div class="profile-info-row hidden" id="channel-profile-requests-row" style="cursor:pointer;border-radius:8px;">
+          <span class="pir-icon">📩</span>
+          <div class="pir-body">
+            <div class="pir-value" id="channel-profile-requests">0</div>
+            <div class="pir-label" data-i18n="channel.profile.requestsHint">Заявок на вступление · нажми, чтобы посмотреть</div>
+          </div>
+        </div>
+        <div class="profile-info-row">
+          <span class="pir-icon"><span class="cell-icon" data-icon="eye"></span></span>
+          <div class="pir-body">
+            <div class="pir-value" id="channel-profile-views">0</div>
+            <div class="pir-label" data-i18n="channel.profile.views">Просмотров за все время</div>
+          </div>
+        </div>
+        <div class="profile-info-row">
+          <span class="pir-icon"><span class="cell-icon" data-icon="calendar"></span></span>
+          <div class="pir-body">
+            <div class="pir-value" id="channel-profile-created">—</div>
+            <div class="pir-label" data-i18n="channel.profile.created">Дата создания</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="channel-profile-close" data-i18n="profile.close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="channel-subs-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title" id="channel-subs-title" data-i18n="channel.profile.subsList">Подписчики</div>
+      <div id="channel-subs-list" class="admins-list" style="max-height:60vh;overflow-y:auto;"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="channel-subs-close" data-i18n="profile.close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="channel-create-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title" data-i18n="channel.create.title">Создать канал</div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="channel.create.avatar">Аватар</div>
+        <div class="avatar-preview">
+          <div class="avatar avatar-large" id="channel-avatar-preview">К</div>
+        </div>
+        <div class="avatar-grid" id="channel-avatar-grid"></div>
+        <label class="upload-btn"><span data-i18n="channel.create.uploadOwn">Загрузить свою</span><input type="file" id="channel-avatar-upload" accept="image/*" hidden></label>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="channel.create.name">Название</div>
+        <input type="text" id="channel-name-input" placeholder="Название канала" data-i18n-placeholder="channel.create.namePlaceholder" maxlength="25">
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="channel.create.username">Юзернейм канала</div>
+        <div class="username-input-wrap">
+          <span class="username-prefix">@</span>
+          <input type="text" id="channel-username-input" placeholder="username" maxlength="32" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="username-hint" id="channel-username-hint"></div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="channel.create.visibility">Тип канала</div>
+        <div class="visibility-toggle" id="channel-visibility-toggle">
+          <button type="button" data-vis="public" data-i18n="channel.create.visibility.public">Открытый</button>
+          <button type="button" data-vis="request" data-i18n="channel.create.visibility.request">По заявке</button>
+          <button type="button" data-vis="private" data-i18n="channel.create.visibility.private">Приватный</button>
+        </div>
+        <div class="username-hint" id="channel-visibility-hint" data-i18n="channel.create.visibility.hint">
+          Открытый — любой может подписаться. По заявке — нужна одобренная заявка. Приватный — только по ссылке-приглашению.
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="channel-create-confirm" disabled data-i18n="channel.create.confirm">Создать канал</button>
+        <button class="dialog-btn dialog-cancel" id="channel-create-cancel" data-i18n="dialog.cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="channel-edit-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title" data-i18n="channel.edit.title">Изменить канал</div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="channel.create.avatar">Аватар</div>
+        <div class="avatar-preview">
+          <div class="avatar avatar-large" id="channel-edit-avatar-preview">К</div>
+        </div>
+        <div class="avatar-grid" id="channel-edit-avatar-grid"></div>
+        <label class="upload-btn"><span data-i18n="channel.create.uploadOwn">Загрузить свою</span><input type="file" id="channel-edit-avatar-upload" accept="image/*" hidden></label>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="channel.create.name">Название</div>
+        <input type="text" id="channel-edit-name-input" placeholder="Название канала" data-i18n-placeholder="channel.create.namePlaceholder" maxlength="25">
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="channel.create.username">Юзернейм канала</div>
+        <div class="username-input-wrap">
+          <span class="username-prefix">@</span>
+          <input type="text" id="channel-edit-username-input" placeholder="username" maxlength="32" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="username-hint" id="channel-edit-username-hint"></div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="channel.create.visibility">Тип канала</div>
+        <div class="visibility-toggle" id="channel-edit-visibility-toggle">
+          <button type="button" data-vis="public" data-i18n="channel.create.visibility.public">Открытый</button>
+          <button type="button" data-vis="request" data-i18n="channel.create.visibility.request">По заявке</button>
+          <button type="button" data-vis="private" data-i18n="channel.create.visibility.private">Приватный</button>
+        </div>
+        <div class="username-hint" id="channel-edit-visibility-hint" data-i18n="channel.create.visibility.hint">
+          Открытый — любой может подписаться. По заявке — нужна одобренная заявка. Приватный — только по ссылке-приглашению.
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="channel.edit.reactions">Доступные реакции</div>
+        <div class="reactions-grid" id="channel-edit-reactions"></div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="channel.edit.admins">Администраторы</div>
+        <div id="channel-edit-admins" class="admins-list"></div>
+        <button type="button" id="channel-edit-add-admin" class="dialog-btn" style="width:100%;margin-top:8px;" data-i18n="channel.edit.addAdmin">+ Добавить администратора</button>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="channel.edit.owner">Владелец канала</div>
+        <div id="channel-edit-owner" class="admins-list"></div>
+        <button type="button" id="channel-edit-transfer" class="dialog-btn" style="width:100%;margin-top:8px;" data-i18n="channel.edit.transfer">Передать владение</button>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="channel-edit-save" data-i18n="channel.edit.save">Сохранить</button>
+        <button class="dialog-btn dialog-cancel" id="channel-edit-cancel" data-i18n="dialog.cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pinned-list-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" data-i18n="pins.title">Закреплённые сообщения</div>
+      <div id="pinned-list" class="pinned-list"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="pinned-list-close" data-i18n="profile.close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="invite-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" data-i18n="invite.title">Ссылка-приглашение</div>
+      <div class="dialog-text" data-i18n="invite.text">По ссылке любой сможет подписаться на канал.</div>
+      <button class="dialog-btn dialog-primary" id="invite-create-btn" style="width:100%;margin-bottom:12px;" data-i18n="invite.create">Создать новую ссылку</button>
+      <div id="invite-list" class="invite-list"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="invite-close-btn" data-i18n="profile.close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="channel-requests-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title" data-i18n="channel.profile.requestsList">Заявки на вступление</div>
+      <div id="channel-requests-list" class="admins-list" style="max-height:60vh;overflow-y:auto;"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="channel-requests-close" data-i18n="profile.close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="settings-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-settings">
+      <div class="dialog-title" data-i18n="settings.title">Настройки</div>
+
+      <div class="profile-section" id="settings-language-section">
+        <div class="profile-label" data-i18n="settings.language.label">Язык</div>
+        <div class="visibility-toggle" id="settings-language-toggle">
+          <button type="button" data-lang="ru">Русский</button>
+          <button type="button" data-lang="en">English</button>
+        </div>
+      </div>
+
+      <div class="profile-section" id="settings-notifications-section">
+        <div class="profile-label" data-i18n="settings.notifications.label">Уведомления</div>
+        <label class="toggle-row" style="padding:4px 0 8px;">
+          <input type="checkbox" id="settings-notifications-enabled">
+          <span data-i18n="settings.notifications.enable">Показывать уведомления о новых сообщениях</span>
+        </label>
+        <div class="username-hint" id="settings-notifications-hint" data-i18n="settings.notifications.hint">
+          На компьютере уведомление всплывает в системном углу экрана. На телефоне — работает, когда приложение открыто или свёрнуто.
+        </div>
+        <button type="button" class="dialog-btn" id="settings-notifications-test" style="width:100%;margin-top:6px;" data-i18n="settings.notifications.test">
+          Проверить уведомление
+        </button>
+      </div>
+
+      <div class="profile-section" id="settings-accent-section">
+        <div class="profile-label" data-i18n="settings.accent.label">Цвет приложения</div>
+        <div class="accent-grid" id="accent-grid"></div>
+      </div>
+
+      <div class="profile-section" id="settings-scroll-mode-section">
+        <div class="profile-label" data-i18n="settings.scrollMode.label">Режим списка чатов</div>
+        <div class="visibility-toggle" id="settings-scroll-mode">
+          <button type="button" data-mode="classic" data-i18n="settings.scrollMode.classic">Обычный</button>
+          <button type="button" data-mode="wheel" data-i18n="settings.scrollMode.wheel">Современный</button>
+        </div>
+        <div class="username-hint" data-i18n="settings.scrollMode.hint">
+          Обычный — привычный список. Современный — колесо с центрированием и плавным переходом.
+        </div>
+      </div>
+
+      <div class="profile-section" id="settings-quick-reaction-section">
+        <div class="profile-label" data-i18n="settings.quickReaction.label">Быстрая реакция</div>
+        <div class="username-hint" style="margin-bottom:8px;" data-i18n="settings.quickReaction.hint">
+          Двойной тап по сообщению поставит эту реакцию.
+        </div>
+        <div class="quick-reaction-grid" id="quick-reaction-grid"></div>
+      </div>
+
+      <div class="profile-section" id="settings-app-icon-section">
+        <div class="profile-label" data-i18n="settings.appIcon.label">Иконка приложения</div>
+        <div class="username-hint" style="margin-bottom:8px;" data-i18n="settings.appIcon.hint">
+          Выбери иконку — она применится к установленному приложению. На iPhone иконку сменить нельзя — это ограничение iOS.
+        </div>
+        <div class="app-icon-grid" id="app-icon-grid"></div>
+      </div>
+
+      <div class="profile-section" id="settings-grandma-section">
+        <div class="profile-label" data-i18n="settings.grandma.label">Режим «Бабушка»</div>
+        <div class="username-hint" style="margin-bottom:10px;" data-i18n="settings.grandma.hint">
+          Упрощает интерфейс: убирает 2FA, шифрование, выход из аккаунта и лишние пункты меню.
+          Отключить можно долгим нажатием на аватар в боковом меню (1.5 сек).
+        </div>
+        <button type="button" class="dialog-btn" id="grandma-toggle-btn" style="width:100%;" data-i18n="settings.grandma.enable">
+          Включить режим «Бабушка»
+        </button>
+      </div>
+
+      <div class="profile-section" id="settings-mfa-section">
+        <div class="profile-label" data-i18n="settings.mfa.label">Двухфакторная аутентификация</div>
+        <div id="mfa-status-row" style="font-size:13px;color:var(--text-sub);margin-bottom:10px;"></div>
+        <button type="button" class="dialog-btn" id="mfa-manage-btn" style="width:100%;" data-i18n="settings.mfa.manage">Управлять 2FA</button>
+      </div>
+
+      <div class="profile-section" id="settings-e2ee-section">
+        <div class="profile-label" data-i18n="settings.e2ee.label">Шифрование</div>
+        <div id="e2ee-status-row" style="font-size:13px;color:var(--text-sub);margin-bottom:10px;"></div>
+        <button type="button" class="dialog-btn" id="e2ee-manage-btn" style="width:100%;" data-i18n="settings.e2ee.manage">Управлять шифрованием</button>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="settings-close" data-i18n="settings.close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="about-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-about">
+      <div class="about-logo">
+        <div class="about-logo-cell">
+          <svg viewBox="0 0 100 100" width="64" height="64">
+            <polygon points="50,5 93,27 93,73 50,95 7,73 7,27" fill="currentColor"/>
+            <circle cx="50" cy="50" r="13" fill="var(--bg-card)"/>
+          </svg>
+        </div>
+        <div class="about-app-name">Cell</div>
+        <div class="about-app-tagline" data-i18n="auth.tagline">Собираемся по кусочкам</div>
+      </div>
+
+      <div class="about-section">
+        <div class="about-section-title" data-i18n="about.section.about">О приложении</div>
+        <div class="about-text" data-i18n="about.text.about">
+          Cell — семейный мессенджер. Каждый чат — это ячейка, а вместе они
+          собираются в улей твоих близких. Здесь нет публичного шума: только ты,
+          твоя семья и те, кому ты доверяешь.
+        </div>
+      </div>
+
+      <div class="about-section">
+        <div class="about-section-title" data-i18n="about.section.features">Возможности</div>
+        <div class="about-text" data-i18n="about.text.features">
+          Личные чаты и каналы, вложения и подарки, закрепы и поиск, реакции
+          и пересылка — всё, чтобы быть на связи.
+        </div>
+      </div>
+
+      <div class="about-section">
+        <div class="about-section-title" data-i18n="about.section.credits">Благодарности</div>
+        <!-- ▼▼▼ ЗДЕСЬ РЕДАКТИРУЙ ТЕКСТ БЛАГОДАРНОСТЕЙ ▼▼▼ -->
+        <div class="about-text">
+          <span data-i18n="about.credits.before">Часть иконок взята с сайтов</span>
+          <a href="https://www.flaticon.com/" target="_blank" rel="noopener">Flaticon</a>
+          <span data-i18n="about.credits.and">и</span>
+          <a href="https://icons8.ru/icons" target="_blank" rel="noopener">Icons8</a>.
+          <span data-i18n="about.credits.after">Спасибо авторам за бесплатные наборы.</span>
+        </div>
+        <!-- ▲▲▲ ЗДЕСЬ РЕДАКТИРУЙ ТЕКСТ БЛАГОДАРНОСТЕЙ ▲▲▲ -->
+      </div>
+
+      <div class="about-section">
+        <div class="about-section-title" data-i18n="about.section.version">Версия</div>
+        <div class="about-text">beta0.2.14 · Cell</div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="about-close" data-i18n="about.close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ ЭКРАН ВВОДА КОДА 2FA ПРИ ВХОДЕ ═══════ -->
+  <div id="mfa-challenge-overlay" class="dialog-overlay hidden" style="z-index:9000;">
+    <div class="dialog">
+      <div class="dialog-title" data-i18n="mfa.title">Двухфакторная аутентификация</div>
+      <div class="dialog-text" data-i18n="mfa.challenge.text">
+        Открой приложение-аутентификатор и введи 6-значный код.
+      </div>
+      <input type="text" id="mfa-challenge-code" inputmode="numeric" maxlength="6"
+             placeholder="000000" autocomplete="one-time-code"
+             style="width:100%;padding:14px;background:var(--bg-input);
+                    border:1px solid var(--border);border-radius:12px;
+                    color:var(--text);font-size:22px;letter-spacing:8px;
+                    text-align:center;outline:none;margin-bottom:12px;">
+      <p class="error" id="mfa-challenge-error" style="margin-bottom:10px;"></p>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="mfa-challenge-submit" data-i18n="mfa.challenge.submit">Подтвердить</button>
+        <button class="dialog-btn dialog-cancel" id="mfa-challenge-cancel" data-i18n="mfa.challenge.exit">Выйти</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ ОКНО НАСТРОЙКИ 2FA ═══════ -->
+  <div id="mfa-setup-overlay" class="dialog-overlay hidden" style="z-index:9000;">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title" data-i18n="mfa.title">Двухфакторная аутентификация</div>
+      <div id="mfa-setup-body"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="mfa-setup-close" data-i18n="profile.close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ E2EE: мастер включения ═══════ -->
+  <div id="e2ee-setup-overlay" class="dialog-overlay hidden" style="z-index:9000;">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title" id="e2ee-setup-title">Шифрование сообщений</div>
+      <div id="e2ee-setup-body"></div>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-cancel" id="e2ee-setup-close" data-i18n="profile.close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ E2EE: показ recovery-кода ═══════ -->
+  <div id="e2ee-recovery-overlay" class="dialog-overlay hidden" style="z-index:9100;">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title" data-i18n="e2ee.setup.recoveryTitle">⚠️ Код восстановления</div>
+      <div class="dialog-text" data-i18n="e2ee.setup.recoveryText">
+        Сохрани эти 12 слов в надёжном месте (менеджер паролей или бумага).
+        Если забудешь пароль — <b>только с их помощью</b> сможешь восстановить
+        доступ к зашифрованным сообщениям. Мы не сможем тебе помочь.
+      </div>
+      <div id="e2ee-recovery-words"
+           style="background:var(--bg-input);border:1px solid var(--border);
+                  border-radius:12px;padding:16px;font-size:15px;line-height:1.8;
+                  text-align:center;font-family:ui-monospace,Menlo,monospace;
+                  user-select:all;margin-bottom:12px;"></div>
+      <label class="toggle-row">
+        <input type="checkbox" id="e2ee-recovery-confirm">
+        <span data-i18n="e2ee.setup.recoveryConfirm">Я сохранил код и понимаю, что без него не восстановлю доступ</span>
+      </label>
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="e2ee-recovery-continue" disabled data-i18n="e2ee.setup.recoveryContinue">Продолжить</button>
+        <button class="dialog-btn dialog-cancel" id="e2ee-recovery-back" data-i18n="e2ee.setup.recoveryBack">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="cmd-palette-overlay" class="cmd-palette-overlay hidden">
+    <div class="cmd-palette">
+      <div class="cmd-palette-head">
+        <span class="cmd-palette-icon">⌘</span>
+        <input type="text" id="cmd-palette-input" placeholder="Поиск чатов, каналов, людей или команда >" data-i18n-placeholder="cmd.placeholder" autocomplete="off" spellcheck="false">
+        <span class="cmd-palette-hint">Esc</span>
+      </div>
+      <div id="cmd-palette-list" class="cmd-palette-list"></div>
+      <div class="cmd-palette-foot">
+        <span><kbd>↑</kbd><kbd>↓</kbd> — <span data-i18n="cmd.foot.select">выбор</span></span>
+        <span><kbd>Enter</kbd> — <span data-i18n="cmd.foot.open">открыть</span></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="mini-profile" class="mini-profile hidden">
+    <div class="mini-profile-head">
+      <div class="avatar" id="mini-profile-avatar">?</div>
+      <div class="mini-profile-info">
+        <div class="mini-profile-name" id="mini-profile-name">—</div>
+        <div class="mini-profile-username" id="mini-profile-username">@—</div>
+      </div>
+    </div>
+    <div class="mini-profile-status" id="mini-profile-status">—</div>
+  </div>
+
+  <div id="attach-preview-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-attach-preview">
+      <div class="dialog-title" id="attach-preview-title">Отправить</div>
+
+      <div id="attach-preview-list" class="attach-preview-list"></div>
+
+      <label class="toggle-row attach-preview-toggle">
+        <span class="cell-icon cell-icon-sm" data-icon="checkboxOff" id="attach-as-file-icon"></span>
+        <input type="checkbox" id="attach-as-file">
+        <span data-i18n="attach.asFile">Отправить как файл</span>
+      </label>
+
+      <div class="profile-label" style="margin-top:4px;" data-i18n="attach.caption">Подпись</div>
+      <textarea id="attach-caption" class="attach-caption" placeholder="Введите подпись..." data-i18n-placeholder="attach.captionPlaceholder" rows="1"></textarea>
+
+      <input type="file" id="attach-more-input" multiple hidden>
+
+      <div class="attach-preview-actions">
+        <button type="button" class="attach-add-btn" id="attach-add-btn" title="Добавить файл" data-i18n-title="attach.addFile"><span class="cell-icon" data-icon="addFile"></span></button>
+        <div class="attach-preview-actions-right">
+          <button class="dialog-btn dialog-cancel" id="attach-preview-cancel" data-i18n="dialog.cancel">Отмена</button>
+          <button class="dialog-btn dialog-primary" id="attach-preview-send" data-i18n="attach.send">Отправить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ КРОП АВАТАРА ═══════ -->
+  <div id="avatar-cropper-overlay" class="dialog-overlay hidden" style="z-index:9500;">
+    <div class="dialog dialog-profile" style="max-width:380px;">
+      <div class="dialog-title">Настроить аватар</div>
+      <div class="dialog-text" style="margin-bottom:12px;">
+        Перетащи фото, чтобы выбрать область. Зум — двумя пальцами или колесом.
+      </div>
+      <div class="cropper-stage" id="cropper-stage">
+        <img id="cropper-img" class="cropper-img" alt="" draggable="false">
+        <div class="cropper-mask"></div>
+      </div>
+      <input type="range" id="cropper-zoom" class="cropper-zoom" min="1" max="2" step="0.01" value="1">
+      <div class="dialog-actions" style="margin-top:12px;">
+        <button class="dialog-btn dialog-primary" id="cropper-apply">Применить</button>
+        <button class="dialog-btn dialog-cancel" id="cropper-cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ ФИЛЬТР ПОДАРКОВ ═══════ -->
+  <div id="gift-filter-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" data-i18n="gifts.filter.title">Фильтр подарков</div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="gifts.filter.rarityLabel">Редкость</div>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="common">
+          <span data-i18n="gifts.filter.common">Обычные</span>
+        </label>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="rare">
+          <span data-i18n="gifts.filter.rare">Редкие</span>
+        </label>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="epic">
+          <span data-i18n="gifts.filter.epic">Эпические</span>
+        </label>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="gifts.filter.pinnedLabel">Закрепление</div>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="pinned">
+          <span data-i18n="gifts.filter.pinned">Закреплённые</span>
+        </label>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="unpinned">
+          <span data-i18n="gifts.filter.unpinned">Незакреплённые</span>
+        </label>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="gifts.filter.profileLabel">В профиле</div>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="inProfile">
+          <span data-i18n="gifts.filter.inProfile">В профиле</span>
+        </label>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="notInProfile">
+          <span data-i18n="gifts.filter.notInProfile">Не в профиле</span>
+        </label>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="gift-filter-apply" data-i18n="dialog.confirm">Применить</button>
+        <button class="dialog-btn dialog-cancel" id="gift-filter-reset" data-i18n="gifts.filter.reset">Сбросить</button>
+        <button class="dialog-btn dialog-cancel" id="gift-filter-cancel" data-i18n="dialog.cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="gift-context-menu" class="context-menu hidden">
+    <button data-action="pin" data-i18n="gifts.action.pin">Закрепить</button>
+    <button data-action="visibility" data-i18n="gifts.action.toProfile">Добавить в профиль</button>
+  </div>
+
+  <!-- Контейнер для in-app уведомлений (тостов) -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Плашка «Доступна новая версия» -->
+  <div id="update-banner" class="update-banner hidden">
+    <span>Доступна новая версия Cell</span>
+    <button type="button" id="update-banner-reload">Перезагрузить</button>
+    <button type="button" id="update-banner-close" aria-label="Скрыть">✕</button>
+  </div>
+
+  <script type="module" src="app.js"></script>
+
+  <!-- Регистрация service worker (PWA) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        const updateBanner = document.getElementById('update-banner');
+        const reloadBtn = document.getElementById('update-banner-reload');
+        const closeBtn = document.getElementById('update-banner-close');
+        let reloadTriggered = false;
+
+        function showUpdateBanner() {
+          if (!updateBanner) return;
+          updateBanner.classList.remove('hidden');
+        }
+        function hideUpdateBanner() {
+          if (!updateBanner) return;
+          updateBanner.classList.add('hidden');
+        }
+
+        if (closeBtn) closeBtn.addEventListener('click', hideUpdateBanner);
+
+        // 🔴 Cache-busting перезагрузка: добавляем ?_r=<timestamp> —
+        // браузер считает это новым URL и не берёт index.html из HTTP-кэша.
+        // Вместе с fetch(cache:"reload") в sw.js это даёт аналог Ctrl+Shift+R.
+        function hardReload() {
+          const url = new URL(window.location.href);
+          url.searchParams.set('_r', Date.now());
+          window.location.replace(url.toString());
+        }
+
+        if (reloadBtn) {
+          reloadBtn.addEventListener('click', () => {
+            reloadTriggered = true;
+            hideUpdateBanner();
+            navigator.serviceWorker.getRegistration()
+              .then((reg) => {
+                if (reg && reg.waiting) {
+                  // Просим новый SW активироваться.
+                  reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                  // 🔴 Fallback: если через 2.5 сек controllerchange не сработал
+                  // (iOS PWA иногда молчит) — делаем cache-busting перезагрузку.
+                  setTimeout(() => {
+                    if (reloadTriggered) hardReload();
+                  }, 2500);
+                } else {
+                  hardReload();
+                }
+              })
+              .catch(() => hardReload());
+          });
+        }
+
+        // Когда новый SW активировался после нашего SKIP_WAITING — перезагружаем страницу.
+        // ⚠️ Только если это был наш явный перезапуск. Иначе не трогаем —
+        // фоновое обновление SW не должно ронять страницу.
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!reloadTriggered) return;
+          reloadTriggered = false;
+          // 🔴 Cache-busting — см. hardReload() выше.
+          const url = new URL(window.location.href);
+          url.searchParams.set('_r', Date.now());
+          window.location.replace(url.toString());
+        });
+
+      navigator.serviceWorker
+        // 🔴 updateViaCache: 'none' — обязательно для PWA. Иначе Chrome
+        // кэширует sw.js через HTTP-кэш (у GH Pages есть Cache-Control),
+        // и reg.update() не видит новую версию. Плашка обновления никогда
+        // не появится, пока не почистишь кэш руками.
+        .register('./sw.js', { scope: './', updateViaCache: 'none' })
+        .then((reg) => {
+          // 🔴 Убрали проверку navigator.serviceWorker.controller.
+          // Она ломала показ плашки на iOS PWA при первой загрузке после
+          // перезапуска приложения: controller там null, а waiting уже есть —
+          // плашка не появлялась, хотя обновление готово.
+          if (reg.waiting) showUpdateBanner();
+
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            if (!newWorker) return;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed') {
+                // Новый SW скачан и ждёт активации
+                showUpdateBanner();
+              }
+            });
+          });
+
+          // 🔴 Проверяем обновления АГРЕССИВНО:
+          // — сразу при загрузке;
+          // — раз в 1 минуту (было 5, в PWA страница живёт сутками);
+          // — при visibilitychange (возврат на вкладку);
+          // — при focus (клик по окну);
+          // — при pageshow (iOS PWA «раскрывается» из фона именно так).
+          const checkUpdate = () => {
+            reg.update().catch(() => {});
+            if (reg.waiting) showUpdateBanner();
+          };
+          checkUpdate();
+          setInterval(checkUpdate, 60 * 1000);
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') checkUpdate();
+          });
+          window.addEventListener('focus', checkUpdate);
+          window.addEventListener('pageshow', checkUpdate);
+        })
+        .catch((err) => console.warn('SW registration failed:', err));
+      });
+    }
+  </script>
+</body>
+</html>
