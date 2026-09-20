@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-v81";
+const CACHE_VERSION = "cell-v82";
 
 const CACHE_FILES = [
   "./",
@@ -204,23 +204,34 @@ self.addEventListener("notificationclick", (event) => {
   const chatId = event.notification.data && event.notification.data.chatId;
   const targetUrl = self.registration.scope;
 
-  event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
-      // Если есть открытое окно Cell — фокусируем его и шлём сообщение.
-      for (const c of list) {
-        if (c.url.startsWith(targetUrl)) {
-          c.focus();
-          if (chatId) {
-            c.postMessage({ type: "OPEN_CHAT", chatId: chatId });
-          }
-          return;
-        }
-      }
-      // Иначе открываем новое окно. chatId передаём через хэш URL.
-      const url = chatId
-        ? (targetUrl + "#open-chat=" + encodeURIComponent(chatId))
-        : targetUrl;
-      if (clients.openWindow) return clients.openWindow(url);
-    })
-  );
+  event.waitUntil((async () => {
+    const list = await clients.matchAll({ type: "window", includeUncontrolled: true });
+
+    // 🔴 Приоритет PWA (standalone): если у пользователя открыты
+    // И вкладка браузера, И установленная PWA — обе делят один SW,
+    // и клик по уведомлению раньше попадал в первую найденную.
+    const pwaClient = list.find((c) =>
+      c.url.startsWith(targetUrl) && c.displayMode === "standalone"
+    );
+    if (pwaClient) {
+      await pwaClient.focus();
+      if (chatId) pwaClient.postMessage({ type: "OPEN_CHAT", chatId });
+      return;
+    }
+
+    // Иначе — любое другое окно Cell (вкладка браузера).
+    const anyCellClient = list.find((c) => c.url.startsWith(targetUrl));
+    if (anyCellClient) {
+      await anyCellClient.focus();
+      if (chatId) anyCellClient.postMessage({ type: "OPEN_CHAT", chatId });
+      return;
+    }
+
+    // Ничего открытого — открываем новое окно. На Android Chrome
+    // при установленной PWA это откроет именно PWA.
+    const url = chatId
+      ? (targetUrl + "#open-chat=" + encodeURIComponent(chatId))
+      : targetUrl;
+    if (clients.openWindow) return clients.openWindow(url);
+  })());
 });
