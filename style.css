@@ -3629,6 +3629,7 @@ button:not(:disabled):active { transform: scale(0.97); }
 .cell-icon[data-icon="phone"]        { --icon: url("https://i.ibb.co/B2nTLVx9/icons8-phone-100.png"); }
 .cell-icon[data-icon="birthday"]     { --icon: url("https://i.ibb.co/0Rdgd9Qh/icons8-birthday-100.png"); }
 .cell-icon[data-icon="typing"]       { --icon: url("https://i.ibb.co/SSq1TyZ/icons8-typing-100.png"); }
+.cell-icon[data-icon="filter"]       { --icon: url("https://i.ibb.co/5X5QfCZH/icons8-100.png"); }
 
 .icon-btn { display: flex; align-items: center; justify-content: center; }
 
@@ -4634,35 +4635,80 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 /* ФИЛЬТР ПОДАРКОВ В ПРОФИЛЕ                               */
 /* ====================================================== */
 
-.gifts-filter-bar {
+.gifts-actions-row {
   display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding: 2px 2px 10px;
-  margin-bottom: 10px;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: stretch;
 }
-.gifts-filter-bar::-webkit-scrollbar { display: none; }
 
-.gift-filter-chip {
-  flex-shrink: 0;
-  padding: 6px 12px;
-  border-radius: 16px;
+.gifts-filter-icon-btn {
+  width: 46px;
+  min-width: 46px;
+  border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--bg-input);
   color: var(--text-sub);
-  font-size: 12px;
-  font-family: inherit;
-  font-weight: 500;
   cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  padding: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.gift-filter-chip:hover { border-color: var(--accent); color: var(--text); }
-.gift-filter-chip.active {
-  background: var(--accent);
+.gifts-filter-icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
   border-color: var(--accent);
-  color: #15110d;
-  font-weight: 700;
+}
+.gifts-filter-icon-btn .cell-icon {
+  width: 22px;
+  height: 22px;
+}
+
+/* ====================================================== */
+/* ОТКЛЮЧАЕМ HOVER НА ТАЧ-УСТРОЙСТВАХ                       */
+/* ====================================================== */
+/* На тач-устройствах :hover «залипает»: элемент, который
+   оказался под пальцем при свайпе, остаётся подсвеченным
+   до следующего тапа. Это даёт ложную подсветку чата при
+   свайпах по списку. Отключаем hover-эффект полностью. */
+@media (hover: none), (pointer: coarse) {
+  .user-item:hover {
+    background: transparent !important;
+    transform: none !important;
+  }
+  .user-item.active,
+  .user-item.active:hover {
+    background: var(--bg-active) !important;
+    transform: none !important;
+  }
+  .gift-card:hover,
+  .forward-item:hover {
+    transform: none !important;
+    background: transparent !important;
+  }
+  .gift-tile:hover {
+    transform: none !important;
+    background: var(--bg-input) !important;
+    border-color: var(--border) !important;
+  }
+  .gift-tile.in-profile:hover {
+    border-color: var(--accent) !important;
+  }
+  .dialog-option:hover {
+    border-color: var(--border) !important;
+  }
+  .icon-btn:hover {
+    background: transparent !important;
+    color: var(--text-dim) !important;
+  }
+  .icon-btn:hover .cell-icon {
+    background-color: currentColor !important;
+  }
+  .accent-option:hover,
+  .avatar-option:hover {
+    transform: none !important;
+  }
 }

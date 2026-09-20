@@ -1086,7 +1086,58 @@
     </div>
   </div>
 
-  <div id="gift-context-menu" class="context-menu hidden">
+  <!-- ═══════ ФИЛЬТР ПОДАРКОВ ═══════ -->
+  <div id="gift-filter-overlay" class="dialog-overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" data-i18n="gifts.filter.title">Фильтр подарков</div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="gifts.filter.rarityLabel">Редкость</div>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="common">
+          <span data-i18n="gifts.filter.common">Обычные</span>
+        </label>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="rare">
+          <span data-i18n="gifts.filter.rare">Редкие</span>
+        </label>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="epic">
+          <span data-i18n="gifts.filter.epic">Эпические</span>
+        </label>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="gifts.filter.pinnedLabel">Закрепление</div>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="pinned">
+          <span data-i18n="gifts.filter.pinned">Закреплённые</span>
+        </label>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="unpinned">
+          <span data-i18n="gifts.filter.unpinned">Незакреплённые</span>
+        </label>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label" data-i18n="gifts.filter.profileLabel">В профиле</div>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="inProfile">
+          <span data-i18n="gifts.filter.inProfile">В профиле</span>
+        </label>
+        <label class="toggle-row" style="padding:6px 0;">
+          <input type="checkbox" data-gift-filter-check="notInProfile">
+          <span data-i18n="gifts.filter.notInProfile">Не в профиле</span>
+        </label>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="gift-filter-apply" data-i18n="dialog.confirm">Применить</button>
+        <button class="dialog-btn dialog-cancel" id="gift-filter-reset" data-i18n="gifts.filter.reset">Сбросить</button>
+        <button class="dialog-btn dialog-cancel" id="gift-filter-cancel" data-i18n="dialog.cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
     <button data-action="pin" data-i18n="gifts.action.pin">Закрепить</button>
     <button data-action="visibility" data-i18n="gifts.action.toProfile">Добавить в профиль</button>
   </div>

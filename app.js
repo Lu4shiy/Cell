@@ -132,6 +132,7 @@ const ICONS = {
   heart:           "https://i.ibb.co/7BkZr68/icons8-heart-100.png",
 
   // === Прочее (в запасе на будущее) ===
+  filter:          "https://i.ibb.co/5X5QfCZH/icons8-100.png",
   home:            "https://i.ibb.co/d0w14w2c/icons8-home-100.png",
   folder:          "https://i.ibb.co/MDWNyVx0/icons8-folder-100.png",
   calendar:        "https://i.ibb.co/mFzbsxdN/icons8-calendar-100.png",
@@ -526,7 +527,10 @@ const I18N = {
     "gifts.rarity.common": "Обычный",
     "gifts.rarity.rare": "Редкий",
     "gifts.rarity.epic": "Эпический",
-    "gifts.filter.all": "Все",
+    "gifts.filter.title": "Фильтр подарков",
+    "gifts.filter.rarityLabel": "Редкость",
+    "gifts.filter.pinnedLabel": "Закрепление",
+    "gifts.filter.profileLabel": "В профиле",
     "gifts.filter.common": "Обычные",
     "gifts.filter.rare": "Редкие",
     "gifts.filter.epic": "Эпические",
@@ -534,6 +538,7 @@ const I18N = {
     "gifts.filter.unpinned": "Незакреплённые",
     "gifts.filter.inProfile": "В профиле",
     "gifts.filter.notInProfile": "Не в профиле",
+    "gifts.filter.reset": "Сбросить",
     "gifts.title.mine": "Мои подарки",
     "gifts.title.user": "Подарки: {name}",
     "gifts.title.detail": "Подарок",
@@ -1280,7 +1285,10 @@ const I18N = {
     "gifts.rarity.common": "Common",
     "gifts.rarity.rare": "Rare",
     "gifts.rarity.epic": "Epic",
-    "gifts.filter.all": "All",
+    "gifts.filter.title": "Gift filter",
+    "gifts.filter.rarityLabel": "Rarity",
+    "gifts.filter.pinnedLabel": "Pin status",
+    "gifts.filter.profileLabel": "Profile visibility",
     "gifts.filter.common": "Common",
     "gifts.filter.rare": "Rare",
     "gifts.filter.epic": "Epic",
@@ -1288,6 +1296,7 @@ const I18N = {
     "gifts.filter.unpinned": "Unpinned",
     "gifts.filter.inProfile": "In profile",
     "gifts.filter.notInProfile": "Not in profile",
+    "gifts.filter.reset": "Reset",
     "gifts.title.mine": "My gifts",
     "gifts.title.user": "Gifts: {name}",
     "gifts.title.detail": "Gift",
@@ -2620,7 +2629,21 @@ let contextChannelForMenu = null;
 let channelAdminsChannel = null;
 let usernameCheckTimeout = null, validatedUsername = null, reactionsRefreshTimer = null;
 let giftCatalogCache = [];
-let giftFilter = "all"; // all | common | rare | epic | pinned | unpinned | inProfile | notInProfile
+// 🔴 Мультивыбор: в каждой категории может быть выбрано несколько
+// (или все) значений. Пустой сет = не фильтруем эту категорию.
+const giftFilters = {
+  rarities: new Set(["common", "rare", "epic"]),
+  pinnedStatus: new Set(["pinned", "unpinned"]),
+  profileStatus: new Set(["inProfile", "notInProfile"]),
+};
+function resetGiftFilters() {
+  giftFilters.rarities = new Set(["common", "rare", "epic"]);
+  giftFilters.pinnedStatus = new Set(["pinned", "unpinned"]);
+  giftFilters.profileStatus = new Set(["inProfile", "notInProfile"]);
+}
+// Какой userId сейчас открыт в окне подарков (нужно для перерисовки
+// при изменении чекбоксов фильтра).
+let currentGiftsUserId = null;
 let lastSeenInterval = null, otherUserInterval = null, statusPollInterval = null, deliveredInterval = null;
 // Throttle для last_seen — не чаще одного раза в 25 секунд.
 // Порог «в сети» у собеседника — 45 сек (см. isUserOnline), так что 25 сек безопасно.
@@ -11239,6 +11262,7 @@ function throttledLastSeen() {
 function setupGiftsUI() {
   const giftsCloseBtn = document.getElementById("gifts-close");
   if (giftsCloseBtn) giftsCloseBtn.addEventListener("click", closeGiftsOverlay);
+  setupGiftFilterUI();
 
   // Контекстное меню подарка (ПКМ → Закрепить/Открепить)
   const giftMenu = document.getElementById("gift-context-menu");
@@ -11709,12 +11733,96 @@ function openGiftsOverlay(userId) {
   renderGiftsMain(userId);
 }
 
+// Открывает окно фильтра. Состояние читается из giftFilters и
+// предзаполняет чекбоксы. Любое изменение чекбокса применяется
+// сразу — список подарков перерисовывается на лету.
+function openGiftFilterDialog(userId) {
+  const overlay = document.getElementById("gift-filter-overlay");
+  if (!overlay) return;
+
+  // Предзаполняем чекбоксы актуальным состоянием
+  overlay.querySelectorAll("[data-gift-filter-check]").forEach((cb) => {
+    const key = cb.dataset.giftFilterCheck;
+    let isOn = false;
+    if (key === "common" || key === "rare" || key === "epic") {
+      isOn = giftFilters.rarities.has(key);
+    } else if (key === "pinned" || key === "unpinned") {
+      isOn = giftFilters.pinnedStatus.has(key);
+    } else if (key === "inProfile" || key === "notInProfile") {
+      isOn = giftFilters.profileStatus.has(key);
+    }
+    cb.checked = isOn;
+  });
+
+  overlay.classList.remove("hidden");
+}
+
+// Закрывает окно фильтра (без сброса состояния).
+function closeGiftFilterDialog() {
+  const overlay = document.getElementById("gift-filter-overlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+// Навешивает обработчики на окно фильтра (один раз).
+function setupGiftFilterUI() {
+  const overlay = document.getElementById("gift-filter-overlay");
+  if (!overlay || overlay.__bound) return;
+  overlay.__bound = true;
+
+  // Меняем состояние сразу при переключении чекбокса и перерисовываем
+  // список подарков в фоне. Окно фильтра остаётся открытым, чтобы можно
+  // было щёлкать сразу несколько чекбоксов.
+  overlay.addEventListener("change", (e) => {
+    const cb = e.target.closest("[data-gift-filter-check]");
+    if (!cb) return;
+    const key = cb.dataset.giftFilterCheck;
+    const on = cb.checked;
+    if (key === "common" || key === "rare" || key === "epic") {
+      if (on) giftFilters.rarities.add(key);
+      else giftFilters.rarities.delete(key);
+    } else if (key === "pinned" || key === "unpinned") {
+      if (on) giftFilters.pinnedStatus.add(key);
+      else giftFilters.pinnedStatus.delete(key);
+    } else if (key === "inProfile" || key === "notInProfile") {
+      if (on) giftFilters.profileStatus.add(key);
+      else giftFilters.profileStatus.delete(key);
+    }
+    // Перерисовываем список сзади (диалог перекрывает его частично,
+    // но список обновляется — пользователь сразу увидит результат,
+    // если закрыть окно).
+    const giftsOverlay = document.getElementById("gifts-overlay");
+    if (giftsOverlay && !giftsOverlay.classList.contains("hidden")) {
+      if (typeof currentGiftsUserId !== "undefined" && currentGiftsUserId) {
+        renderGiftsMain(currentGiftsUserId);
+      }
+    }
+  });
+
+  document.getElementById("gift-filter-apply").addEventListener("click", () => {
+    closeGiftFilterDialog();
+  });
+
+  document.getElementById("gift-filter-cancel").addEventListener("click", () => {
+    closeGiftFilterDialog();
+  });
+
+  document.getElementById("gift-filter-reset").addEventListener("click", () => {
+    resetGiftFilters();
+    // Перерисовываем чекбоксы
+    overlay.querySelectorAll("[data-gift-filter-check]").forEach((cb) => { cb.checked = true; });
+    if (typeof currentGiftsUserId !== "undefined" && currentGiftsUserId) {
+      renderGiftsMain(currentGiftsUserId);
+    }
+  });
+}
+
 function closeGiftsOverlay() {
   const el = document.getElementById("gifts-overlay");
   if (el) el.classList.add("hidden");
 }
 
 async function renderGiftsMain(userId) {
+  currentGiftsUserId = userId;
   const content = document.getElementById("gifts-content");
   const title = document.getElementById("gifts-title");
   const backBtn = document.getElementById("gifts-back");
@@ -11747,23 +11855,10 @@ async function renderGiftsMain(userId) {
   const buyLabel = isMe
     ? t("gifts.buy.button")
     : tFmt("gifts.buy.buttonFor", { name: (profileCache.get(userId) || {}).display_name || "" });
-  html += `<button class="gift-card-button" style="width:100%;padding:12px;margin-bottom:12px;" id="open-catalog-btn"><span class="cell-icon cell-icon-sm" data-icon="shop" style="vertical-align:-3px;margin-right:6px;"></span>${escapeHtml(buyLabel)}</button>`;
-
-  // 🔴 Фильтр подарков. Чипсы горизонтально скроллятся, если не влезают.
-  const filterChips = [
-    { id: "all",        label: t("gifts.filter.all") },
-    { id: "common",     label: t("gifts.filter.common") },
-    { id: "rare",       label: t("gifts.filter.rare") },
-    { id: "epic",       label: t("gifts.filter.epic") },
-    { id: "pinned",     label: t("gifts.filter.pinned") },
-    { id: "unpinned",   label: t("gifts.filter.unpinned") },
-    { id: "inProfile",  label: t("gifts.filter.inProfile") },
-    { id: "notInProfile", label: t("gifts.filter.notInProfile") },
-  ];
-  html += `<div class="gifts-filter-bar">` +
-    filterChips.map((c) =>
-      `<button type="button" class="gift-filter-chip${giftFilter === c.id ? " active" : ""}" data-gift-filter="${c.id}">${escapeHtml(c.label)}</button>`
-    ).join("") +
+  // Кнопка «Купить подарок» + иконка фильтра справа
+  html += `<div class="gifts-actions-row">` +
+    `<button class="gift-card-button" style="flex:1;padding:12px;" id="open-catalog-btn"><span class="cell-icon cell-icon-sm" data-icon="shop" style="vertical-align:-3px;margin-right:6px;"></span>${escapeHtml(buyLabel)}</button>` +
+    `<button type="button" class="gifts-filter-icon-btn" id="open-gift-filter-btn" title="${escapeHtml(t("gifts.filter.title"))}"><span class="cell-icon" data-icon="filter"></span></button>` +
     `</div>`;
 
   if (!gifts.length) {
@@ -11771,17 +11866,16 @@ async function renderGiftsMain(userId) {
       ? `<div class="empty">${escapeHtml(t("gifts.empty.mine"))}</div>`
       : `<div class="empty">${escapeHtml(t("gifts.empty.other"))}</div>`;
   } else {
-    // Применяем фильтр к списку подарков
+    // 🔴 Применяем мультивыбор-фильтр.
+    // Логика: И между категориями, ИЛИ внутри категории.
     const filtered = gifts.filter((ug) => {
-      if (giftFilter === "all") return true;
       const cat = catalogMap.get(ug.gift_id);
-      if (giftFilter === "common" || giftFilter === "rare" || giftFilter === "epic") {
-        return cat && cat.rarity === giftFilter;
-      }
-      if (giftFilter === "pinned") return !!ug.pinned_at;
-      if (giftFilter === "unpinned") return !ug.pinned_at;
-      if (giftFilter === "inProfile") return !!ug.in_profile;
-      if (giftFilter === "notInProfile") return !ug.in_profile;
+      if (!cat) return false;
+      if (!giftFilters.rarities.has(cat.rarity)) return false;
+      const pinKey = ug.pinned_at ? "pinned" : "unpinned";
+      if (!giftFilters.pinnedStatus.has(pinKey)) return false;
+      const profKey = ug.in_profile ? "inProfile" : "notInProfile";
+      if (!giftFilters.profileStatus.has(profKey)) return false;
       return true;
     });
     if (!filtered.length) {
@@ -11819,14 +11913,8 @@ async function renderGiftsMain(userId) {
   const openBtn = document.getElementById("open-catalog-btn");
   if (openBtn) openBtn.addEventListener("click", () => renderCatalog(userId));
 
-  // Обработчики фильтр-чипсов
-  content.querySelectorAll("[data-gift-filter]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const f = btn.dataset.giftFilter;
-      giftFilter = (giftFilter === f && f !== "all") ? "all" : f;
-      renderGiftsMain(userId);
-    });
-  });
+  const filterBtn = document.getElementById("open-gift-filter-btn");
+  if (filterBtn) filterBtn.addEventListener("click", () => openGiftFilterDialog(userId));
 
   // Асинхронно дорисовываем паттерны на плитках
   content.querySelectorAll(".gift-tile-pattern[data-icon]").forEach((el) => {
