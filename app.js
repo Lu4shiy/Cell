@@ -3689,6 +3689,9 @@ async function initApp() {
   // Предзагружаем иконки паттернов в фоне, чтобы к моменту покупки подарка
   // они уже были в кэше — иначе паттерн появляется с задержкой в несколько секунд.
   setTimeout(preloadPatternIcons, 1500);
+  // Предзагружаем картинки всех моделей эпических подарков — чтобы
+  // они не догружались «на лету» при открытии каталога/подарка.
+  setTimeout(preloadGiftModels, 1800);
   subscribeToPins();
   subscribeToChannelRequests();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
@@ -11213,6 +11216,34 @@ function preloadPatternIcons() {
     if (!p.icon) return;
     buildPatternMaskUrl(p.icon).catch(() => {});
   });
+}
+
+// Предзагрузка всех картинок моделей эпических подарков.
+// Пробегает по каталогу, собирает URL из gift.models[].image
+// и качает их через new Image() — браузер складывает в свой HTTP-кэш.
+// Благодаря этому к моменту открытия каталога/детали модели уже готовы.
+let giftModelsPreloaded = false;
+async function preloadGiftModels() {
+  if (giftModelsPreloaded) return;
+  giftModelsPreloaded = true;
+  try {
+    const catalog = await loadGiftCatalog();
+    const seen = new Set();
+    catalog.forEach((g) => {
+      if (!Array.isArray(g.models)) return;
+      g.models.forEach((m) => {
+        if (!m || !m.image) return;
+        const url = String(m.image);
+        if (!/^https?:\/\//i.test(url)) return;
+        if (seen.has(url)) return;
+        seen.add(url);
+        const img = new Image();
+        img.decoding = "async";
+        img.loading = "eager";
+        img.src = url;
+      });
+    });
+  } catch (e) { /* silent */ }
 }
 
 // Поле collection:

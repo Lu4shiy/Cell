@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-v73";
+const CACHE_VERSION = "cell-v74";
 
 const CACHE_FILES = [
   "./",
@@ -146,8 +146,16 @@ self.addEventListener("push", (event) => {
     try { data = { body: event.data && event.data.text() }; } catch (e2) {}
   }
 
-  const title = data.title || "Cell";
-  const body = data.body || "";
+  // 🔴 Формат уведомления: заголовок всегда "Cell", в теле — "{отправитель}: {текст}".
+  // От Edge Function приходит: data.title = имя отправителя (custom_name либо
+  // display_name), data.body = текст сообщения.
+  // Если Edge Function уже в будущем начнёт присылать data.title = "Cell",
+  // мы это распознаём и просто оставим body как есть.
+  const rawTitle = data.title || "";
+  const rawBody = data.body || "";
+  const senderName = (rawTitle && rawTitle !== "Cell") ? rawTitle : "";
+  const title = "Cell";
+  const body = senderName ? (rawBody ? `${senderName}: ${rawBody}` : senderName) : rawBody;
   const chatId = data.chatId || null;
   const tag = data.tag || ("cell-chat-" + (chatId || "unknown"));
   const iconUrl = data.icon || "icon-192.png";
@@ -162,14 +170,17 @@ self.addEventListener("push", (event) => {
   };
 
   event.waitUntil((async () => {
-    // Если этот же чат открыт в окне Cell и оно сфокусировано — не показываем.
-    // Клиент сам покажет in-app тост.
+    // 🔴 Показываем системное уведомление ТОЛЬКО если приложение полностью
+    // скрыто (ни одно окно Cell не видимо на экране).
+    //
+    // Раньше дополнительно требовалось w.focused — но на мобильных
+    // PWA focused часто false даже когда приложение прямо перед глазами,
+    // из-за этого приходило и системное, и in-app уведомление одновременно,
+    // а в открытом чате — вообще лишнее системное поверх тоста.
     try {
-      if (chatId && chatId === activeChatId) {
-        const wins = await clients.matchAll({ type: "window", includeUncontrolled: true });
-        const visible = wins.some((w) => w.visibilityState === "visible" && w.focused);
-        if (visible) return;
-      }
+      const wins = await clients.matchAll({ type: "window", includeUncontrolled: true });
+      const anyVisible = wins.some((w) => w.visibilityState === "visible");
+      if (anyVisible) return;
     } catch (e) { /* silent */ }
 
     await self.registration.showNotification(title, notifOptions);
