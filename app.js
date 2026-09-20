@@ -5150,14 +5150,28 @@ async function loadRecentChats() {
   channelCache = new Map((channelsData || []).map((c) => [c.id, c]));
   const channelIds = new Set(channelCache.keys());
 
-  const [msgsRes, othersRes, readsRes, hidesRes] = await Promise.all([
+  // 🔴 Дополнительно тянем chat_clears: если пользователь «очистил чат
+  // только у себя», сообщения ДО cleared_at не должны появляться ни в
+  // самом чате, ни в превью списка чатов.
+  const [msgsRes, othersRes, readsRes, hidesRes, clearsRes] = await Promise.all([
     supabase.from("messages").select("id, chat_id, sender_id, content, created_at, message_type, tokens_amount, delivered_at, read_at, encrypted, file_iv, file_key_enc")
       .in("chat_id", chatIds).order("created_at", { ascending: false }).limit(500),
     supabase.from("chat_members").select("chat_id, user_id").in("chat_id", chatIds).neq("user_id", currentUser.id),
     supabase.from("chat_reads").select("chat_id, last_read_at").eq("user_id", currentUser.id),
     supabase.from("chat_hides").select("chat_id, hidden_at").eq("user_id", currentUser.id),
+    supabase.from("chat_clears").select("chat_id, cleared_at").eq("user_id", currentUser.id),
   ]);
-  const msgs = msgsRes.data || [], others = othersRes.data || [], reads = readsRes.data || [], hides = hidesRes.data || [];
+  const others = othersRes.data || [], reads = readsRes.data || [], hides = hidesRes.data || [];
+  const clearsMap = new Map(
+    (clearsRes.data || []).map((c) => [c.chat_id, new Date(c.cleared_at).getTime()])
+  );
+  // Фильтруем сообщения: у кого есть запись в chat_clears — берём только те,
+  // что пришли ПОСЛЕ cleared_at.
+  const msgs = (msgsRes.data || []).filter((m) => {
+    const ca = clearsMap.get(m.chat_id);
+    if (!ca) return true;
+    return new Date(m.created_at).getTime() > ca;
+  });
   const hideMap = new Map((hides || []).map((h) => [h.chat_id, new Date(h.hidden_at).getTime()]));
   const readMap = new Map((reads || []).map((r) => [r.chat_id, new Date(r.last_read_at).getTime()]));
   chatReads = readMap;
@@ -9692,11 +9706,27 @@ function updateBlockUI() {
 
 async function clearChatForMe() {
   if (!currentChatId) return;
+  const chatId = currentChatId;
+  const clearedAt = new Date().toISOString();
   const { error } = await supabase.from("chat_clears").upsert({
-    chat_id: currentChatId, user_id: currentUser.id, cleared_at: new Date().toISOString(),
+    chat_id: chatId, user_id: currentUser.id, cleared_at: clearedAt,
   });
   if (error) { await showAlertDialog("Ошибка", error.message); return; }
-  await loadMessages(currentChatId);
+
+  // 🔴 Сразу сбрасываем превью/бейдж для этого чата в списке,
+  // не дожидаясь realtime — иначе справа видно «Файл», а слева чат пуст.
+  chatLastMsg.set(chatId, {
+    text: t("preview.noMessages"),
+    time: Date.now(),
+    senderId: null,
+    msgId: null,
+    unread: 0,
+  });
+  updateChatItemPreview(chatId);
+  resortChatsList();
+
+  // Перезагружаем сам чат
+  await loadMessages(chatId);
   await loadReactionsForVisibleMessages();
 }
 
@@ -9714,6 +9744,17 @@ async function clearChatForBoth() {
     ? '<div class="empty">' + escapeHtml(t("empty.noMessagesChannel")) + '</div>'
     : '<div class="empty">' + escapeHtml(t("empty.noMessages")) + '</div>';
   msgCache.clear(); reactionsCache.clear();
+
+  // 🔴 Сбрасываем превью и бейдж в списке чатов.
+  chatLastMsg.set(chatId, {
+    text: t("preview.noMessages"),
+    time: Date.now(),
+    senderId: null,
+    msgId: null,
+    unread: 0,
+  });
+  updateChatItemPreview(chatId);
+  resortChatsList();
 
   // Если удалилось меньше, чем было в кэше, — явно предупреждаем.
   // (RLS может резать удаление части сообщений.)
