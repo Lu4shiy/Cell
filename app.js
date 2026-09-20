@@ -14476,19 +14476,6 @@ async function unsubscribeFromWebPush() {
 }
 
 // Сообщаем Service Worker'у, какой чат сейчас активен.
-// SW хранит это значение и не показывает push для активного чата
-// (клиент сам покажет in-app тост).
-function notifySwActiveChat(chatId) {
-  try {
-    if (!("serviceWorker" in navigator)) return;
-    const controller = navigator.serviceWorker.controller;
-    if (controller) {
-      controller.postMessage({ type: "ACTIVE_CHAT", chatId: chatId || null });
-    }
-  } catch (e) { /* silent */ }
-}
-
-// Сообщаем Service Worker'у, какой чат сейчас активен.
 // SW не будет показывать push для этого чата, если окно в фокусе —
 // клиент сам покажет in-app тост.
 function notifySwActiveChat(chatId) {
