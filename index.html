@@ -809,79 +809,85 @@
     <div class="dialog dialog-settings">
       <div class="dialog-title" data-i18n="settings.title">Настройки</div>
 
-      <div class="settings-list">
-
-        <button type="button" class="settings-row" id="settings-language-section" data-settings-page="lang">
-          <span class="settings-row-label" data-i18n="settings.language.label">Язык</span>
-          <span class="settings-row-value" id="settings-lang-value">Русский</span>
-          <span class="settings-row-chevron"><span class="cell-icon cell-icon-sm" data-icon="right"></span></span>
-        </button>
-
-        <div class="settings-row settings-row-notif" id="settings-notifications-section">
-          <span class="settings-row-label" data-i18n="settings.notifications.label">Уведомления</span>
-          <label class="settings-toggle">
-            <input type="checkbox" id="settings-notifications-enabled">
-            <span class="settings-toggle-slider"></span>
-          </label>
+      <div class="profile-section" id="settings-language-section">
+        <div class="profile-label" data-i18n="settings.language.label">Язык</div>
+        <div class="visibility-toggle" id="settings-language-toggle">
+          <button type="button" data-lang="ru">Русский</button>
+          <button type="button" data-lang="en">English</button>
         </div>
+      </div>
 
-        <button type="button" class="settings-row" id="settings-accent-section" data-settings-page="accent">
-          <span class="settings-row-label" data-i18n="settings.accent.label">Цвет приложения</span>
-          <span class="settings-row-value" id="settings-accent-value">Мёд</span>
-          <span class="settings-row-chevron"><span class="cell-icon cell-icon-sm" data-icon="right"></span></span>
-        </button>
-
-        <div class="settings-row" id="settings-scroll-mode-section">
-          <span class="settings-row-label" data-i18n="settings.scrollMode.label">Режим списка чатов</span>
-          <div class="visibility-toggle" id="settings-scroll-mode">
-            <button type="button" data-mode="classic" data-i18n="settings.scrollMode.classic">Обычный</button>
-            <button type="button" data-mode="wheel" data-i18n="settings.scrollMode.wheel">Современный</button>
-          </div>
+      <div class="profile-section" id="settings-notifications-section">
+        <div class="profile-label" data-i18n="settings.notifications.label">Уведомления</div>
+        <label class="toggle-row" style="padding:4px 0 8px;">
+          <input type="checkbox" id="settings-notifications-enabled">
+          <span data-i18n="settings.notifications.enable">Показывать уведомления о новых сообщениях</span>
+        </label>
+        <div class="username-hint" id="settings-notifications-hint" data-i18n="settings.notifications.hint">
+          На компьютере уведомление всплывает в системном углу экрана. На телефоне — работает, когда приложение открыто или свёрнуто.
         </div>
-
-        <button type="button" class="settings-row" id="settings-quick-reaction-section" data-settings-page="quickReaction">
-          <span class="settings-row-label" data-i18n="settings.quickReaction.label">Быстрая реакция</span>
-          <span class="settings-row-value" id="settings-quick-reaction-value">❤️</span>
-          <span class="settings-row-chevron"><span class="cell-icon cell-icon-sm" data-icon="right"></span></span>
+        <button type="button" class="dialog-btn" id="settings-notifications-test" style="width:100%;margin-top:6px;" data-i18n="settings.notifications.test">
+          Проверить уведомление
         </button>
+      </div>
 
-        <button type="button" class="settings-row" id="settings-app-icon-section" data-settings-page="appIcon">
-          <span class="settings-row-label" data-i18n="settings.appIcon.label">Иконка приложения</span>
-          <span class="settings-row-chevron"><span class="cell-icon cell-icon-sm" data-icon="right"></span></span>
+      <div class="profile-section" id="settings-accent-section">
+        <div class="profile-label" data-i18n="settings.accent.label">Цвет приложения</div>
+        <div class="accent-grid" id="accent-grid"></div>
+      </div>
+
+      <div class="profile-section" id="settings-scroll-mode-section">
+        <div class="profile-label" data-i18n="settings.scrollMode.label">Режим списка чатов</div>
+        <div class="visibility-toggle" id="settings-scroll-mode">
+          <button type="button" data-mode="classic" data-i18n="settings.scrollMode.classic">Обычный</button>
+          <button type="button" data-mode="wheel" data-i18n="settings.scrollMode.wheel">Современный</button>
+        </div>
+        <div class="username-hint" data-i18n="settings.scrollMode.hint">
+          Обычный — привычный список. Современный — колесо с центрированием и плавным переходом.
+        </div>
+      </div>
+
+      <div class="profile-section" id="settings-quick-reaction-section">
+        <div class="profile-label" data-i18n="settings.quickReaction.label">Быстрая реакция</div>
+        <div class="username-hint" style="margin-bottom:8px;" data-i18n="settings.quickReaction.hint">
+          Двойной тап по сообщению поставит эту реакцию.
+        </div>
+        <div class="quick-reaction-grid" id="quick-reaction-grid"></div>
+      </div>
+
+      <div class="profile-section" id="settings-app-icon-section">
+        <div class="profile-label" data-i18n="settings.appIcon.label">Иконка приложения</div>
+        <div class="username-hint" style="margin-bottom:8px;" data-i18n="settings.appIcon.hint">
+          Выбери иконку — она применится к установленному приложению. На iPhone иконку сменить нельзя — это ограничение iOS.
+        </div>
+        <div class="app-icon-grid" id="app-icon-grid"></div>
+      </div>
+
+      <div class="profile-section" id="settings-grandma-section">
+        <div class="profile-label" data-i18n="settings.grandma.label">Режим «Бабушка»</div>
+        <div class="username-hint" style="margin-bottom:10px;" data-i18n="settings.grandma.hint">
+          Упрощает интерфейс: убирает 2FA, шифрование, выход из аккаунта и лишние пункты меню.
+          Отключить можно долгим нажатием на аватар в боковом меню (1.5 сек).
+        </div>
+        <button type="button" class="dialog-btn" id="grandma-toggle-btn" style="width:100%;" data-i18n="settings.grandma.enable">
+          Включить режим «Бабушка»
         </button>
+      </div>
 
-        <button type="button" class="settings-row" id="settings-grandma-section">
-          <span class="settings-row-label" data-i18n="settings.grandma.label">Режим «Бабушка»</span>
-          <span class="settings-row-chevron"><span class="cell-icon cell-icon-sm" data-icon="right"></span></span>
-        </button>
+      <div class="profile-section" id="settings-mfa-section">
+        <div class="profile-label" data-i18n="settings.mfa.label">Двухфакторная аутентификация</div>
+        <div id="mfa-status-row" style="font-size:13px;color:var(--text-sub);margin-bottom:10px;"></div>
+        <button type="button" class="dialog-btn" id="mfa-manage-btn" style="width:100%;" data-i18n="settings.mfa.manage">Управлять 2FA</button>
+      </div>
 
-        <button type="button" class="settings-row" id="settings-mfa-section">
-          <span class="settings-row-label" data-i18n="settings.mfa.label">Двухфакторная аутентификация</span>
-          <span class="settings-row-value" id="settings-mfa-value">—</span>
-          <span class="settings-row-chevron"><span class="cell-icon cell-icon-sm" data-icon="right"></span></span>
-        </button>
-
-        <button type="button" class="settings-row" id="settings-e2ee-section">
-          <span class="settings-row-label" data-i18n="settings.e2ee.label">Шифрование</span>
-          <span class="settings-row-value" id="settings-e2ee-value">—</span>
-          <span class="settings-row-chevron"><span class="cell-icon cell-icon-sm" data-icon="right"></span></span>
-        </button>
-
+      <div class="profile-section" id="settings-e2ee-section">
+        <div class="profile-label" data-i18n="settings.e2ee.label">Шифрование</div>
+        <div id="e2ee-status-row" style="font-size:13px;color:var(--text-sub);margin-bottom:10px;"></div>
+        <button type="button" class="dialog-btn" id="e2ee-manage-btn" style="width:100%;" data-i18n="settings.e2ee.manage">Управлять шифрованием</button>
       </div>
 
       <div class="dialog-actions">
         <button class="dialog-btn dialog-primary" id="settings-close" data-i18n="settings.close">Закрыть</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════ ПОДСТРАНИЦА НАСТРОЕК ═══════ -->
-  <div id="settings-subpage-overlay" class="dialog-overlay hidden" style="z-index:1050;">
-    <div class="dialog dialog-settings">
-      <div class="dialog-title" id="settings-subpage-title"></div>
-      <div id="settings-subpage-content"></div>
-      <div class="dialog-actions">
-        <button class="dialog-btn dialog-cancel" id="settings-subpage-back" data-i18n="settings.back">Назад</button>
       </div>
     </div>
   </div>
@@ -1132,6 +1138,8 @@
       </div>
     </div>
   </div>
+
+  <div id="gift-context-menu" class="context-menu hidden">
     <button data-action="pin" data-i18n="gifts.action.pin">Закрепить</button>
     <button data-action="visibility" data-i18n="gifts.action.toProfile">Добавить в профиль</button>
   </div>
