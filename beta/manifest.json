@@ -1,0 +1,33 @@
+{
+  "name": "Cell — семейный мессенджер",
+  "short_name": "Cell",
+  "description": "Собираемся по кусочкам",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#15110d",
+  "theme_color": "#15110d",
+  "lang": "ru",
+  "categories": ["social", "communication"],
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
