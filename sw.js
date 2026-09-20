@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-v74";
+const CACHE_VERSION = "cell-v75";
 
 const CACHE_FILES = [
   "./",
@@ -146,15 +146,15 @@ self.addEventListener("push", (event) => {
     try { data = { body: event.data && event.data.text() }; } catch (e2) {}
   }
 
-  // 🔴 Формат уведомления: заголовок всегда "Cell", в теле — "{отправитель}: {текст}".
+  // 🔴 Формат уведомления: тело — "{отправитель}: {текст}", а заголовок
+  // оставляем пустым. Тогда Android подставит имя приложения сверху сам,
+  // и системная приписка «от {app}» не появится.
   // От Edge Function приходит: data.title = имя отправителя (custom_name либо
   // display_name), data.body = текст сообщения.
-  // Если Edge Function уже в будущем начнёт присылать data.title = "Cell",
-  // мы это распознаём и просто оставим body как есть.
   const rawTitle = data.title || "";
   const rawBody = data.body || "";
   const senderName = (rawTitle && rawTitle !== "Cell") ? rawTitle : "";
-  const title = "Cell";
+  const title = " "; // пробел — не пустая строка (некоторые браузеры падают на "")
   const body = senderName ? (rawBody ? `${senderName}: ${rawBody}` : senderName) : rawBody;
   const chatId = data.chatId || null;
   const tag = data.tag || ("cell-chat-" + (chatId || "unknown"));

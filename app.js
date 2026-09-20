@@ -3156,22 +3156,23 @@ async function shareChannelKeysWithMembers(chatId) {
   const others = subs.filter((s) => s.user_id !== currentUser.id);
   if (!others.length) return;
 
-  // Забираем публичные ключи всех подписчиков одним запросом
+  // Забираем публичные ключи всех подписчиков одним запросом.
+  // 🔴 ВАЖНО: берём ещё e2ee_enabled — если хоть у одного подписчика
+  // E2EE выключена, канал целиком НЕ шифруем. Иначе он получит
+  // зашифрованное сообщение и не сможет его прочитать.
   const ids = others.map((s) => s.user_id);
   const { data: profs } = await supabase.from("profiles")
-    .select("id, public_key").in("id", ids);
-  const pubMap = new Map((profs || []).map((p) => [p.id, p.public_key]));
+    .select("id, public_key, e2ee_enabled").in("id", ids);
+  const profMap = new Map((profs || []).map((p) => [p.id, p]));
 
-  // Владелец/админ должен ещё иметь возможность писать, а остальные — читать.
-  // Если у кого-то из подписчиков нет public_key — канал целиком НЕ шифруем.
   let allHaveE2ee = true;
   const items = [];
 
   for (const s of others) {
-    const pub = pubMap.get(s.user_id);
-    if (!pub) { allHaveE2ee = false; break; }
+    const p = profMap.get(s.user_id);
+    if (!p || !p.public_key || !p.e2ee_enabled) { allHaveE2ee = false; break; }
     try {
-      const theirPubJwk = JSON.parse(pub);
+      const theirPubJwk = JSON.parse(p.public_key);
       const shared = await Crypto.deriveSharedKey(myIdentityPrivateJwk, theirPubJwk);
       const encKey = await Crypto.encryptMessage(shared, keyB64);
       items.push({ user_id: s.user_id, encrypted_key: encKey });
@@ -4920,7 +4921,18 @@ async function showMessageNotification(m) {
       }
     } catch (e) { /* silent */ }
   }
-  const senderName = (senderProfile && senderProfile.display_name) || "Cell";
+
+  // 🔴 Имя отправителя: приоритет — как Я назвал этот чат (custom_name),
+  // иначе — оригинальное display_name отправителя.
+  // custom_name уже лежит в data-custom-name карточки чата в списке.
+  let senderName = "";
+  const chatEl = document.querySelector(`.user-item[data-chat-id="${m.chat_id}"]`);
+  if (chatEl && chatEl.dataset.customName) {
+    senderName = chatEl.dataset.customName;
+  }
+  if (!senderName) {
+    senderName = (senderProfile && senderProfile.display_name) || "Cell";
+  }
 
   // Текст уведомления
   let body = "";
@@ -4956,10 +4968,13 @@ async function showMessageNotification(m) {
     return;
   }
 
-  // 2) Окно в фоне — системное уведомление
+  // 2) Окно в фоне — системное уведомление.
+  // 🔴 Тот же формат, что и на телефоне: заголовок "Cell",
+  // тело "{имя}: {текст}". Тогда и в Windows-то, и на Android-е
+  // имя приложения сверху не выглядит криво.
   const iconUrl = await getNotificationIcon(senderProfile);
-  showAppNotification(senderName, {
-    body: body,
+  showAppNotification("Cell", {
+    body: senderName + ": " + body,
     tag: "cell-chat-" + m.chat_id,
     icon: iconUrl,
     onClick,
