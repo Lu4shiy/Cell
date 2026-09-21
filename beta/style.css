@@ -5040,6 +5040,64 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   border-radius: 50%;
   border: 1px solid var(--border);
 }
+.market-picker-check {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  opacity: 0.55;
+}
+.market-picker-check.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #15110d;
+  opacity: 1;
+}
+.market-picker-check .cell-icon { background-color: currentColor; }
+
+/* ====================================================== */
+/* МАРКЕТ: ВКЛАДКА «ПРОФИЛЬ»                               */
+/* ====================================================== */
+
+.market-profile { display: flex; flex-direction: column; gap: 14px; }
+
+.market-profile-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+}
+.market-profile-info { flex: 1; min-width: 0; }
+.market-profile-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.market-profile-username {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.market-profile-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--text-dim);
+  font-weight: 700;
+  margin-top: 4px;
+}
 
 /* ====================================================== */
 /* ОТКЛЮЧАЕМ HOVER НА ТАЧ-УСТРОЙСТВАХ                       */

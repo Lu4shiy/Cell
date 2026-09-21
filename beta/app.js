@@ -367,6 +367,19 @@ const I18N = {
     "market.buy.title": "Купить подарок",
     "market.buy.text": "Подарок перейдёт в ваш профиль. Спишется {price} Nectar.",
     "market.buy.confirm": "Купить",
+    "market.filter.selectedN": "Выбрано: {n}",
+    "market.list.title": "Выставить на продажу",
+    "market.list.text": "Укажите цену в Nectar. Подарок исчезнет из вашего профиля и появится в маркете.",
+    "market.list.invalid": "Цена должна быть целым числом больше нуля.",
+    "market.card.changePrice": "Цена",
+    "market.card.unlist": "Снять",
+    "market.profile.myListings": "Мои предложения",
+    "market.profile.noListings": "У вас пока нет активных предложений.",
+    "market.changePrice.title": "Изменить цену",
+    "market.changePrice.text": "Новая цена в Nectar:",
+    "market.unlist.title": "Снять с продажи",
+    "market.unlist.text": "Подарок вернётся в ваш профиль. Продолжить?",
+    "market.unlist.confirm": "Снять",
     "sidebar.menu.about": "О приложении",
     "sidebar.menu.logout": "Выйти",
     "sidebar.search.placeholder": "Поиск по имени или @username",
@@ -628,6 +641,7 @@ const I18N = {
     "gifts.action.unpin": "Открепить",
     "gifts.action.toProfile": "Добавить в профиль",
     "gifts.action.fromProfile": "Убрать из профиля",
+    "gifts.action.toMarket": "Добавить в маркет",
     "gifts.purchase.title.self": "Купить подарок себе",
     "gifts.purchase.title.other": "Купить подарок для {name}",
     "gifts.purchase.caption": "Подпись (необязательно)",
@@ -1151,6 +1165,19 @@ const I18N = {
     "market.buy.title": "Buy gift",
     "market.buy.text": "Gift will move to your profile. You'll spend {price} Nectar.",
     "market.buy.confirm": "Buy",
+    "market.filter.selectedN": "{n} selected",
+    "market.list.title": "List for sale",
+    "market.list.text": "Enter a price in Nectar. The gift will disappear from your profile and appear on the market.",
+    "market.list.invalid": "Price must be a positive integer.",
+    "market.card.changePrice": "Price",
+    "market.card.unlist": "Unlist",
+    "market.profile.myListings": "My listings",
+    "market.profile.noListings": "You have no active listings yet.",
+    "market.changePrice.title": "Change price",
+    "market.changePrice.text": "New price in Nectar:",
+    "market.unlist.title": "Unlist",
+    "market.unlist.text": "The gift will return to your profile. Continue?",
+    "market.unlist.confirm": "Unlist",
     "sidebar.menu.about": "About",
     "sidebar.menu.logout": "Log out",
     "sidebar.search.placeholder": "Search by name or @username",
@@ -1412,6 +1439,7 @@ const I18N = {
     "gifts.action.unpin": "Unpin",
     "gifts.action.toProfile": "Add to profile",
     "gifts.action.fromProfile": "Remove from profile",
+    "gifts.action.toMarket": "Add to market",
     "gifts.purchase.title.self": "Buy a gift for yourself",
     "gifts.purchase.title.other": "Buy a gift for {name}",
     "gifts.purchase.caption": "Caption (optional)",
@@ -11483,9 +11511,17 @@ const marketState = {
   hasMore: true,
   loading: false,
   offset: 0,
-  filtersApplied: { giftId: null, modelId: null, backgroundName: null, patternId: null, sort: "new-desc" },
-  filtersDraft:   { giftId: null, modelId: null, backgroundName: null, patternId: null, sort: "new-desc" },
+  filtersApplied: emptyMarketFilters(),
+  filtersDraft:   emptyMarketFilters(),
 };
+
+function emptyMarketFilters() {
+  return { giftId: null, modelIds: [], backgroundNames: [], patternIds: [], sort: "new-desc" };
+}
+
+// Цвет каждого background_name — Map<name, "c1|c2">.
+// Заполняется один раз ленивым RPC get_background_examples().
+let marketBackgroundColors = null;
 
 // ID лотов, лежащих в корзине текущего пользователя.
 let marketCartIds = new Set();
@@ -11531,7 +11567,22 @@ function openMarket() {
   overlay.classList.remove("hidden");
   refreshMarketBalance();
   refreshMarketCart();
+  ensureMarketBackgroundColors();
   switchMarketTab(marketTab || "listings");
+}
+
+async function ensureMarketBackgroundColors() {
+  if (marketBackgroundColors) return;
+  marketBackgroundColors = new Map();
+  try {
+    const { data, error } = await supabase.rpc("get_background_examples");
+    if (error) return;
+    (data || []).forEach((r) => {
+      if (r.background_name && r.background && !marketBackgroundColors.has(r.background_name)) {
+        marketBackgroundColors.set(r.background_name, r.background);
+      }
+    });
+  } catch (e) { /* silent */ }
 }
 
 function closeMarket() {
@@ -11542,8 +11593,8 @@ function closeMarket() {
   marketState.hasMore = true;
   marketState.loading = false;
   marketState.offset = 0;
-  marketState.filtersApplied = { giftId: null, modelId: null, backgroundName: null, patternId: null, sort: "new-desc" };
-  marketState.filtersDraft   = { giftId: null, modelId: null, backgroundName: null, patternId: null, sort: "new-desc" };
+  marketState.filtersApplied = emptyMarketFilters();
+  marketState.filtersDraft   = emptyMarketFilters();
 }
 
 function switchMarketTab(tab) {
@@ -11558,14 +11609,155 @@ function switchMarketTab(tab) {
   content.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
 
   if (tab === "profile") {
-    if (typeof renderMarketProfile === "function") renderMarketProfile();
-    else content.innerHTML = '<div class="empty">Профиль продавца — в разработке</div>';
+    renderMarketProfile();
   } else if (tab === "listings") {
     renderMarketListings();
   } else if (tab === "cart") {
     if (typeof renderMarketCart === "function") renderMarketCart();
     else content.innerHTML = '<div class="empty">Корзина — в разработке</div>';
   }
+}
+
+// ======================================================
+// Маркет: вкладка «Профиль» — пока только «Мои предложения»
+// ======================================================
+
+async function renderMarketProfile() {
+  const content = document.getElementById("market-content");
+  if (!content || !myProfile) return;
+
+  content.innerHTML = `
+    <div class="market-profile">
+      <div class="market-profile-header">
+        <div class="avatar avatar-large" id="market-profile-avatar">?</div>
+        <div class="market-profile-info">
+          <div class="market-profile-name" id="market-profile-name">—</div>
+          <div class="market-profile-username" id="market-profile-username">@—</div>
+        </div>
+      </div>
+      <div class="market-profile-section-title">${escapeHtml(t("market.profile.myListings"))}</div>
+      <div id="market-my-listings" class="market-grid">
+        <div class="empty">${escapeHtml(t("empty.loading"))}</div>
+      </div>
+    </div>`;
+
+  paintAvatar(document.getElementById("market-profile-avatar"), myProfile);
+  document.getElementById("market-profile-name").innerHTML =
+    escapeHtml(myProfile.display_name || "") + verifiedBadge(myProfile);
+  document.getElementById("market-profile-username").textContent = "@" + (myProfile.username || "");
+
+  await loadMarketMyListings();
+}
+
+async function loadMarketMyListings() {
+  const el = document.getElementById("market-my-listings");
+  if (!el) return;
+
+  try {
+    const { data, error } = await supabase.from("market_listings")
+      .select("id, price, created_at, user_gift_id, user_gifts!inner(id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name)")
+      .eq("seller_id", currentUser.id)
+      .eq("status", "active")
+      .order("created_at", { ascending: false });
+
+    if (error) { el.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+
+    const rows = data || [];
+    if (!rows.length) {
+      el.innerHTML = `<div class="empty">${escapeHtml(t("market.profile.noListings"))}</div>`;
+      return;
+    }
+
+    if (!giftCatalogCache.length) await loadGiftCatalog();
+
+    el.innerHTML = rows.map(renderMyListingCard).filter(Boolean).join("");
+    fillGiftPatternsIn(el);
+    bindMyListingCards(rows);
+  } catch (e) {
+    console.error("loadMarketMyListings:", e);
+  }
+}
+
+function renderMyListingCard(listing) {
+  const ug = listing.user_gifts || {};
+  const cat = giftCatalogCache.find((c) => c.id === ug.gift_id);
+  if (!cat) return "";
+
+  const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
+  const patternIcon = cat.rarity === "epic" ? getPatternIcon(ug.pattern_id) : null;
+  const displayImg = giftDisplayImage(cat, ug);
+  const modelName = ug.model_name || "";
+  const title = `#${ug.serial_number}${modelName ? " " + modelName : ""}`;
+
+  return `
+    <div class="market-card" data-listing-id="${listing.id}">
+      <div class="market-card-media" style="${bg}">
+        ${patternIcon ? `<div class="gift-tile-pattern" data-icon="${escapeHtml(patternIcon)}"></div>` : ""}
+        <span class="gift-tile-emoji-symbol">${renderGiftModel(displayImg, 51)}</span>
+        <div class="market-card-ribbon">#${ug.serial_number}</div>
+      </div>
+      <div class="market-card-info">
+        <div class="market-card-name">${escapeHtml(title)}</div>
+        <div class="market-card-price">${NECTAR_HTML} ${listing.price}</div>
+      </div>
+      <div class="market-card-actions">
+        <button type="button" class="market-card-buy" data-action="change-price" data-listing-id="${listing.id}">${escapeHtml(t("market.card.changePrice"))}</button>
+        <button type="button" class="market-card-cart" data-action="unlist" data-listing-id="${listing.id}">${escapeHtml(t("market.card.unlist"))}</button>
+      </div>
+    </div>`;
+}
+
+function bindMyListingCards(rows) {
+  const el = document.getElementById("market-my-listings");
+  if (!el) return;
+
+  el.querySelectorAll(".market-card").forEach((card) => {
+    const listingId = card.dataset.listingId;
+    const listing = rows.find((r) => r.id === listingId);
+    if (!listing) return;
+
+    const changeBtn = card.querySelector('[data-action="change-price"]');
+    if (changeBtn) changeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      marketChangePrice(listingId, listing.price);
+    });
+
+    const unlistBtn = card.querySelector('[data-action="unlist"]');
+    if (unlistBtn) unlistBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      marketUnlist(listing.user_gift_id);
+    });
+  });
+}
+
+async function marketChangePrice(listingId, currentPrice) {
+  const priceStr = await showInputDialog(
+    t("market.changePrice.title"),
+    t("market.changePrice.text"),
+    String(currentPrice)
+  );
+  if (priceStr === null) return;
+  const price = parseInt(priceStr, 10);
+  if (!price || price <= 0) {
+    await showAlertDialog(t("gifts.error"), t("market.list.invalid"));
+    return;
+  }
+  const { error } = await supabase.from("market_listings")
+    .update({ price }).eq("id", listingId);
+  if (error) { await showAlertDialog(t("gifts.error"), error.message); return; }
+  await loadMarketMyListings();
+}
+
+async function marketUnlist(userGiftId) {
+  const ok = await showConfirmDialog(
+    t("market.unlist.title"),
+    t("market.unlist.text"),
+    t("market.unlist.confirm")
+  );
+  if (!ok) return;
+  const { error } = await supabase.rpc("market_unlist_gift", { p_user_gift_id: userGiftId });
+  if (error) { await showAlertDialog(t("gifts.error"), error.message); return; }
+  await loadMarketMyListings();
 }
 
 async function refreshMarketBalance() {
@@ -11656,10 +11848,10 @@ async function loadMarketListings(reset) {
       .eq("status", "active");
 
     const f = marketState.filtersApplied;
-    if (f.giftId)         q = q.eq("user_gifts.gift_id", f.giftId);
-    if (f.modelId)        q = q.eq("user_gifts.model_id", f.modelId);
-    if (f.backgroundName) q = q.eq("user_gifts.background_name", f.backgroundName);
-    if (f.patternId)      q = q.eq("user_gifts.pattern_id", f.patternId);
+    if (f.giftId)                 q = q.eq("user_gifts.gift_id", f.giftId);
+    if (f.modelIds.length)        q = q.in("user_gifts.model_id", f.modelIds);
+    if (f.backgroundNames.length) q = q.in("user_gifts.background_name", f.backgroundNames);
+    if (f.patternIds.length)      q = q.in("user_gifts.pattern_id", f.patternIds);
 
     if (f.sort === "new-desc")        q = q.order("created_at", { ascending: false });
     else if (f.sort === "new-asc")    q = q.order("created_at", { ascending: true });
@@ -11813,6 +12005,38 @@ function openMarketListingDetail(listingId) {
 }
 
 // ======================================================
+// Маркет: выставление подарка на продажу
+// ======================================================
+
+async function marketListGiftDialog(userGiftId) {
+  const priceStr = await showInputDialog(
+    t("market.list.title"),
+    t("market.list.text"),
+    "100"
+  );
+  if (priceStr === null) return;
+  const price = parseInt(priceStr, 10);
+  if (!price || price <= 0) {
+    await showAlertDialog(t("gifts.error"), t("market.list.invalid"));
+    return;
+  }
+  const { error } = await supabase.rpc("market_list_gift", {
+    p_user_gift_id: userGiftId,
+    p_price: price,
+  });
+  if (error) { await showAlertDialog(t("gifts.error"), error.message); return; }
+
+  // Обновляем список подарков (лот пропал) и профиль маркета, если он открыт.
+  if (typeof currentGiftsUserId !== "undefined" && currentGiftsUserId) {
+    renderGiftsMain(currentGiftsUserId);
+  }
+  if (marketTab === "profile" && document.getElementById("market-overlay")
+      && !document.getElementById("market-overlay").classList.contains("hidden")) {
+    renderMarketProfile();
+  }
+}
+
+// ======================================================
 // Маркет: фильтры
 // ======================================================
 
@@ -11823,39 +12047,25 @@ function renderMarketFilters() {
 
   const chips = [];
 
-  // Подарок
+  // Подарок — одиночный выбор.
   chips.push(`
     <button type="button" class="market-filter-chip ${f.giftId ? "active" : ""}" data-filter="gift">
       <span>${escapeHtml(cat ? cat.name : t("market.filter.gift"))}</span>
       <span class="cell-icon cell-icon-sm" data-icon="down"></span>
     </button>`);
 
-  // Модель — только если выбран подарок с моделями.
+  // Модель — мультивыбор (только если выбран подарок с моделями).
   if (hasModels) {
-    const model = cat.models.find((m) => m.id === f.modelId);
-    chips.push(`
-      <button type="button" class="market-filter-chip ${f.modelId ? "active" : ""}" data-filter="model">
-        <span>${escapeHtml(model ? (model.name || model.id) : t("market.filter.model"))}</span>
-        <span class="cell-icon cell-icon-sm" data-icon="down"></span>
-      </button>`);
+    chips.push(multiFilterChip("model", f.modelIds, cat.models.map((m) => ({ id: m.id, name: m.name || m.id })), t("market.filter.model")));
   }
 
-  // Фон
-  chips.push(`
-    <button type="button" class="market-filter-chip ${f.backgroundName ? "active" : ""}" data-filter="background">
-      <span>${escapeHtml(f.backgroundName || t("market.filter.background"))}</span>
-      <span class="cell-icon cell-icon-sm" data-icon="down"></span>
-    </button>`);
+  // Фон — мультивыбор.
+  chips.push(multiFilterChip("background", f.backgroundNames, null, t("market.filter.background")));
 
-  // Паттерн
-  const patternLabel = f.patternId ? f.patternId : t("market.filter.pattern");
-  chips.push(`
-    <button type="button" class="market-filter-chip ${f.patternId ? "active" : ""}" data-filter="pattern">
-      <span>${escapeHtml(patternLabel)}</span>
-      <span class="cell-icon cell-icon-sm" data-icon="down"></span>
-    </button>`);
+  // Паттерн — мультивыбор.
+  chips.push(multiFilterChip("pattern", f.patternIds, null, t("market.filter.pattern")));
 
-  // Сортировка
+  // Сортировка.
   const sortLabel = ({
     "new-desc":   t("market.sort.newDesc"),
     "new-asc":    t("market.sort.newAsc"),
@@ -11868,7 +12078,6 @@ function renderMarketFilters() {
       <span class="cell-icon cell-icon-sm" data-icon="down"></span>
     </button>`);
 
-  // Кнопка «Применить» — активна, если черновик отличается от применённого.
   const dirty = JSON.stringify(f) !== JSON.stringify(marketState.filtersApplied);
   chips.push(`
     <button type="button" class="market-filter-apply" id="market-apply-btn" ${dirty ? "" : "disabled"}>
@@ -11876,6 +12085,25 @@ function renderMarketFilters() {
     </button>`);
 
   return `<div class="market-filters">${chips.join("")}</div>`;
+}
+
+function multiFilterChip(filterName, ids, allItems, baseLabel) {
+  let label = baseLabel;
+  if (ids.length === 1) {
+    if (allItems) {
+      const item = allItems.find((x) => x.id === ids[0]);
+      label = item ? item.name : ids[0];
+    } else {
+      label = ids[0];
+    }
+  } else if (ids.length > 1) {
+    label = tFmt("market.filter.selectedN", { n: ids.length });
+  }
+  return `
+    <button type="button" class="market-filter-chip ${ids.length ? "active" : ""}" data-filter="${filterName}">
+      <span>${escapeHtml(label)}</span>
+      <span class="cell-icon cell-icon-sm" data-icon="down"></span>
+    </button>`;
 }
 
 function bindMarketFilterEvents() {
@@ -11896,25 +12124,22 @@ function bindMarketFilterEvents() {
   });
 }
 
-function openMarketFilterPicker(type) {
+async function openMarketFilterPicker(type) {
   const f = marketState.filtersDraft;
 
   if (type === "gift") {
     const items = [{ value: null, label: t("market.filter.all"), icon: "" }];
     giftCatalogCache.forEach((c) => {
-      items.push({
-        value: c.id,
-        label: c.name,
-        icon: renderGiftIcon(c.emoji, 22),
-      });
+      items.push({ value: c.id, label: c.name, icon: renderGiftIcon(c.emoji, 22) });
     });
     openMarketPicker({
       title: t("market.filter.gift"),
       items,
-      currentValue: f.giftId,
-      onPick: (val) => {
+      mode: "single",
+      current: f.giftId,
+      onToggle: (val) => {
         f.giftId = val;
-        f.modelId = null; // при смене подарка модель сбрасывается
+        f.modelIds = []; // при смене подарка модели сбрасываются
         renderMarketListingsFromCache();
       },
     });
@@ -11926,36 +12151,36 @@ function openMarketFilterPicker(type) {
     if (!cat || !Array.isArray(cat.models) || !cat.models.length) return;
     const items = [{ value: null, label: t("market.filter.all"), icon: "" }];
     cat.models.forEach((m) => {
-      items.push({
-        value: m.id,
-        label: m.name || m.id,
-        icon: renderGiftIcon(m.image || "", 22),
-      });
+      items.push({ value: m.id, label: m.name || m.id, icon: renderGiftIcon(m.image || "", 22) });
     });
     openMarketPicker({
       title: t("market.filter.model"),
       items,
-      currentValue: f.modelId,
-      onPick: (val) => { f.modelId = val; renderMarketListingsFromCache(); },
+      mode: "multi",
+      current: f.modelIds,
+      onToggle: (ids) => { f.modelIds = ids; renderMarketListingsFromCache(); },
     });
     return;
   }
 
   if (type === "background") {
+    await ensureMarketBackgroundColors();
     const items = [{ value: null, label: t("market.filter.all"), icon: "" }];
     Object.keys(BACKGROUND_CHANCES).forEach((name) => {
-      const items2 = null; // eslint-disable-line no-unused-vars
+      const bg = marketBackgroundColors ? marketBackgroundColors.get(name) : null;
+      const style = bg ? giftBackgroundStyle(bg) : "background: var(--bg-hover);";
       items.push({
         value: name,
         label: name,
-        icon: `<span class="market-picker-swatch" style="${giftBackgroundStyle(name)}"></span>`,
+        icon: `<span class="market-picker-swatch" style="${style}"></span>`,
       });
     });
     openMarketPicker({
       title: t("market.filter.background"),
       items,
-      currentValue: f.backgroundName,
-      onPick: (val) => { f.backgroundName = val; renderMarketListingsFromCache(); },
+      mode: "multi",
+      current: f.backgroundNames,
+      onToggle: (names) => { f.backgroundNames = names; renderMarketListingsFromCache(); },
     });
     return;
   }
@@ -11972,8 +12197,9 @@ function openMarketFilterPicker(type) {
     openMarketPicker({
       title: t("market.filter.pattern"),
       items,
-      currentValue: f.patternId,
-      onPick: (val) => { f.patternId = val; renderMarketListingsFromCache(); },
+      mode: "multi",
+      current: f.patternIds,
+      onToggle: (ids) => { f.patternIds = ids; renderMarketListingsFromCache(); },
     });
     return;
   }
@@ -11988,9 +12214,10 @@ function openMarketFilterPicker(type) {
     openMarketPicker({
       title: t("market.sort.label"),
       items,
-      currentValue: f.sort,
+      mode: "single",
+      current: f.sort,
       searchable: false,
-      onPick: (val) => { f.sort = val; renderMarketListingsFromCache(); },
+      onToggle: (val) => { f.sort = val; renderMarketListingsFromCache(); },
     });
     return;
   }
@@ -12019,8 +12246,18 @@ function openMarketPicker(opts) {
   searchEl.style.display = searchable ? "" : "none";
   searchEl.placeholder = t("dialog.search.placeholder");
 
+  const mode = opts.mode || "single";
+  let selectedSet = mode === "multi" ? new Set(opts.current || []) : null;
+  let singleValue = mode === "single" ? opts.current : null;
+
   const allItems = opts.items || [];
   let rendered = allItems;
+
+  function isActive(value) {
+    if (value === null) return false;
+    if (mode === "multi") return selectedSet.has(value);
+    return value === singleValue;
+  }
 
   function renderList() {
     if (!rendered.length) {
@@ -12029,18 +12266,37 @@ function openMarketPicker(opts) {
     }
     listEl.innerHTML = rendered.map((it, i) => {
       const icon = it.icon ? `<span class="market-picker-icon">${it.icon}</span>` : "";
-      const active = it.value === opts.currentValue ? "selected" : "";
+      const active = isActive(it.value) ? "selected" : "";
+      const check = mode === "multi"
+        ? `<span class="market-picker-check ${active ? "on" : ""}"><span class="cell-icon cell-icon-sm" data-icon="check"></span></span>`
+        : "";
       return `<button type="button" class="dialog-option market-picker-item ${active}" data-idx="${i}">
         ${icon}
         <span class="market-picker-label">${escapeHtml(it.label)}</span>
+        ${check}
       </button>`;
     }).join("");
     listEl.querySelectorAll(".market-picker-item").forEach((b) => {
       b.addEventListener("click", () => {
         const it = rendered[parseInt(b.dataset.idx, 10)];
         if (!it) return;
-        overlay.classList.add("hidden");
-        if (opts.onPick) opts.onPick(it.value);
+
+        if (mode === "multi") {
+          if (it.value === null) {
+            // «Все» — сброс выбора.
+            selectedSet = new Set();
+          } else if (selectedSet.has(it.value)) {
+            selectedSet.delete(it.value);
+          } else {
+            selectedSet.add(it.value);
+          }
+          renderList();
+          if (opts.onToggle) opts.onToggle([...selectedSet]);
+        } else {
+          singleValue = it.value;
+          renderList();
+          if (opts.onToggle) opts.onToggle(it.value);
+        }
       });
     });
   }
@@ -12090,6 +12346,8 @@ function setupGiftsUI() {
         if (error) { await showAlertDialog("Ошибка", error.message); return; }
         await refreshMyGiftsCount();
         renderGiftsMain(currentUser.id);
+      } else if (action === "market") {
+        await marketListGiftDialog(ugId);
       }
     });
     document.addEventListener("pointerdown", (e) => {
@@ -12239,10 +12497,16 @@ let patternIconsPreloaded = false;
 function preloadPatternIcons() {
   if (patternIconsPreloaded) return;
   patternIconsPreloaded = true;
-  // Строим SVG-маски заранее — так после покупки паттерн рисуется мгновенно.
   GIFT_PATTERNS.forEach((p) => {
     if (!p.icon) return;
+    // 1) SVG-маска (для плитки/hero/карточки в чате).
     buildPatternMaskUrl(p.icon).catch(() => {});
+    // 2) Сырой URL — чтобы пикер фильтра показал кружок мгновенно.
+    try {
+      const img = new Image();
+      img.decoding = "async";
+      img.src = p.icon;
+    } catch (e) { /* silent */ }
   });
 }
 
@@ -12651,8 +12915,18 @@ async function renderGiftsMain(userId) {
   if (!isMe) giftsQuery = giftsQuery.eq("in_profile", true);
   const { data: giftsRaw } = await giftsQuery.order("created_at", { ascending: false });
 
-  // Закреплённые — наверх (свежезакреплённые выше), затем по дате создания
-  const allGifts = giftsRaw || [];
+  // Закреплённые — наверх (свежезакреплённые выше), затем по дате создания.
+  // 🔴 Подарки, выставленные на маркет, в списке не показываем.
+  let allGifts = giftsRaw || [];
+  if (allGifts.length) {
+    try {
+      const ids = allGifts.map((g) => g.id);
+      const { data: listings } = await supabase.from("market_listings")
+        .select("user_gift_id").in("user_gift_id", ids).eq("status", "active");
+      const listedIds = new Set((listings || []).map((l) => l.user_gift_id));
+      if (listedIds.size) allGifts = allGifts.filter((g) => !listedIds.has(g.id));
+    } catch (e) { /* silent */ }
+  }
   const pinned = allGifts.filter((g) => g.pinned_at)
     .sort((a, b) => new Date(b.pinned_at) - new Date(a.pinned_at));
   const unpinned = allGifts.filter((g) => !g.pinned_at);
@@ -13090,6 +13364,7 @@ async function renderGiftDetail(ownerId, ug) {
             ${escapeHtml(isInProfile ? t("gifts.action.hideFromProfile") : t("gifts.action.addToProfile"))}
           </button>
           <button class="dialog-btn" id="gift-send"><span class="cell-icon cell-icon-sm" data-icon="gift" style="vertical-align:-3px;margin-right:6px;"></span>${escapeHtml(t("gifts.action.gift"))}</button>
+          <button class="dialog-btn" id="gift-market"><span class="cell-icon cell-icon-sm" data-icon="market" style="vertical-align:-3px;margin-right:6px;"></span>${escapeHtml(t("gifts.action.toMarket"))}</button>
           <button class="dialog-btn" id="gift-sell"><span class="cell-icon cell-icon-sm" data-icon="dollarBag" style="vertical-align:-3px;margin-right:6px;"></span>${tFmt("gifts.action.sell", { price: `${NECTAR_HTML} ${Math.floor(cat.price * 0.85)}` })}</button>
         ` : `
           <div class="dialog-text" style="text-align:center;">${escapeHtml(t("gifts.detail.notOwner"))}</div>
@@ -13120,6 +13395,9 @@ async function renderGiftDetail(ownerId, ug) {
     });
 
     document.getElementById("gift-send").addEventListener("click", () => openGiftSend(ug));
+
+    const marketBtn = document.getElementById("gift-market");
+    if (marketBtn) marketBtn.addEventListener("click", () => marketListGiftDialog(ug.id));
 
     document.getElementById("gift-sell").addEventListener("click", async () => {
       const ok = await showConfirmDialog(
