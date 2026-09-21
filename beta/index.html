@@ -1091,14 +1091,28 @@
     </div>
   </div>
 
+  <!-- ═══════ ДЕТАЛЬНАЯ КАРТОЧКА ЛОТА МАРКЕТА ═══════ -->
+  <div id="market-listing-overlay" class="dialog-overlay hidden" style="z-index:9650;">
+    <div class="dialog dialog-market-listing">
+      <div class="dialog-title" id="market-listing-name">Подарок</div>
+      <div id="market-listing-body"></div>
+      <div class="dialog-actions market-listing-actions">
+        <button class="dialog-btn dialog-primary" id="market-listing-buy">Купить</button>
+        <button class="dialog-btn" id="market-listing-cart">В корзину</button>
+        <button class="dialog-btn dialog-cancel" id="market-listing-close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══════ ВЫБОР В ФИЛЬТРЕ МАРКЕТА ═══════ -->
   <div id="market-picker-overlay" class="dialog-overlay hidden" style="z-index:9700;">
     <div class="dialog dialog-market-picker">
       <div class="dialog-title" id="market-picker-title">Выбрать</div>
       <input type="text" id="market-picker-search" class="dialog-search" placeholder="Поиск..." autocomplete="off">
       <div class="dialog-options-list" id="market-picker-list"></div>
-      <div class="dialog-actions">
-        <button class="dialog-btn dialog-cancel" id="market-picker-cancel">Отмена</button>
+      <div class="dialog-actions market-picker-actions">
+        <button class="dialog-btn dialog-cancel" id="market-picker-reset">Сбросить</button>
+        <button class="dialog-btn dialog-primary" id="market-picker-cancel">Закрыть</button>
       </div>
     </div>
   </div>
