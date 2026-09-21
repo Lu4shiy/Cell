@@ -293,7 +293,7 @@ const I18N = {
     "auth.register.submit": "Создать аккаунт",
     "auth.err.prefix": "Ошибка",
     "beta.notTester.title": "Доступ закрыт",
-    "beta.notTester.text": "С этого аккаунта вход в бета-версию запрещён. Сейчас откроем стабильную версию Cell.",
+    "beta.notTester.text": "С этого аккаунта вход в бета-версию запрещён.",
     "beta.notTester.action": "Понятно",
     "auth.err.username.required": "Введите юзернейм",
     "auth.err.username.format": "Юзернейм: 3-32 символа, a-z, 0-9, _ и -",
@@ -2067,6 +2067,10 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
     return;
   }
 
+  // 🔴 Помечаем ЯВНЫЙ выход — чтобы фолбэк автовосстановления
+  // local-сессии не залогинил пользователя обратно после перезагрузки.
+  try { localStorage.setItem("cell_logged_out", "1"); } catch (e) {}
+
   // Локальный (анонимный) аккаунт: НЕ вызываем signOut — он отзывает
   // refresh-токен на сервере (даже со scope:"local"), и вернуться потом
   // уже нельзя. Вместо этого сохраняем токены в отдельный ключ,
@@ -3697,27 +3701,52 @@ function resetAppState() {
 async function showApp(user) {
   // 🔴 BETA: доступ только для тестеров. Проверка ДО открытия приложения —
   // иначе пользователь успевает залогиниться и увидеть бета-интерфейс.
+  // 🔴 При отказе НЕ перенаправляем в stable — остаёмся в beta.
   if (/\/beta\//.test(window.location.pathname)) {
+    let isTester = false;
     try {
       const { data: prof } = await supabase.from("profiles")
         .select("is_tester").eq("id", user.id).maybeSingle();
-      if (!prof || !prof.is_tester) {
-        try { await supabase.auth.signOut(); } catch (e) {}
-        window.location.replace("/Cell/");
-        return;
-      }
+      isTester = !!(prof && prof.is_tester);
     } catch (e) {
-      window.location.replace("/Cell/");
+      isTester = false;
+    }
+    if (!isTester) {
+      // Помечаем выход, чтобы фолбэк автовосстановления не залогинил обратно.
+      try { localStorage.setItem("cell_logged_out", "1"); } catch (e) {}
+
+      // Локальный (анонимный) аккаунт не разлогиниваем до конца —
+      // сохраняем токены, чтобы можно было вернуться на stable.
+      const isLocalAcc = user.is_anonymous === true ||
+                         !user.email ||
+                         (user.app_metadata && user.app_metadata.provider === "anonymous");
+      if (isLocalAcc) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+            }));
+          }
+        } catch (e) { /* silent */ }
+        try { localStorage.removeItem(AUTH_STORAGE_KEY); } catch (e) {}
+      } else {
+        try { await supabase.auth.signOut(); } catch (e) {}
+      }
+
+      showAuth();
+      await showAlertDialog(t("beta.notTester.title"), t("beta.notTester.text"));
       return;
     }
   }
 
+  // 🔴 Пользователь снова в приложении — сбрасываем флаг «явный выход».
+  try { localStorage.removeItem("cell_logged_out"); } catch (e) {}
+
   // Чистим ВСЁ от предыдущего аккаунта, если был
   resetAppState();
   currentUser = user;
-  // В режиме «Бабушка» авто-выход по неактивности не работает —
-  // иначе через час простоя бабушку выкинет на экран входа, где
-  // она не сможет ввести пароль.
   if (!isGrandmaMode()) resetInactivityTimer();
   document.getElementById("auth-screen").classList.add("hidden");
   document.getElementById("app-screen").classList.remove("hidden");
@@ -15566,6 +15595,9 @@ setupLocalLogin();
   // Так local-сессия переживает перезапуск устройства, смену
   // PWA ↔ браузер и потерю основной сессии в localStorage.
   try {
+    // 🔴 Если пользователь ЯВНО вышел — не восстанавливаем автоматически.
+    if (localStorage.getItem("cell_logged_out") === "1") return;
+
     const raw = localStorage.getItem("cell_local_session");
     if (!raw) return;
     const saved = JSON.parse(raw);

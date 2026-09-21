@@ -2061,6 +2061,10 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
     return;
   }
 
+  // 🔴 Помечаем ЯВНЫЙ выход — чтобы фолбэк автовосстановления
+  // local-сессии не залогинил пользователя обратно после перезагрузки.
+  try { localStorage.setItem("cell_logged_out", "1"); } catch (e) {}
+
   // Локальный (анонимный) аккаунт: НЕ вызываем signOut — он отзывает
   // refresh-токен на сервере (даже со scope:"local"), и вернуться потом
   // уже нельзя. Вместо этого сохраняем токены в отдельный ключ,
@@ -3689,6 +3693,9 @@ function resetAppState() {
 
 // ======================= 4. ЭКРАНЫ =======================
 function showApp(user) {
+  // 🔴 Пользователь снова в приложении — сбрасываем флаг «явный выход».
+  try { localStorage.removeItem("cell_logged_out"); } catch (e) {}
+
   // Чистим ВСЁ от предыдущего аккаунта, если был
   resetAppState();
   currentUser = user;
@@ -15536,6 +15543,9 @@ setupLocalLogin();
   // Так local-сессия переживает перезапуск устройства, смену
   // PWA ↔ браузер и потерю основной сессии в localStorage.
   try {
+    // 🔴 Если пользователь ЯВНО вышел — не восстанавливаем автоматически.
+    if (localStorage.getItem("cell_logged_out") === "1") return;
+
     const raw = localStorage.getItem("cell_local_session");
     if (!raw) return;
     const saved = JSON.parse(raw);
