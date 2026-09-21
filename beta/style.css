@@ -4921,7 +4921,7 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 .market-card-media .gift-tile-emoji-symbol {
   position: relative;
   z-index: 1;
-  font-size: 51px;
+  font-size: 78px;
   line-height: 1;
 }
 
@@ -5103,6 +5103,192 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   color: var(--text-dim);
   font-weight: 700;
   margin-top: 4px;
+}
+
+.market-profile-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+}
+.market-profile-history-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-side);
+  color: var(--text-sub);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  padding: 0;
+}
+.market-profile-history-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.market-profile-history-btn .cell-icon { width: 20px; height: 20px; }
+
+/* Статистика продавца */
+.market-profile-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.market-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+.market-stat-icon {
+  width: 26px;
+  height: 26px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.market-stat-body { min-width: 0; flex: 1; }
+.market-stat-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.market-stat-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.market-stat-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 700px) {
+  .market-profile-stats { grid-template-columns: 1fr; }
+}
+
+/* Свой лот — без подсветки CTA */
+.market-listing-seller.own-listing { cursor: default; }
+.market-listing-seller.own-listing:hover {
+  background: var(--bg-input);
+  border-color: var(--border);
+}
+
+/* ====================================================== */
+/* МАРКЕТ: ИСТОРИЯ СДЕЛОК                                  */
+/* ====================================================== */
+
+.market-history-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.market-history-back {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-sub);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+}
+.market-history-back:hover { background: var(--bg-hover); color: var(--accent); }
+
+.market-history-body {
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.market-history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+}
+.market-history-badge {
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.market-history-badge.sale {
+  background: rgba(111, 191, 74, 0.15);
+  color: #6fbf4a;
+}
+.market-history-badge.purchase {
+  background: rgba(var(--accent-rgb), 0.15);
+  color: var(--accent);
+}
+.market-history-main { flex: 1; min-width: 0; }
+.market-history-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.market-history-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.market-history-user {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+.market-history-user:hover { text-decoration: underline; }
+.market-history-price {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
 }
 
 /* ====================================================== */

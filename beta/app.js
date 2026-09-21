@@ -389,6 +389,21 @@ const I18N = {
     "market.cart.total": "Итого",
     "market.cart.buyAll": "Купить всё",
     "market.cart.buyAllText": "Купить все подарки из корзины за {sum}?",
+    "market.err.ownListing": "Нельзя купить собственный лот.",
+    // Профиль продавца
+    "market.profile.level": "Уровень продавца",
+    "market.profile.bought": "Куплено за всё время",
+    "market.profile.sold": "Продано за всё время",
+    "market.profile.history": "История",
+    // История
+    "market.history.title": "История сделок",
+    "market.history.empty": "Пока нет сделок.",
+    "market.history.sale": "Продажа",
+    "market.history.purchase": "Покупка",
+    "market.history.with": "С кем",
+    "market.history.date": "Дата",
+    "market.history.price": "Цена сделки",
+    "market.history.back": "Назад",
     "sidebar.menu.about": "О приложении",
     "sidebar.menu.logout": "Выйти",
     "sidebar.search.placeholder": "Поиск по имени или @username",
@@ -1196,6 +1211,21 @@ const I18N = {
     "market.cart.total": "Total",
     "market.cart.buyAll": "Buy all",
     "market.cart.buyAllText": "Buy all gifts from your cart for {sum}?",
+    "market.err.ownListing": "You can't buy your own listing.",
+    // Seller profile
+    "market.profile.level": "Seller level",
+    "market.profile.bought": "Bought all time",
+    "market.profile.sold": "Sold all time",
+    "market.profile.history": "History",
+    // History
+    "market.history.title": "Trade history",
+    "market.history.empty": "No trades yet.",
+    "market.history.sale": "Sale",
+    "market.history.purchase": "Purchase",
+    "market.history.with": "With",
+    "market.history.date": "Date",
+    "market.history.price": "Price",
+    "market.history.back": "Back",
     "sidebar.menu.about": "About",
     "sidebar.menu.logout": "Log out",
     "sidebar.search.placeholder": "Search by name or @username",
@@ -11662,7 +11692,35 @@ async function renderMarketProfile() {
           <div class="market-profile-name" id="market-profile-name">—</div>
           <div class="market-profile-username" id="market-profile-username">@—</div>
         </div>
+        <button class="market-profile-history-btn" id="market-profile-history-btn" type="button" title="${escapeHtml(t("market.profile.history"))}">
+          <span class="cell-icon" data-icon="history"></span>
+        </button>
       </div>
+
+      <div class="market-profile-stats" id="market-profile-stats">
+        <div class="market-stat">
+          <span class="cell-icon market-stat-icon" data-icon="shield"></span>
+          <div class="market-stat-body">
+            <div class="market-stat-value" id="market-stat-level">0</div>
+            <div class="market-stat-label">${escapeHtml(t("market.profile.level"))}</div>
+          </div>
+        </div>
+        <div class="market-stat">
+          <span class="cell-icon market-stat-icon" data-icon="decrease"></span>
+          <div class="market-stat-body">
+            <div class="market-stat-value" id="market-stat-bought">0 <span class="market-stat-sub">(<span id="market-stat-spent">0</span> ${NECTAR_HTML})</span></div>
+            <div class="market-stat-label">${escapeHtml(t("market.profile.bought"))}</div>
+          </div>
+        </div>
+        <div class="market-stat">
+          <span class="cell-icon market-stat-icon" data-icon="increase"></span>
+          <div class="market-stat-body">
+            <div class="market-stat-value" id="market-stat-sold">0 <span class="market-stat-sub">(<span id="market-stat-earned">0</span> ${NECTAR_HTML})</span></div>
+            <div class="market-stat-label">${escapeHtml(t("market.profile.sold"))}</div>
+          </div>
+        </div>
+      </div>
+
       <div class="market-profile-section-title">${escapeHtml(t("market.profile.myListings"))}</div>
       <div id="market-my-listings" class="market-grid">
         <div class="empty">${escapeHtml(t("empty.loading"))}</div>
@@ -11674,7 +11732,122 @@ async function renderMarketProfile() {
     escapeHtml(myProfile.display_name || "") + verifiedBadge(myProfile);
   document.getElementById("market-profile-username").textContent = "@" + (myProfile.username || "");
 
-  await loadMarketMyListings();
+  // Кнопка истории.
+  const histBtn = document.getElementById("market-profile-history-btn");
+  if (histBtn) histBtn.addEventListener("click", openMarketHistory);
+
+  await Promise.all([
+    loadMarketProfileStats(),
+    loadMarketMyListings(),
+  ]);
+}
+
+async function loadMarketProfileStats() {
+  try {
+    const { data, error } = await supabase.rpc("market_seller_stats", { p_user_id: currentUser.id });
+    if (error || !data || !data.length) return;
+    const s = data[0];
+    const lvlEl = document.getElementById("market-stat-level");
+    if (lvlEl) lvlEl.textContent = String(s.level || 0);
+    const boughtEl = document.getElementById("market-stat-bought");
+    if (boughtEl) {
+      boughtEl.innerHTML = `${s.bought_count || 0} <span class="market-stat-sub">(<span id="market-stat-spent">${s.spent_total || 0}</span> ${NECTAR_HTML})</span>`;
+    }
+    const soldEl = document.getElementById("market-stat-sold");
+    if (soldEl) {
+      soldEl.innerHTML = `${s.sold_count || 0} <span class="market-stat-sub">(<span id="market-stat-earned">${s.earned_total || 0}</span> ${NECTAR_HTML})</span>`;
+    }
+  } catch (e) { /* silent */ }
+}
+
+// ======================================================
+// Маркет: история сделок
+// ======================================================
+
+async function openMarketHistory() {
+  const overlay = document.getElementById("market-history-overlay");
+  const body = document.getElementById("market-history-body");
+  const backBtn = document.getElementById("market-history-back");
+  const closeBtn = document.getElementById("market-history-close");
+  if (!overlay || !body) return;
+
+  body.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
+  overlay.classList.remove("hidden");
+
+  backBtn.onclick = () => overlay.classList.add("hidden");
+  closeBtn.onclick = () => overlay.classList.add("hidden");
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.classList.add("hidden"); };
+
+  try {
+    const { data, error } = await supabase.from("market_transactions")
+      .select("id, price, created_at, seller_id, buyer_id, user_gift_id, user_gifts!inner(gift_id, serial_number, model_id, model_name)")
+      .or(`seller_id.eq.${currentUser.id},buyer_id.eq.${currentUser.id}`)
+      .order("created_at", { ascending: false });
+
+    if (error) { body.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
+    const rows = data || [];
+
+    if (!rows.length) {
+      body.innerHTML = `<div class="empty">${escapeHtml(t("market.history.empty"))}</div>`;
+      return;
+    }
+
+    if (!giftCatalogCache.length) await loadGiftCatalog();
+
+    // Прогружаем профили всех контрагентов.
+    const otherIds = new Set();
+    rows.forEach((r) => {
+      const other = r.seller_id === currentUser.id ? r.buyer_id : r.seller_id;
+      if (other) otherIds.add(other);
+    });
+    if (otherIds.size) {
+      const { data: profs } = await supabase.from("profiles")
+        .select("id, username, display_name, avatar_url").in("id", [...otherIds]);
+      (profs || []).forEach((p) => profileCache.set(p.id, p));
+    }
+
+    body.innerHTML = rows.map((r) => {
+      const isSale = r.seller_id === currentUser.id;
+      const otherId = isSale ? r.buyer_id : r.seller_id;
+      const other = profileCache.get(otherId) || { display_name: "?", username: "" };
+      const ug = r.user_gifts || {};
+      const cat = giftCatalogCache.find((c) => c.id === ug.gift_id);
+      const catName = cat ? cat.name : "?";
+      const date = r.created_at
+        ? new Date(r.created_at).toLocaleString(localeId(), { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+        : "—";
+      const badge = isSale ? t("market.history.sale") : t("market.history.purchase");
+      const badgeClass = isSale ? "sale" : "purchase";
+
+      return `
+        <div class="market-history-item">
+          <div class="market-history-badge ${badgeClass}">${escapeHtml(badge)}</div>
+          <div class="market-history-main">
+            <div class="market-history-title">${escapeHtml(catName)} #${ug.serial_number || "?"}${ug.model_name ? " · " + escapeHtml(ug.model_name) : ""}</div>
+            <div class="market-history-sub">${escapeHtml(t("market.history.with"))}: <a href="#" class="market-history-user" data-user-id="${escapeHtml(otherId || "")}">${escapeHtml(other.display_name || "?")}</a> · @${escapeHtml(other.username || "")}</div>
+            <div class="market-history-sub">${escapeHtml(t("market.history.date"))}: ${escapeHtml(date)}</div>
+          </div>
+          <div class="market-history-price">${NECTAR_HTML} <b>${r.price}</b></div>
+        </div>`;
+    }).join("");
+
+    // Клик по пользователю → открыть чат.
+    body.querySelectorAll(".market-history-user").forEach((a) => {
+      a.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const uid = a.dataset.userId;
+        if (!uid) return;
+        const p = profileCache.get(uid);
+        if (!p) return;
+        overlay.classList.add("hidden");
+        closeMarket();
+        try { await openChatWith(p); } catch (err) { /* silent */ }
+      });
+    });
+  } catch (e) {
+    console.error("openMarketHistory:", e);
+    body.innerHTML = `<div class="empty">${escapeHtml(String(e.message || e))}</div>`;
+  }
 }
 
 async function loadMarketMyListings() {
@@ -11821,6 +11994,14 @@ function updateMarketCartBadge() {
 
 async function marketCartToggle(listingId) {
   const inCart = marketCartIds.has(listingId);
+  if (!inCart) {
+    // 🔴 Защита от своего лота: сервер тоже отклонит, но здесь — без запроса.
+    const listing = marketState.listings.find((l) => l.id === listingId);
+    if (listing && listing.seller_id === currentUser.id) {
+      await showAlertDialog(t("gifts.error"), t("market.err.ownListing"));
+      return;
+    }
+  }
   const rpcName = inCart ? "market_cart_remove" : "market_cart_add";
   const { error } = await supabase.rpc(rpcName, { p_listing_id: listingId });
   if (error) { await showAlertDialog(t("gifts.error"), error.message); return; }
@@ -11873,7 +12054,9 @@ async function loadMarketListings(reset) {
   try {
     let q = supabase.from("market_listings")
       .select("id, price, created_at, seller_id, user_gift_id, user_gifts!inner(id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name)")
-      .eq("status", "active");
+      .eq("status", "active")
+      // 🔴 Свои лоты в общем списке не показываем — они в «Профиль → Мои предложения».
+      .neq("seller_id", currentUser.id);
 
     const f = marketState.filtersApplied;
     if (f.giftId)                 q = q.eq("user_gifts.gift_id", f.giftId);
@@ -12003,6 +12186,10 @@ function bindMarketListingCards() {
 async function marketBuyListing(listingId) {
   const listing = marketState.listings.find((l) => l.id === listingId);
   if (!listing) return;
+  if (listing.seller_id === currentUser.id) {
+    await showAlertDialog(t("gifts.error"), t("market.err.ownListing"));
+    return;
+  }
 
   const ok = await showConfirmDialog(
     t("market.buy.title"),
@@ -12145,10 +12332,18 @@ async function openMarketListingDetail(listingId) {
     });
   }
 
-  // Клик по продавцу → диалог «Связаться с продавцом».
+  // 🔴 Свой лот: не показываем CTA «Связаться с продавцом».
+  const isMine = listing.seller_id === currentUser.id;
   const sellerRow = document.getElementById("market-listing-seller");
-  if (sellerRow && seller) {
-    sellerRow.addEventListener("click", () => marketContactSeller(seller));
+  if (sellerRow) {
+    if (isMine) {
+      const cta = sellerRow.querySelector(".market-listing-seller-cta");
+      if (cta) cta.remove();
+      sellerRow.style.cursor = "default";
+      sellerRow.classList.add("own-listing");
+    } else if (seller) {
+      sellerRow.addEventListener("click", () => marketContactSeller(seller));
+    }
   }
 
   // Кнопка «В корзину» — динамически переключаем текст.
