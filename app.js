@@ -47,7 +47,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 // Восстановление пароля: Supabase при возврате по ссылке из письма
 // присылает событие PASSWORD_RECOVERY — показываем форму нового пароля
 // и ПРЯЧЕМ приложение (иначе на фоне видны чаты чужого аккаунта).
-supabase.auth.onAuthStateChange((event) => {
+supabase.auth.onAuthStateChange((event, session) => {
   if (event === "PASSWORD_RECOVERY") {
     inRecoveryFlow = true;
     // Скрываем приложение и показываем экран входа как фон
@@ -58,6 +58,25 @@ supabase.auth.onAuthStateChange((event) => {
     // Поверх всего — форма нового пароля
     const overlay = document.getElementById("reset-new-overlay");
     if (overlay) overlay.classList.remove("hidden");
+    return;
+  }
+
+  // 🔴 Backup для локального (anonymous) аккаунта: сохраняем актуальные
+  // токены в cell_local_session при КАЖДОМ событии. Это позволяет
+  // восстановить сессию даже если основной ключ AUTH_STORAGE_KEY был
+  // потерян (перезагрузка устройства, чистка storage Chrome, смена PWA/браузер).
+  if (!session || !session.user) return;
+  const u = session.user;
+  const isLocal = u.is_anonymous === true ||
+                  !u.email ||
+                  (u.app_metadata && u.app_metadata.provider === "anonymous");
+  if (isLocal && session.access_token && session.refresh_token) {
+    try {
+      localStorage.setItem("cell_local_session", JSON.stringify({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      }));
+    } catch (e) { /* silent */ }
   }
 });
 
@@ -15187,6 +15206,14 @@ async function localLogin() {
           refresh_token: saved.refresh_token,
         });
         if (!error && data && data.session) {
+          // 🔴 Обновляем backup свежими токенами — они могли
+          // быть ротированы при setSession.
+          try {
+            localStorage.setItem("cell_local_session", JSON.stringify({
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+            }));
+          } catch (e) { /* silent */ }
           // Успех — возвращаемся в свой аккаунт
           showApp(data.session.user);
           return;
@@ -15231,6 +15258,19 @@ async function localLogin() {
       });
     }
   } catch (e) { console.warn("local profile bootstrap:", e); }
+
+  // 🔴 Сразу после signInAnonymously сохраняем backup-токены.
+  // Без этого при перезагрузке устройства локальная сессия может
+  // потеряться, и пользователю придётся заново жать «Войти локально».
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session && session.access_token && session.refresh_token) {
+      localStorage.setItem("cell_local_session", JSON.stringify({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      }));
+    }
+  } catch (e) { /* silent */ }
 
   // 4. Только что создали аккаунт — сразу дадим пользователю выбрать имя,
   //    юзернейм и аватар. При повторном входе диалог не показываем.
@@ -15488,5 +15528,35 @@ setupLocalLogin();
     // Если в URL есть #open-chat=<id> (клик по push-уведомлению на закрытом
     // приложении) — открываем нужный чат после загрузки.
     handleOpenChatHash();
+    return;
   }
+
+  // 🔴 Фолбэк: основной сессии в AUTH_STORAGE_KEY нет, но есть backup
+  // локального аккаунта — пробуем восстановить его автоматически.
+  // Так local-сессия переживает перезапуск устройства, смену
+  // PWA ↔ браузер и потерю основной сессии в localStorage.
+  try {
+    const raw = localStorage.getItem("cell_local_session");
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (!saved || !saved.access_token || !saved.refresh_token) return;
+    const { data, error } = await supabase.auth.setSession({
+      access_token: saved.access_token,
+      refresh_token: saved.refresh_token,
+    });
+    if (!error && data && data.session) {
+      // Обновляем backup свежими токенами (setSession мог их ротировать)
+      try {
+        localStorage.setItem("cell_local_session", JSON.stringify({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        }));
+      } catch (e) { /* silent */ }
+      showApp(data.session.user);
+      handleOpenChatHash();
+      return;
+    }
+    // Токены отозваны/протухли — чистим backup, чтобы не пытаться снова
+    localStorage.removeItem("cell_local_session");
+  } catch (e) { /* silent */ }
 })();
