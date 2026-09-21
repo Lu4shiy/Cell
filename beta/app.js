@@ -3694,19 +3694,6 @@ function resetAppState() {
 }
 
 // ======================= 4. ЭКРАНЫ =======================
-<<<<<<< HEAD
-async function showApp(user) {
-  // 🔴 BETA: доступ только для тестеров. Проверка ДО открытия приложения —
-  // иначе пользователь успевает залогиниться и увидеть бета-интерфейс.
-  if (/\/beta\//.test(window.location.pathname)) {
-    let isTester = false;
-    try {
-      const { data: prof } = await supabase.from("profiles")
-        .select("is_tester").eq("id", user.id).maybeSingle();
-      isTester = !!(prof && prof.is_tester);
-    } catch (e) {
-      isTester = false;
-=======
 async function showApp(user) {
   // 🔴 BETA: доступ только для тестеров. Проверка ДО открытия приложения —
   // иначе пользователь успевает залогиниться и увидеть бета-интерфейс.
@@ -3741,22 +3728,10 @@ async function showApp(user) {
       listEl.innerHTML = '<div class="empty">Ошибка запуска:<br>' +
         escapeHtml(err && err.message ? err.message : String(err)) +
         '<br><br>Открой F12 → Console и покажи ошибку.</div>';
->>>>>>> 4d889940f9b65d806d91d8c2178ed680adef304a
     }
-
-    if (!isTester) {
-      // Показываем понятную плашку, чтобы не выглядело как «сломалось».
-      try {
-        await showAlertDialog(
-          t("beta.notTester.title"),
-          t("beta.notTester.text")
-        );
-      } catch (e) { /* silent */ }
-      try { await supabase.auth.signOut(); } catch (e) {}
-      window.location.replace("/Cell/");
-      return;
-    }
-  }
+  });
+  setTimeout(updateE2eeComposerHint, 500);
+}
 
 function showAuth() {
   resetAppState();
