@@ -3754,6 +3754,21 @@ async function initApp() {
   subscribeToBlocks(); subscribeToGlobalChanges(); subscribeToProfiles();
   subscribeToMemberships(); subscribeToReads(); subscribeToGlobalMessages();
   await Promise.all([loadMyProfile(), loadBlocks(), loadChatReads()]);
+
+  // 🔴 BETA: пускаем только тестеров. Всех остальных отправляем
+  // в стабильную версию. Проверка идёт по profiles.is_tester.
+  const BETA_ALLOWED = !!(myProfile && myProfile.is_tester);
+  if (!BETA_ALLOWED) {
+    try {
+      // На всякий случай убеждаемся, что мы реально в /beta/,
+      // чтобы не зациклиться, если кто-то случайно скопирует это
+      // в стабильную версию.
+      if (/\/beta\//.test(window.location.pathname)) {
+        window.location.replace("/Cell/");
+        return;
+      }
+    } catch (e) { /* silent */ }
+  }
   // Пробуем автоматически разблокировать E2EE, если ключ был сохранён
   // в этой сессии или на доверенном устройстве.
   tryRestoreE2eeSession();
@@ -3905,7 +3920,7 @@ async function pollMyMessageStatuses() {
 
 async function loadMyProfile() {
   const { data, error } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, accent_color, gender, last_seen, birthday, created_at, imagi_tokens, verified, bio")
+    .select("id, username, display_name, avatar_url, accent_color, gender, last_seen, birthday, created_at, imagi_tokens, verified, bio, is_tester")
     .eq("id", currentUser.id).single();
   if (error) { console.error(error); return; }
   myProfile = data; profileCache.set(currentUser.id, data);

@@ -1,7 +1,7 @@
 {
-  "name": "Cell — семейный мессенджер",
-  "short_name": "Cell",
-  "description": "Собираемся по кусочкам",
+  "name": "Cell — семейный мессенджер (BETA)",
+  "short_name": "Cell BETA",
+  "description": "Собираемся по кусочкам · бета для тестеров",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -11,6 +11,24 @@
   "lang": "ru",
   "categories": ["social", "communication"],
   "icons": [
+    {
+      "src": "./icon-beta-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-beta-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-beta-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
     {
       "src": "./icon-192.png",
       "sizes": "192x192",
@@ -22,12 +40,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
-    },
-    {
-      "src": "./icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
     }
   ]
 }

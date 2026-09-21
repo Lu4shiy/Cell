@@ -3905,7 +3905,7 @@ async function pollMyMessageStatuses() {
 
 async function loadMyProfile() {
   const { data, error } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, accent_color, gender, last_seen, birthday, created_at, imagi_tokens, verified, bio")
+    .select("id, username, display_name, avatar_url, accent_color, gender, last_seen, birthday, created_at, imagi_tokens, verified, bio, is_tester")
     .eq("id", currentUser.id).single();
   if (error) { console.error(error); return; }
   myProfile = data; profileCache.set(currentUser.id, data);

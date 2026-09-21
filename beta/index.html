@@ -1166,6 +1166,17 @@
         const closeBtn = document.getElementById('update-banner-close');
         let reloadTriggered = false;
 
+        // 🔴 Флаг: SW уже активировался хотя бы раз в этом браузере.
+        // На самой первой установке state становится 'installed', но
+        // это ещё не «обновление» — баннер показывать не надо.
+        const SW_EVER_ACTIVE_KEY = "cell_sw_ever_active";
+        function swEverActive() {
+          try { return localStorage.getItem(SW_EVER_ACTIVE_KEY) === "1"; } catch (e) { return false; }
+        }
+        function markSwActive() {
+          try { localStorage.setItem(SW_EVER_ACTIVE_KEY, "1"); } catch (e) {}
+        }
+
         function showUpdateBanner() {
           if (!updateBanner) return;
           updateBanner.classList.remove('hidden');
@@ -1212,6 +1223,9 @@
         // ⚠️ Только если это был наш явный перезапуск. Иначе не трогаем —
         // фоновое обновление SW не должно ронять страницу.
         navigator.serviceWorker.addEventListener('controllerchange', () => {
+          // Первый раз контроллер появился — значит SW только что
+          // встал впервые. Запоминаем, но баннер не трогаем.
+          markSwActive();
           if (!reloadTriggered) return;
           reloadTriggered = false;
           // 🔴 Cache-busting — см. hardReload() выше.
@@ -1227,22 +1241,25 @@
         // не появится, пока не почистишь кэш руками.
         .register('./sw.js', { scope: './', updateViaCache: 'none' })
         .then((reg) => {
-          // 🔴 Убрали проверку navigator.serviceWorker.controller.
-          // Она ломала показ плашки на iOS PWA при первой загрузке после
-          // перезапуска приложения: controller там null, а waiting уже есть —
-          // плашка не появлялась, хотя обновление готово.
-          if (reg.waiting) showUpdateBanner();
+          // 🔴 Баннер показываем только если SW уже был активен раньше —
+          // иначе это первая установка, обновлять нечего.
+          if (reg.waiting && swEverActive()) showUpdateBanner();
 
           reg.addEventListener('updatefound', () => {
             const newWorker = reg.installing;
             if (!newWorker) return;
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed') {
-                // Новый SW скачан и ждёт активации
-                showUpdateBanner();
+                // Новый SW скачан и ждёт активации. Показываем баннер
+                // только если это реально обновление, а не первая установка.
+                if (swEverActive()) showUpdateBanner();
               }
             });
           });
+
+          // Если SW уже активен прямо сейчас — сразу ставим флаг,
+          // чтобы следующие загрузки не считались «первой установкой».
+          if (navigator.serviceWorker.controller) markSwActive();
 
           // 🔴 Проверяем обновления АГРЕССИВНО:
           // — сразу при загрузке;
@@ -1252,7 +1269,7 @@
           // — при pageshow (iOS PWA «раскрывается» из фона именно так).
           const checkUpdate = () => {
             reg.update().catch(() => {});
-            if (reg.waiting) showUpdateBanner();
+            if (reg.waiting && swEverActive()) showUpdateBanner();
           };
           checkUpdate();
           setInterval(checkUpdate, 60 * 1000);
