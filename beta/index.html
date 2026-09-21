@@ -179,6 +179,10 @@
   <span class="cell-icon" data-icon="plus"></span>
   <span data-i18n="sidebar.menu.createChannel">Создать канал</span>
 </button>
+<button id="market-btn" class="drawer-btn" type="button">
+  <span class="cell-icon" data-icon="market"></span>
+  <span data-i18n="sidebar.menu.market">Маркет</span>
+</button>
 <button id="settings-btn" class="drawer-btn" type="button">
   <span class="cell-icon" data-icon="settings"></span>
   <span data-i18n="sidebar.menu.settings">Настройки</span>
@@ -1143,6 +1147,38 @@
   <div id="gift-context-menu" class="context-menu hidden">
     <button data-action="pin" data-i18n="gifts.action.pin">Закрепить</button>
     <button data-action="visibility" data-i18n="gifts.action.toProfile">Добавить в профиль</button>
+    <button data-action="market" data-i18n="gifts.action.toMarket">Добавить в маркет</button>
+  </div>
+
+  <!-- ═══════ МАРКЕТ ПОДАРКОВ ═══════ -->
+  <div id="market-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-market">
+      <div class="market-header">
+        <div class="market-title" data-i18n="market.title">Маркет</div>
+        <div class="market-balance">
+          <img class="nectar-icon" src="https://i.ibb.co/MkfVPGwZ/icons8-100.png" alt="Nectar" draggable="false">
+          <span id="market-balance">0</span>
+        </div>
+        <button class="market-close" id="market-close" type="button" aria-label="Закрыть">
+          <span class="cell-icon" data-icon="cancel"></span>
+        </button>
+      </div>
+
+      <div class="market-body" id="market-content"></div>
+
+      <div class="market-tabs">
+        <button class="market-tab" data-market-tab="cart" type="button" title="Корзина">
+          <span class="cell-icon" data-icon="shoppingCart"></span>
+          <span class="market-cart-badge hidden" id="market-cart-badge">0</span>
+        </button>
+        <button class="market-tab active" data-market-tab="listings" type="button" title="Предложения">
+          <span class="cell-icon" data-icon="shoppingBag"></span>
+        </button>
+        <button class="market-tab" data-market-tab="profile" type="button" title="Профиль">
+          <span class="cell-icon" data-icon="accountMale"></span>
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Контейнер для in-app уведомлений (тостов) -->

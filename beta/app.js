@@ -176,6 +176,16 @@ const ICONS = {
   switchOn:        "https://i.ibb.co/MDfhc887/icons8-switch-on-100.png",
   findFile:        "https://i.ibb.co/8L9MNx03/icons8-view-100.png",
   verified:        "https://i.ibb.co/TB7T6kgN/image.png",
+
+  // === Маркет ===
+  market:          "https://i.ibb.co/RG3LgKBL/icons8-100.png",
+  accountMale:     "https://i.ibb.co/GvKBtx0w/icons8-account-male-100.png",
+  shoppingBag:     "https://i.ibb.co/Lz6dqFms/icons8-shopping-bag-100.png",
+  shoppingCart:    "https://i.ibb.co/kVPjvzB1/icons8-shopping-cart-100.png",
+  shield:          "https://i.ibb.co/6R2jYqGm/icons8-shield-100.png",
+  decrease:        "https://i.ibb.co/WNH28Vtd/icons8-decrease-100.png",
+  increase:        "https://i.ibb.co/dySYFnz/icons8-increase-100.png",
+  history:         "https://i.ibb.co/gMN2RM6W/icons8-100.png",
 };
 
 function verifiedBadge(profile) {
@@ -334,6 +344,7 @@ const I18N = {
 
     // ---- Сайдбар ----
     "sidebar.menu.createChannel": "Создать канал",
+    "sidebar.menu.market": "Маркет",
     "sidebar.menu.settings": "Настройки",
     "sidebar.menu.about": "О приложении",
     "sidebar.menu.logout": "Выйти",
@@ -1096,6 +1107,7 @@ const I18N = {
 
     // ---- Sidebar ----
     "sidebar.menu.createChannel": "Create channel",
+    "sidebar.menu.market": "Market",
     "sidebar.menu.settings": "Settings",
     "sidebar.menu.about": "About",
     "sidebar.menu.logout": "Log out",
@@ -3818,6 +3830,7 @@ async function initApp() {
   subscribeToPins();
   subscribeToChannelRequests();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
+  setupMarketUI();
   setupAvatarCropper();
   setupGrandmaEscapeHatch();
   setupBirthdayClose(); setupTokensDialog(); setupChannelCreate(); setupChannelEdit();
@@ -11413,6 +11426,81 @@ function throttledLastSeen() {
   if (now - lastSeenThrottleAt < LAST_SEEN_THROTTLE_MS) return;
   lastSeenThrottleAt = now;
   updateMyLastSeen();
+}
+
+// ======================================================
+// 26.5. МАРКЕТ ПОДАРКОВ — каркас
+// ======================================================
+
+let marketTab = "listings"; // "profile" | "listings" | "cart"
+
+function setupMarketUI() {
+  const btn = document.getElementById("market-btn");
+  const overlay = document.getElementById("market-overlay");
+  const closeBtn = document.getElementById("market-close");
+  if (!btn || !overlay) return;
+
+  // Открытие из бургер-меню. Закрываем drawer, потом показываем окно.
+  btn.addEventListener("click", () => {
+    const sidebar = document.querySelector(".sidebar");
+    if (sidebar) sidebar.classList.remove("menu-open");
+    openMarket();
+  });
+
+  if (closeBtn) closeBtn.addEventListener("click", closeMarket);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeMarket();
+  });
+
+  document.querySelectorAll(".market-tab").forEach((t) => {
+    t.addEventListener("click", () => switchMarketTab(t.dataset.marketTab));
+  });
+}
+
+function openMarket() {
+  const overlay = document.getElementById("market-overlay");
+  if (!overlay) return;
+  overlay.classList.remove("hidden");
+  if (typeof refreshMarketBalance === "function") refreshMarketBalance();
+  switchMarketTab(marketTab || "listings");
+}
+
+function closeMarket() {
+  const overlay = document.getElementById("market-overlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+function switchMarketTab(tab) {
+  if (!tab) return;
+  marketTab = tab;
+  document.querySelectorAll(".market-tab").forEach((t) => {
+    t.classList.toggle("active", t.dataset.marketTab === tab);
+  });
+  const content = document.getElementById("market-content");
+  if (!content) return;
+
+  // Заглушки — реальные рендеры подключим на следующих этапах.
+  content.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
+  if (tab === "profile") {
+    if (typeof renderMarketProfile === "function") renderMarketProfile();
+    else content.innerHTML = '<div class="empty">Профиль продавца — в разработке</div>';
+  } else if (tab === "listings") {
+    if (typeof renderMarketListings === "function") renderMarketListings();
+    else content.innerHTML = '<div class="empty">Предложения — в разработке</div>';
+  } else if (tab === "cart") {
+    if (typeof renderMarketCart === "function") renderMarketCart();
+    else content.innerHTML = '<div class="empty">Корзина — в разработке</div>';
+  }
+}
+
+async function refreshMarketBalance() {
+  try {
+    const { data } = await supabase.from("profiles")
+      .select("imagi_tokens").eq("id", currentUser.id).single();
+    const el = document.getElementById("market-balance");
+    if (el && data) el.textContent = String(data.imagi_tokens || 0);
+    if (myProfile && data) myProfile.imagi_tokens = data.imagi_tokens;
+  } catch (e) { /* silent */ }
 }
 
 // ======================================================
