@@ -292,6 +292,9 @@ const I18N = {
     "auth.login.submit": "Войти",
     "auth.register.submit": "Создать аккаунт",
     "auth.err.prefix": "Ошибка",
+    "beta.notTester.title": "Доступ закрыт",
+    "beta.notTester.text": "С этого аккаунта вход в бета-версию запрещён. Сейчас откроем стабильную версию Cell.",
+    "beta.notTester.action": "Понятно",
     "auth.err.username.required": "Введите юзернейм",
     "auth.err.username.format": "Юзернейм: 3-32 символа, a-z, 0-9, _ и -",
     "auth.err.displayname.required": "Введите имя",
@@ -1051,6 +1054,9 @@ const I18N = {
     "auth.login.submit": "Log in",
     "auth.register.submit": "Create account",
     "auth.err.prefix": "Error",
+    "beta.notTester.title": "Access denied",
+    "beta.notTester.text": "This account can't sign in to the beta version. Opening the stable Cell instead.",
+    "beta.notTester.action": "Got it",
     "auth.err.username.required": "Enter a username",
     "auth.err.username.format": "Username: 3–32 characters, a-z, 0-9, _ and -",
     "auth.err.displayname.required": "Enter a name",
@@ -3688,6 +3694,19 @@ function resetAppState() {
 }
 
 // ======================= 4. ЭКРАНЫ =======================
+<<<<<<< HEAD
+async function showApp(user) {
+  // 🔴 BETA: доступ только для тестеров. Проверка ДО открытия приложения —
+  // иначе пользователь успевает залогиниться и увидеть бета-интерфейс.
+  if (/\/beta\//.test(window.location.pathname)) {
+    let isTester = false;
+    try {
+      const { data: prof } = await supabase.from("profiles")
+        .select("is_tester").eq("id", user.id).maybeSingle();
+      isTester = !!(prof && prof.is_tester);
+    } catch (e) {
+      isTester = false;
+=======
 async function showApp(user) {
   // 🔴 BETA: доступ только для тестеров. Проверка ДО открытия приложения —
   // иначе пользователь успевает залогиниться и увидеть бета-интерфейс.
@@ -3722,10 +3741,22 @@ async function showApp(user) {
       listEl.innerHTML = '<div class="empty">Ошибка запуска:<br>' +
         escapeHtml(err && err.message ? err.message : String(err)) +
         '<br><br>Открой F12 → Console и покажи ошибку.</div>';
+>>>>>>> 4d889940f9b65d806d91d8c2178ed680adef304a
     }
-  });
-  setTimeout(updateE2eeComposerHint, 500);
-}
+
+    if (!isTester) {
+      // Показываем понятную плашку, чтобы не выглядело как «сломалось».
+      try {
+        await showAlertDialog(
+          t("beta.notTester.title"),
+          t("beta.notTester.text")
+        );
+      } catch (e) { /* silent */ }
+      try { await supabase.auth.signOut(); } catch (e) {}
+      window.location.replace("/Cell/");
+      return;
+    }
+  }
 
 function showAuth() {
   resetAppState();
