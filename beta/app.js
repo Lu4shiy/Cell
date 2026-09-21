@@ -13992,7 +13992,9 @@ async function refreshInviteList() {
     listEl.innerHTML = '<div class="empty">' + escapeHtml(t("invite.empty")) + '</div>';
     return;
   }
-  const baseUrl = window.location.origin + window.location.pathname;
+  // 🔴 В beta ссылки-приглашения ведут на stable, чтобы обычные юзеры
+  // не попадали в beta.
+  const baseUrl = window.location.origin + "/Cell/";
   listEl.innerHTML = currentInvitesList.map((inv) => {
     const url = `${baseUrl}#invite=${inv.code}`;
     return `
@@ -15401,8 +15403,12 @@ function setupPasswordReset() {
       reqErr.textContent = "";
       if (!email) { reqErr.textContent = t("auth.err.email.required"); return; }
       reqSubmit.disabled = true;
+      // 🔴 Beta: редирект возвращает именно в beta, а не в stable.
+      // Определяем текущий путь динамически.
+      const _betaRedirect = window.location.origin +
+        window.location.pathname.replace(/index\.html$/, "");
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: "https://lu4shiy.github.io/Cell/",
+        redirectTo: _betaRedirect,
       });
       reqSubmit.disabled = false;
       if (error) { reqErr.textContent = error.message || t("auth.reset.err"); return; }
