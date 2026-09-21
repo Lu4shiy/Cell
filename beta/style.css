@@ -4806,6 +4806,242 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 }
 
 /* ====================================================== */
+/* МАРКЕТ: ФИЛЬТРЫ                                         */
+/* ====================================================== */
+
+.market-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+  align-items: center;
+}
+
+.market-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-sub);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+  max-width: 220px;
+}
+.market-filter-chip:hover { background: var(--bg-hover); color: var(--text); border-color: var(--accent); }
+.market-filter-chip.active {
+  background: rgba(var(--accent-rgb), 0.15);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.market-filter-chip > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.market-filter-chip .cell-icon { width: 14px; height: 14px; }
+
+.market-filter-apply {
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: none;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  color: #15110d;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s, opacity 0.15s;
+}
+.market-filter-apply:hover:not(:disabled) { filter: brightness(1.08); }
+.market-filter-apply:disabled {
+  opacity: 0.4;
+  cursor: default;
+  filter: none;
+}
+
+/* ====================================================== */
+/* МАРКЕТ: СЕТКА ЛОТОВ                                     */
+/* ====================================================== */
+
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 900px) {
+  .market-grid { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 700px) {
+  .market-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+.market-card {
+  position: relative;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: transform 0.12s, border-color 0.12s, background 0.12s;
+}
+.market-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.market-card-media {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.market-card-media .gift-tile-pattern {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.45;
+  background-size: 37.5px 37.5px;
+  background-repeat: repeat;
+  background-position: 0 0;
+  z-index: 0;
+  display: none;
+}
+.market-card-media .gift-tile-emoji-symbol {
+  position: relative;
+  z-index: 1;
+  font-size: 51px;
+  line-height: 1;
+}
+
+.market-card-ribbon {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.market-card-info {
+  padding: 8px 10px 4px;
+  flex: 1;
+  min-width: 0;
+}
+.market-card-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.market-card-price {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.market-card-actions {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px 8px;
+}
+.market-card-actions button {
+  flex: 1;
+  padding: 6px 4px;
+  border-radius: 8px;
+  border: none;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: filter 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.market-card-buy {
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  color: #15110d;
+}
+.market-card-buy:hover { filter: brightness(1.08); }
+
+.market-card-cart {
+  background: transparent;
+  color: var(--text-sub);
+  border: 1px solid var(--border);
+}
+.market-card-cart:hover { color: var(--accent); border-color: var(--accent); }
+.market-card-cart.in-cart {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.market-card-cart.in-cart:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+/* ====================================================== */
+/* МАРКЕТ: ПИКЕР ФИЛЬТРА                                   */
+/* ====================================================== */
+
+.dialog-market-picker {
+  max-width: 420px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+.dialog-market-picker .dialog-options-list {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.market-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.market-picker-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.market-picker-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.market-picker-swatch {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+
+/* ====================================================== */
 /* ОТКЛЮЧАЕМ HOVER НА ТАЧ-УСТРОЙСТВАХ                       */
 /* ====================================================== */
 /* На тач-устройствах :hover «залипает»: элемент, который

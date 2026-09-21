@@ -346,6 +346,27 @@ const I18N = {
     "sidebar.menu.createChannel": "Создать канал",
     "sidebar.menu.market": "Маркет",
     "sidebar.menu.settings": "Настройки",
+
+    // ---- Маркет ----
+    "market.title": "Маркет",
+    "market.empty": "Пока нет предложений по этому фильтру.",
+    "market.card.buy": "Купить",
+    "market.card.toCart": "В корзину",
+    "market.card.removeFromCart": "Убрать",
+    "market.filter.gift": "Подарок",
+    "market.filter.model": "Модель",
+    "market.filter.background": "Фон",
+    "market.filter.pattern": "Паттерн",
+    "market.filter.all": "Все",
+    "market.filter.apply": "Применить",
+    "market.sort.label": "Сортировка",
+    "market.sort.newDesc": "Сначала новые",
+    "market.sort.newAsc": "Сначала старые",
+    "market.sort.priceDesc": "Дорогие → дешёвые",
+    "market.sort.priceAsc": "Дешёвые → дорогие",
+    "market.buy.title": "Купить подарок",
+    "market.buy.text": "Подарок перейдёт в ваш профиль. Спишется {price} Nectar.",
+    "market.buy.confirm": "Купить",
     "sidebar.menu.about": "О приложении",
     "sidebar.menu.logout": "Выйти",
     "sidebar.search.placeholder": "Поиск по имени или @username",
@@ -1109,6 +1130,27 @@ const I18N = {
     "sidebar.menu.createChannel": "Create channel",
     "sidebar.menu.market": "Market",
     "sidebar.menu.settings": "Settings",
+
+    // ---- Market ----
+    "market.title": "Market",
+    "market.empty": "No listings match this filter yet.",
+    "market.card.buy": "Buy",
+    "market.card.toCart": "Add to cart",
+    "market.card.removeFromCart": "Remove",
+    "market.filter.gift": "Gift",
+    "market.filter.model": "Model",
+    "market.filter.background": "Background",
+    "market.filter.pattern": "Pattern",
+    "market.filter.all": "All",
+    "market.filter.apply": "Apply",
+    "market.sort.label": "Sort",
+    "market.sort.newDesc": "Newest first",
+    "market.sort.newAsc": "Oldest first",
+    "market.sort.priceDesc": "Price: high to low",
+    "market.sort.priceAsc": "Price: low to high",
+    "market.buy.title": "Buy gift",
+    "market.buy.text": "Gift will move to your profile. You'll spend {price} Nectar.",
+    "market.buy.confirm": "Buy",
     "sidebar.menu.about": "About",
     "sidebar.menu.logout": "Log out",
     "sidebar.search.placeholder": "Search by name or @username",
@@ -11429,10 +11471,24 @@ function throttledLastSeen() {
 }
 
 // ======================================================
-// 26.5. МАРКЕТ ПОДАРКОВ — каркас
+// 26.5. МАРКЕТ ПОДАРКОВ — каркас + вкладка «Предложения»
 // ======================================================
 
 let marketTab = "listings"; // "profile" | "listings" | "cart"
+
+// Кэш прогруженных лотов. Живёт, пока открыт маркет.
+// При закрытии маркета — сбрасывается (требование ТЗ).
+const marketState = {
+  listings: [],
+  hasMore: true,
+  loading: false,
+  offset: 0,
+  filtersApplied: { giftId: null, modelId: null, backgroundName: null, patternId: null, sort: "new-desc" },
+  filtersDraft:   { giftId: null, modelId: null, backgroundName: null, patternId: null, sort: "new-desc" },
+};
+
+// ID лотов, лежащих в корзине текущего пользователя.
+let marketCartIds = new Set();
 
 function setupMarketUI() {
   const btn = document.getElementById("market-btn");
@@ -11455,19 +11511,39 @@ function setupMarketUI() {
   document.querySelectorAll(".market-tab").forEach((t) => {
     t.addEventListener("click", () => switchMarketTab(t.dataset.marketTab));
   });
+
+  // Бесконечная подгрузка лотов при скролле.
+  const body = document.getElementById("market-content");
+  if (body && !body.__marketScrollBound) {
+    body.__marketScrollBound = true;
+    body.addEventListener("scroll", () => {
+      if (marketTab !== "listings") return;
+      if (!marketState.hasMore || marketState.loading) return;
+      const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 400;
+      if (nearBottom) loadMarketListings(false);
+    }, { passive: true });
+  }
 }
 
 function openMarket() {
   const overlay = document.getElementById("market-overlay");
   if (!overlay) return;
   overlay.classList.remove("hidden");
-  if (typeof refreshMarketBalance === "function") refreshMarketBalance();
+  refreshMarketBalance();
+  refreshMarketCart();
   switchMarketTab(marketTab || "listings");
 }
 
 function closeMarket() {
   const overlay = document.getElementById("market-overlay");
   if (overlay) overlay.classList.add("hidden");
+  // Требование ТЗ: при выходе из маркета прогруженные предложения сгружаются.
+  marketState.listings = [];
+  marketState.hasMore = true;
+  marketState.loading = false;
+  marketState.offset = 0;
+  marketState.filtersApplied = { giftId: null, modelId: null, backgroundName: null, patternId: null, sort: "new-desc" };
+  marketState.filtersDraft   = { giftId: null, modelId: null, backgroundName: null, patternId: null, sort: "new-desc" };
 }
 
 function switchMarketTab(tab) {
@@ -11478,15 +11554,14 @@ function switchMarketTab(tab) {
   });
   const content = document.getElementById("market-content");
   if (!content) return;
-
-  // Заглушки — реальные рендеры подключим на следующих этапах.
+  content.scrollTop = 0;
   content.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
+
   if (tab === "profile") {
     if (typeof renderMarketProfile === "function") renderMarketProfile();
     else content.innerHTML = '<div class="empty">Профиль продавца — в разработке</div>';
   } else if (tab === "listings") {
-    if (typeof renderMarketListings === "function") renderMarketListings();
-    else content.innerHTML = '<div class="empty">Предложения — в разработке</div>';
+    renderMarketListings();
   } else if (tab === "cart") {
     if (typeof renderMarketCart === "function") renderMarketCart();
     else content.innerHTML = '<div class="empty">Корзина — в разработке</div>';
@@ -11501,6 +11576,485 @@ async function refreshMarketBalance() {
     if (el && data) el.textContent = String(data.imagi_tokens || 0);
     if (myProfile && data) myProfile.imagi_tokens = data.imagi_tokens;
   } catch (e) { /* silent */ }
+}
+
+// ======================================================
+// Маркет: корзина
+// ======================================================
+
+async function refreshMarketCart() {
+  try {
+    const { data } = await supabase.from("market_cart")
+      .select("listing_id").eq("user_id", currentUser.id);
+    marketCartIds = new Set((data || []).map((r) => r.listing_id));
+    updateMarketCartBadge();
+  } catch (e) { /* silent */ }
+}
+
+function updateMarketCartBadge() {
+  const badge = document.getElementById("market-cart-badge");
+  if (!badge) return;
+  const n = marketCartIds.size;
+  if (n > 0) { badge.textContent = String(n); badge.classList.remove("hidden"); }
+  else badge.classList.add("hidden");
+}
+
+async function marketCartToggle(listingId) {
+  const inCart = marketCartIds.has(listingId);
+  const rpcName = inCart ? "market_cart_remove" : "market_cart_add";
+  const { error } = await supabase.rpc(rpcName, { p_listing_id: listingId });
+  if (error) { await showAlertDialog(t("gifts.error"), error.message); return; }
+  if (inCart) marketCartIds.delete(listingId);
+  else marketCartIds.add(listingId);
+  updateMarketCartBadge();
+
+  // Мгновенно меняем надпись на карточке.
+  const card = document.querySelector(`.market-card[data-listing-id="${listingId}"]`);
+  if (card) {
+    const btn = card.querySelector(".market-card-cart");
+    if (btn) {
+      const nowIn = marketCartIds.has(listingId);
+      btn.classList.toggle("in-cart", nowIn);
+      btn.textContent = nowIn ? t("market.card.removeFromCart") : t("market.card.toCart");
+    }
+  }
+}
+
+// ======================================================
+// Маркет: вкладка «Предложения»
+// ======================================================
+
+function renderMarketListings() {
+  if (!marketState.listings.length && marketState.hasMore && !marketState.loading) {
+    loadMarketListings(true);
+    return;
+  }
+  renderMarketListingsFromCache();
+}
+
+async function loadMarketListings(reset) {
+  if (marketState.loading) return;
+  if (!reset && !marketState.hasMore) return;
+  marketState.loading = true;
+
+  if (reset) {
+    marketState.listings = [];
+    marketState.offset = 0;
+    marketState.hasMore = true;
+  }
+
+  const content = document.getElementById("market-content");
+  if (reset && content) content.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
+
+  const PAGE = 50;
+  const from = marketState.offset;
+  const to = from + PAGE - 1;
+
+  try {
+    let q = supabase.from("market_listings")
+      .select("id, price, created_at, seller_id, user_gift_id, user_gifts!inner(id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name)")
+      .eq("status", "active");
+
+    const f = marketState.filtersApplied;
+    if (f.giftId)         q = q.eq("user_gifts.gift_id", f.giftId);
+    if (f.modelId)        q = q.eq("user_gifts.model_id", f.modelId);
+    if (f.backgroundName) q = q.eq("user_gifts.background_name", f.backgroundName);
+    if (f.patternId)      q = q.eq("user_gifts.pattern_id", f.patternId);
+
+    if (f.sort === "new-desc")        q = q.order("created_at", { ascending: false });
+    else if (f.sort === "new-asc")    q = q.order("created_at", { ascending: true });
+    else if (f.sort === "price-desc") q = q.order("price", { ascending: false });
+    else if (f.sort === "price-asc")  q = q.order("price", { ascending: true });
+
+    q = q.range(from, to);
+
+    const { data, error } = await q;
+    if (error) {
+      console.error("market listings:", error);
+      if (reset && content) content.innerHTML = `<div class="empty">Ошибка: ${escapeHtml(error.message)}</div>`;
+      marketState.loading = false;
+      return;
+    }
+
+    const rows = data || [];
+    marketState.listings = reset ? rows : marketState.listings.concat(rows);
+    marketState.offset += rows.length;
+    marketState.hasMore = rows.length >= PAGE;
+
+    // Прогружаем профили продавцов одним запросом — чтобы карточки лота
+    // сразу знали display_name / avatar_url.
+    const sellerIds = [...new Set(rows.map((r) => r.seller_id).filter(Boolean))];
+    if (sellerIds.length) {
+      const { data: profs } = await supabase.from("profiles")
+        .select("id, username, display_name, avatar_url").in("id", sellerIds);
+      (profs || []).forEach((p) => profileCache.set(p.id, p));
+    }
+
+    if (!giftCatalogCache.length) await loadGiftCatalog();
+
+    renderMarketListingsFromCache();
+  } catch (e) {
+    console.error("loadMarketListings:", e);
+  } finally {
+    marketState.loading = false;
+  }
+}
+
+function renderMarketListingsFromCache() {
+  const content = document.getElementById("market-content");
+  if (!content) return;
+
+  const filtersHtml = renderMarketFilters();
+
+  let gridHtml = "";
+  if (!marketState.listings.length) {
+    gridHtml = '<div class="empty">' + escapeHtml(t("market.empty")) + '</div>';
+  } else {
+    gridHtml = '<div class="market-grid">' +
+      marketState.listings.map(renderMarketListingCard).filter(Boolean).join("") +
+      '</div>';
+    if (marketState.loading) gridHtml += '<div class="msg-loader">' + escapeHtml(t("empty.loading")) + '</div>';
+  }
+
+  content.innerHTML = filtersHtml + gridHtml;
+
+  bindMarketFilterEvents();
+  bindMarketListingCards();
+  fillGiftPatternsIn(content);
+}
+
+function renderMarketListingCard(listing) {
+  const ug = listing.user_gifts || {};
+  const cat = giftCatalogCache.find((c) => c.id === ug.gift_id);
+  if (!cat) return "";
+
+  const bg = giftBackgroundStyle(ug.background, ug.background_rarity);
+  const patternIcon = cat.rarity === "epic" ? getPatternIcon(ug.pattern_id) : null;
+  const displayImg = giftDisplayImage(cat, ug);
+  const modelName = ug.model_name || "";
+  const title = `#${ug.serial_number}${modelName ? " " + modelName : ""}`;
+  const inCart = marketCartIds.has(listing.id);
+
+  return `
+    <div class="market-card" data-listing-id="${listing.id}">
+      <div class="market-card-media" style="${bg}">
+        ${patternIcon ? `<div class="gift-tile-pattern" data-icon="${escapeHtml(patternIcon)}"></div>` : ""}
+        <span class="gift-tile-emoji-symbol">${renderGiftModel(displayImg, 51)}</span>
+        <div class="market-card-ribbon">#${ug.serial_number}</div>
+      </div>
+      <div class="market-card-info">
+        <div class="market-card-name">${escapeHtml(title)}</div>
+        <div class="market-card-price">${NECTAR_HTML} ${listing.price}</div>
+      </div>
+      <div class="market-card-actions">
+        <button type="button" class="market-card-buy" data-action="buy" data-listing-id="${listing.id}">${escapeHtml(t("market.card.buy"))}</button>
+        <button type="button" class="market-card-cart ${inCart ? "in-cart" : ""}" data-action="cart" data-listing-id="${listing.id}">${escapeHtml(inCart ? t("market.card.removeFromCart") : t("market.card.toCart"))}</button>
+      </div>
+    </div>`;
+}
+
+function bindMarketListingCards() {
+  const content = document.getElementById("market-content");
+  if (!content) return;
+
+  content.querySelectorAll(".market-card").forEach((card) => {
+    const listingId = card.dataset.listingId;
+
+    card.addEventListener("click", (e) => {
+      // Клик по кнопкам — отдельные обработчики.
+      if (e.target.closest(".market-card-actions")) return;
+      openMarketListingDetail(listingId);
+    });
+
+    const buyBtn = card.querySelector('.market-card-buy');
+    if (buyBtn) buyBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      marketBuyListing(listingId);
+    });
+
+    const cartBtn = card.querySelector('.market-card-cart');
+    if (cartBtn) cartBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      marketCartToggle(listingId);
+    });
+  });
+}
+
+async function marketBuyListing(listingId) {
+  const listing = marketState.listings.find((l) => l.id === listingId);
+  if (!listing) return;
+
+  const ok = await showConfirmDialog(
+    t("market.buy.title"),
+    tFmt("market.buy.text", { price: `${NECTAR_HTML} <b>${listing.price}</b>` }),
+    t("market.buy.confirm"),
+    { html: true }
+  );
+  if (!ok) return;
+
+  const { error } = await supabase.rpc("market_buy_listing", { p_listing_id: listingId });
+  if (error) { await showAlertDialog(t("gifts.error"), error.message); return; }
+
+  marketState.listings = marketState.listings.filter((l) => l.id !== listingId);
+  marketCartIds.delete(listingId);
+  updateMarketCartBadge();
+
+  await refreshMarketBalance();
+  await refreshBalance();
+  await refreshMyGiftsCount();
+
+  renderMarketListingsFromCache();
+}
+
+// Заглушка — реальный экран сделаем на следующем этапе.
+function openMarketListingDetail(listingId) {
+  // eslint-disable-next-line no-console
+  console.log("openMarketListingDetail:", listingId);
+}
+
+// ======================================================
+// Маркет: фильтры
+// ======================================================
+
+function renderMarketFilters() {
+  const f = marketState.filtersDraft;
+  const cat = giftCatalogCache.find((c) => c.id === f.giftId);
+  const hasModels = !!(cat && Array.isArray(cat.models) && cat.models.length);
+
+  const chips = [];
+
+  // Подарок
+  chips.push(`
+    <button type="button" class="market-filter-chip ${f.giftId ? "active" : ""}" data-filter="gift">
+      <span>${escapeHtml(cat ? cat.name : t("market.filter.gift"))}</span>
+      <span class="cell-icon cell-icon-sm" data-icon="down"></span>
+    </button>`);
+
+  // Модель — только если выбран подарок с моделями.
+  if (hasModels) {
+    const model = cat.models.find((m) => m.id === f.modelId);
+    chips.push(`
+      <button type="button" class="market-filter-chip ${f.modelId ? "active" : ""}" data-filter="model">
+        <span>${escapeHtml(model ? (model.name || model.id) : t("market.filter.model"))}</span>
+        <span class="cell-icon cell-icon-sm" data-icon="down"></span>
+      </button>`);
+  }
+
+  // Фон
+  chips.push(`
+    <button type="button" class="market-filter-chip ${f.backgroundName ? "active" : ""}" data-filter="background">
+      <span>${escapeHtml(f.backgroundName || t("market.filter.background"))}</span>
+      <span class="cell-icon cell-icon-sm" data-icon="down"></span>
+    </button>`);
+
+  // Паттерн
+  const patternLabel = f.patternId ? f.patternId : t("market.filter.pattern");
+  chips.push(`
+    <button type="button" class="market-filter-chip ${f.patternId ? "active" : ""}" data-filter="pattern">
+      <span>${escapeHtml(patternLabel)}</span>
+      <span class="cell-icon cell-icon-sm" data-icon="down"></span>
+    </button>`);
+
+  // Сортировка
+  const sortLabel = ({
+    "new-desc":   t("market.sort.newDesc"),
+    "new-asc":    t("market.sort.newAsc"),
+    "price-desc": t("market.sort.priceDesc"),
+    "price-asc":  t("market.sort.priceAsc"),
+  })[f.sort] || t("market.sort.label");
+  chips.push(`
+    <button type="button" class="market-filter-chip" data-filter="sort">
+      <span>${escapeHtml(sortLabel)}</span>
+      <span class="cell-icon cell-icon-sm" data-icon="down"></span>
+    </button>`);
+
+  // Кнопка «Применить» — активна, если черновик отличается от применённого.
+  const dirty = JSON.stringify(f) !== JSON.stringify(marketState.filtersApplied);
+  chips.push(`
+    <button type="button" class="market-filter-apply" id="market-apply-btn" ${dirty ? "" : "disabled"}>
+      ${escapeHtml(t("market.filter.apply"))}
+    </button>`);
+
+  return `<div class="market-filters">${chips.join("")}</div>`;
+}
+
+function bindMarketFilterEvents() {
+  const content = document.getElementById("market-content");
+  if (!content) return;
+
+  content.querySelectorAll(".market-filter-chip[data-filter]").forEach((chip) => {
+    chip.addEventListener("click", () => openMarketFilterPicker(chip.dataset.filter));
+  });
+
+  const applyBtn = document.getElementById("market-apply-btn");
+  if (applyBtn) applyBtn.addEventListener("click", () => {
+    marketState.filtersApplied = { ...marketState.filtersDraft };
+    marketState.listings = [];
+    marketState.offset = 0;
+    marketState.hasMore = true;
+    loadMarketListings(true);
+  });
+}
+
+function openMarketFilterPicker(type) {
+  const f = marketState.filtersDraft;
+
+  if (type === "gift") {
+    const items = [{ value: null, label: t("market.filter.all"), icon: "" }];
+    giftCatalogCache.forEach((c) => {
+      items.push({
+        value: c.id,
+        label: c.name,
+        icon: renderGiftIcon(c.emoji, 22),
+      });
+    });
+    openMarketPicker({
+      title: t("market.filter.gift"),
+      items,
+      currentValue: f.giftId,
+      onPick: (val) => {
+        f.giftId = val;
+        f.modelId = null; // при смене подарка модель сбрасывается
+        renderMarketListingsFromCache();
+      },
+    });
+    return;
+  }
+
+  if (type === "model") {
+    const cat = giftCatalogCache.find((c) => c.id === f.giftId);
+    if (!cat || !Array.isArray(cat.models) || !cat.models.length) return;
+    const items = [{ value: null, label: t("market.filter.all"), icon: "" }];
+    cat.models.forEach((m) => {
+      items.push({
+        value: m.id,
+        label: m.name || m.id,
+        icon: renderGiftIcon(m.image || "", 22),
+      });
+    });
+    openMarketPicker({
+      title: t("market.filter.model"),
+      items,
+      currentValue: f.modelId,
+      onPick: (val) => { f.modelId = val; renderMarketListingsFromCache(); },
+    });
+    return;
+  }
+
+  if (type === "background") {
+    const items = [{ value: null, label: t("market.filter.all"), icon: "" }];
+    Object.keys(BACKGROUND_CHANCES).forEach((name) => {
+      const items2 = null; // eslint-disable-line no-unused-vars
+      items.push({
+        value: name,
+        label: name,
+        icon: `<span class="market-picker-swatch" style="${giftBackgroundStyle(name)}"></span>`,
+      });
+    });
+    openMarketPicker({
+      title: t("market.filter.background"),
+      items,
+      currentValue: f.backgroundName,
+      onPick: (val) => { f.backgroundName = val; renderMarketListingsFromCache(); },
+    });
+    return;
+  }
+
+  if (type === "pattern") {
+    const items = [{ value: null, label: t("market.filter.all"), icon: "" }];
+    GIFT_PATTERNS.forEach((p) => {
+      items.push({
+        value: p.id,
+        label: p.id,
+        icon: p.icon ? `<img src="${escapeHtml(p.icon)}" style="width:22px;height:22px;object-fit:contain;" alt="" draggable="false">` : "",
+      });
+    });
+    openMarketPicker({
+      title: t("market.filter.pattern"),
+      items,
+      currentValue: f.patternId,
+      onPick: (val) => { f.patternId = val; renderMarketListingsFromCache(); },
+    });
+    return;
+  }
+
+  if (type === "sort") {
+    const items = [
+      { value: "new-desc",   label: t("market.sort.newDesc"),   icon: "" },
+      { value: "new-asc",    label: t("market.sort.newAsc"),    icon: "" },
+      { value: "price-desc", label: t("market.sort.priceDesc"), icon: "" },
+      { value: "price-asc",  label: t("market.sort.priceAsc"),  icon: "" },
+    ];
+    openMarketPicker({
+      title: t("market.sort.label"),
+      items,
+      currentValue: f.sort,
+      searchable: false,
+      onPick: (val) => { f.sort = val; renderMarketListingsFromCache(); },
+    });
+    return;
+  }
+}
+
+function renderGiftIcon(value, size) {
+  const s = String(value || "").trim();
+  if (!s) return "";
+  if (/^https?:\/\//i.test(s)) {
+    return `<img src="${escapeHtml(s)}" style="width:${size}px;height:${size}px;object-fit:contain;display:block;" alt="" draggable="false">`;
+  }
+  return `<span style="font-size:${size}px;line-height:1;">${escapeHtml(s)}</span>`;
+}
+
+function openMarketPicker(opts) {
+  const overlay = document.getElementById("market-picker-overlay");
+  const titleEl = document.getElementById("market-picker-title");
+  const listEl = document.getElementById("market-picker-list");
+  const searchEl = document.getElementById("market-picker-search");
+  const cancelBtn = document.getElementById("market-picker-cancel");
+  if (!overlay) return;
+
+  titleEl.textContent = opts.title || "";
+  searchEl.value = "";
+  const searchable = opts.searchable !== false;
+  searchEl.style.display = searchable ? "" : "none";
+  searchEl.placeholder = t("dialog.search.placeholder");
+
+  const allItems = opts.items || [];
+  let rendered = allItems;
+
+  function renderList() {
+    if (!rendered.length) {
+      listEl.innerHTML = '<div class="empty" style="padding:10px;">Ничего не найдено</div>';
+      return;
+    }
+    listEl.innerHTML = rendered.map((it, i) => {
+      const icon = it.icon ? `<span class="market-picker-icon">${it.icon}</span>` : "";
+      const active = it.value === opts.currentValue ? "selected" : "";
+      return `<button type="button" class="dialog-option market-picker-item ${active}" data-idx="${i}">
+        ${icon}
+        <span class="market-picker-label">${escapeHtml(it.label)}</span>
+      </button>`;
+    }).join("");
+    listEl.querySelectorAll(".market-picker-item").forEach((b) => {
+      b.addEventListener("click", () => {
+        const it = rendered[parseInt(b.dataset.idx, 10)];
+        if (!it) return;
+        overlay.classList.add("hidden");
+        if (opts.onPick) opts.onPick(it.value);
+      });
+    });
+  }
+  renderList();
+
+  searchEl.oninput = () => {
+    const q = searchEl.value.trim().toLowerCase();
+    rendered = !q ? allItems : allItems.filter((it) => String(it.label).toLowerCase().includes(q));
+    renderList();
+  };
+
+  cancelBtn.onclick = () => overlay.classList.add("hidden");
+  overlay.classList.remove("hidden");
+  if (searchable) setTimeout(() => searchEl.focus(), 60);
 }
 
 // ======================================================
