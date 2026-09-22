@@ -9669,6 +9669,9 @@ function subscribeToChat(chatId) {
         if (el) el.remove();
         checkEmptyChat();
         refreshMessageGroups();
+        // 🔴 Если удалённое сообщение было последним — обновим превью
+        // в списке чатов, чтобы у собеседника тоже не осталось «призрака».
+        refreshChatLastMsgAfterDelete(currentChatId, [id]).catch(() => {});
       })
     .subscribe();
 }
@@ -10850,6 +10853,57 @@ async function handleDeleteOne(msgId) {
   else if (choice === "both") await deleteMessageForBoth(msgId);
 }
 
+// 🔴 После удаления сообщения у себя/у обоих превью в списке чатов
+// может остаться старым — если удалили последнее сообщение. Эта функция
+// ищет самое свежее оставшееся и обновляет превью.
+async function refreshChatLastMsgAfterDelete(chatId, deletedIds) {
+  if (!chatId) return;
+  const delSet = new Set(deletedIds || []);
+
+  // 1) Локальный поиск по закэшированным сообщениям.
+  let latest = null;
+  for (const m of msgCache.values()) {
+    if (m.chat_id !== chatId) continue;
+    if (String(m.id).startsWith("tmp_")) continue;
+    if (delSet.has(m.id)) continue;
+    if (hiddenMsgIds.has(m.id)) continue;
+    if (!latest || new Date(m.created_at) > new Date(latest.created_at)) latest = m;
+  }
+
+  // 2) Если в кэше нет ничего — добираем с сервера.
+  if (!latest) {
+    try {
+      const { data } = await supabase.from("messages")
+        .select("id, chat_id, sender_id, content, message_type, tokens_amount, file_kind, encrypted, created_at")
+        .eq("chat_id", chatId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      latest = (data && data[0]) || null;
+    } catch (e) { /* silent */ }
+  }
+
+  if (latest) {
+    const isMine = latest.sender_id === currentUser.id;
+    chatLastMsg.set(chatId, {
+      text: previewTextForMsg(latest, isMine),
+      time: new Date(latest.created_at).getTime(),
+      senderId: latest.sender_id,
+      msgId: latest.id,
+      unread: 0,
+    });
+  } else {
+    chatLastMsg.set(chatId, {
+      text: t("preview.noMessages"),
+      time: Date.now(),
+      senderId: null,
+      msgId: null,
+      unread: 0,
+    });
+  }
+  updateChatItemPreview(chatId);
+  resortChatsList();
+}
+
 async function hideMessageForMe(msgId) {
   if (String(msgId).startsWith("tmp_")) return;
   const { error } = await supabase.from("message_hides").insert({ message_id: msgId, user_id: currentUser.id });
@@ -10860,6 +10914,8 @@ async function hideMessageForMe(msgId) {
   const el = document.querySelector(`[data-id="${msgId}"]`);
   if (el) el.remove();
   checkEmptyChat();
+  // 🔴 Обновляем превью в списке чатов — вдруг удалили последнее сообщение.
+  await refreshChatLastMsgAfterDelete(currentChatId, [msgId]);
 }
 
 async function deleteMessageForBoth(msgId) {
@@ -10878,6 +10934,8 @@ async function deleteMessageForBoth(msgId) {
   if (el) el.remove();
   checkEmptyChat();
   refreshMessageGroups();
+  // 🔴 Обновляем превью в списке чатов.
+  await refreshChatLastMsgAfterDelete(currentChatId, [msgId]);
 }
 
 // ======================================================
@@ -10946,12 +11004,14 @@ async function handleDeleteSelected() {
   );
   if (!choice) return;
   const ids = [...selectedMsgIds].filter((id) => !String(id).startsWith("tmp_"));
+  const deletedIdsForPreview = [];
   if (choice === "me") {
     for (const id of ids) {
       await supabase.from("message_hides").insert({ message_id: id, user_id: currentUser.id });
       hiddenMsgIds.add(id); msgCache.delete(id);
       const el = document.querySelector(`[data-id="${id}"]`);
       if (el) el.remove();
+      deletedIdsForPreview.push(id);
     }
   } else if (choice === "both") {
     const { data: del, error } = await supabase.from("messages").delete().in("id", ids).select("id");
@@ -10963,10 +11023,15 @@ async function handleDeleteSelected() {
       subtractViewsForDeletedMessage(id);
       const el = document.querySelector(`[data-id="${id}"]`);
       if (el) el.remove();
+      deletedIdsForPreview.push(id);
     });
   }
   exitSelectionMode();
   checkEmptyChat();
+  // 🔴 Обновляем превью в списке чатов.
+  if (deletedIdsForPreview.length) {
+    await refreshChatLastMsgAfterDelete(currentChatId, deletedIdsForPreview);
+  }
 }
 
 async function handleForwardSelected() {
@@ -11005,6 +11070,22 @@ async function openForwardDialog(msgs) {
 }
 
 // Диалог «Переслать» для произвольного текста (например, ссылки-приглашения)
+// 🔴 «Поделиться» ссылкой на подарок — открывает диалог выбора чата
+// ВНУТРИ Cell (как пересылка), а не системный share-шит ОС.
+async function openGiftShareDialog(shareStr) {
+  forwardSourceMsgs = [{ content: shareStr, sender_id: currentUser.id, message_type: "text" }];
+  forwardPlainText = true;
+  forwardSelectedChats.clear();
+  document.getElementById("forward-hide-sender").checked = false;
+  const hideRow = document.querySelector("#forward-overlay .toggle-row");
+  if (hideRow) hideRow.classList.add("hidden");
+  document.getElementById("forward-overlay").classList.remove("hidden");
+  document.getElementById("forward-list").innerHTML =
+    '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
+  await populateForwardList();
+  document.getElementById("forward-info").textContent = tFmt("forward.info", { n: 0 });
+}
+
 async function openInviteShareDialog(text) {
   inviteShareReturnToInvite = true;
   document.getElementById("invite-overlay").classList.add("hidden");
@@ -13501,15 +13582,20 @@ async function openGiftFromShareString(share) {
     await showAlertDialog(t("gifts.title.detail"), t("gifts.share.notFound"));
     return;
   }
-  const catalog = await loadGiftCatalog();
-  const slugLower = parsed.slug.toLowerCase();
-  const cat = catalog.find((c) => giftSlug(c.name).toLowerCase() === slugLower);
-  if (!cat) {
-    await showAlertDialog(t("gifts.title.detail"), t("gifts.share.notFound"));
-    return;
+  // 🔴 Забираем подарок через SECURITY DEFINER RPC — она видит любые
+  // подарки независимо от RLS. Прямой SELECT из JS упирается в политику
+  // «вижу только свои / те, что в профиле», и чужой подарок не находился.
+  let ug = null;
+  try {
+    const { data, error } = await supabase.rpc("get_gift_by_link", {
+      p_slug: parsed.slug,
+      p_serial: parsed.serial,
+    });
+    if (error) console.warn("get_gift_by_link:", error);
+    ug = data && data[0] ? data[0] : null;
+  } catch (e) {
+    console.warn("get_gift_by_link (catch):", e);
   }
-  const { data: ug } = await supabase.from("user_gifts")
-    .select("*").eq("gift_id", cat.id).eq("serial_number", parsed.serial).maybeSingle();
   if (!ug) {
     await showAlertDialog(t("gifts.title.detail"), t("gifts.share.notFound"));
     return;
@@ -14561,8 +14647,14 @@ async function renderGiftDetail(ownerId, ug, opts) {
         <span class="cell-icon" data-icon="menuVertical"></span>
       </button>
       <div class="gift-detail-menu hidden" id="gift-detail-menu">
-        <button type="button" data-action="share">${escapeHtml(t("gifts.share.share"))}</button>
-        <button type="button" data-action="copy">${escapeHtml(t("gifts.share.copy"))}</button>
+        <button type="button" data-action="share">
+          <span class="cell-icon cell-icon-sm" data-icon="share" style="vertical-align:-3px;margin-right:8px;"></span>
+          ${escapeHtml(t("gifts.share.share"))}
+        </button>
+        <button type="button" data-action="copy">
+          <span class="cell-icon cell-icon-sm" data-icon="copyLink" style="vertical-align:-3px;margin-right:8px;"></span>
+          ${escapeHtml(t("gifts.share.copy"))}
+        </button>
       </div>
       <div class="gift-hero" style="${bg}">
         <div class="gift-hero-pattern" style="${patternStyle}"></div>
@@ -14643,29 +14735,28 @@ async function renderGiftDetail(ownerId, ug, opts) {
       const shareStr = giftShareString(cat, ug);
       if (!shareStr) return;
       const action = b.dataset.action;
-      if (action === "share" && navigator.share) {
-        try {
-          await navigator.share({ title: `${cat.name} #${ug.serial_number}`, text: shareStr });
-          return;
-        } catch (err) {
-          if (err && err.name === "AbortError") return;
-        }
+      if (action === "share") {
+        // 🔴 «Поделиться» — открываем диалог выбора чата внутри Cell,
+        // как пересылку. Ссылка уйдёт как обычный текст.
+        openGiftShareDialog(shareStr).catch(() => {});
+        return;
       }
-      // Fallback для «Поделиться» и основной путь для «Скопировать».
-      try {
-        if (navigator.clipboard) {
-          await navigator.clipboard.writeText(shareStr);
-        } else {
-          const tmp = document.createElement("textarea");
-          tmp.value = shareStr;
-          document.body.appendChild(tmp);
-          tmp.select();
-          document.execCommand("copy");
-          document.body.removeChild(tmp);
+      if (action === "copy") {
+        try {
+          if (navigator.clipboard) {
+            await navigator.clipboard.writeText(shareStr);
+          } else {
+            const tmp = document.createElement("textarea");
+            tmp.value = shareStr;
+            document.body.appendChild(tmp);
+            tmp.select();
+            document.execCommand("copy");
+            document.body.removeChild(tmp);
+          }
+          await showAlertDialog(t("gifts.share.share"), t("gifts.share.copyOk"));
+        } catch (err) {
+          await showAlertDialog(t("gifts.error"), t("gifts.share.copyFail"));
         }
-        await showAlertDialog(t("gifts.share.share"), t("gifts.share.copyOk"));
-      } catch (err) {
-        await showAlertDialog(t("gifts.error"), t("gifts.share.copyFail"));
       }
     };
   }
