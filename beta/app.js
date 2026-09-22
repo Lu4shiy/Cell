@@ -394,6 +394,9 @@ const I18N = {
     "market.err.cartEmpty": "Корзина пуста.",
     "market.err.listingUnavailable": "Этот лот больше недоступен.",
     "market.err.alreadySold": "Ошибка, уже куплено.",
+    "market.err.wasCancelled": "Этот подарок снят с продажи.",
+    "market.err.notFound": "Лот не найден.",
+    "market.err.notAvailable": "Лот больше недоступен.",
     "market.err.notAuth": "Нужно войти в аккаунт.",
     "market.notif.soldTitle": "Подарок продан",
     "market.notif.soldBody": "«{name}»{model} куплен за {price} Nectar.",
@@ -1223,6 +1226,9 @@ const I18N = {
     "market.err.cartEmpty": "Your cart is empty.",
     "market.err.listingUnavailable": "This listing is no longer available.",
     "market.err.alreadySold": "Error: already sold.",
+    "market.err.wasCancelled": "This gift was removed from sale.",
+    "market.err.notFound": "Listing not found.",
+    "market.err.notAvailable": "Listing is no longer available.",
     "market.err.notAuth": "Please sign in.",
     "market.notif.soldTitle": "Gift sold",
     "market.notif.soldBody": "\"{name}\"{model} sold for {price} Nectar.",
@@ -3963,6 +3969,8 @@ async function initApp() {
   subscribeToChannelRequests();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
   setupMarketUI();
+  // 🔴 Прогрев всех иконок при старте — чтобы не «мигали» пустыми квадратами.
+  preloadAllIcons();
   setupAvatarCropper();
   setupGrandmaEscapeHatch();
   setupBirthdayClose(); setupTokensDialog(); setupChannelCreate(); setupChannelEdit();
@@ -11636,14 +11644,14 @@ function setupMarketUI() {
   }
 }
 
-function openMarket() {
+function openMarket(initialTab) {
   const overlay = document.getElementById("market-overlay");
   if (!overlay) return;
   overlay.classList.remove("hidden");
   refreshMarketBalance();
   refreshMarketCart();
   ensureMarketBackgroundColors();
-  switchMarketTab(marketTab || "listings");
+  switchMarketTab(initialTab || marketTab || "listings");
 }
 
 async function ensureMarketBackgroundColors() {
@@ -11867,10 +11875,7 @@ function subscribeToMarketNotifications() {
         price: n.price || 0,
       });
       // 🔴 Переход по клику — сразу в профиль маркета.
-      const onClick = () => {
-        openMarket();
-        switchMarketTab("profile");
-      };
+      const onClick = () => { openMarket("profile"); };
 
       if (document.visibilityState === "visible") {
         // Окно открыто — только in-app тост + звук.
@@ -11980,15 +11985,19 @@ async function openMarketHistory() {
     }).join("");
 
     // 🔴 Клик по строке (кроме клика по @юзеру) → открыть детальную карточку лота.
+    // При закрытии карточки возвращаемся в историю и сохраняем позицию скролла.
     body.querySelectorAll(".market-history-item").forEach((item) => {
       item.addEventListener("click", (e) => {
         if (e.target.closest(".market-history-user")) return;
         const txId = item.dataset.txId;
         const tx = rows.find((r) => r.id === txId);
         if (!tx) return;
-        // Скрываем историю (модалка поверх), открываем карточку.
+        const prevScrollTop = body.scrollTop;
         overlay.classList.add("hidden");
-        openMarketListingDetail(tx.listing_id, tx);
+        openMarketListingDetail(tx.listing_id, tx, () => {
+          overlay.classList.remove("hidden");
+          body.scrollTop = prevScrollTop;
+        });
       });
     });
 
@@ -12143,9 +12152,10 @@ function translateMarketError(msg) {
   const m = String(msg || "").toLowerCase();
   if (m.includes("not enough nectar")) return t("market.err.notEnoughNectar");
   if (m.includes("cart is empty")) return t("market.err.cartEmpty");
-  if (m.includes("listing not found") ||
-      m.includes("listing not active") ||
-      m.includes("listing not available")) return t("market.err.alreadySold");
+  if (m.includes("listing already sold") || m.includes("already sold")) return t("market.err.alreadySold");
+  if (m.includes("listing was cancelled") || m.includes("was cancelled")) return t("market.err.wasCancelled");
+  if (m.includes("listing not found")) return t("market.err.notFound");
+  if (m.includes("listing not active") || m.includes("listing not available")) return t("market.err.notAvailable");
   if (m.includes("cant buy your own") ||
       m.includes("cant add your own listing")) return t("market.err.ownListing");
   if (m.includes("not authenticated")) return t("market.err.notAuth");
@@ -12434,7 +12444,7 @@ async function marketBuyListing(listingId) {
 
 let currentMarketListingId = null;
 
-async function openMarketListingDetail(listingId, fallbackTx) {
+async function openMarketListingDetail(listingId, fallbackTx, onClose) {
   let listing = null;
   let sellerId = null;
   let priceVal = null;
@@ -12652,14 +12662,18 @@ async function openMarketListingDetail(listingId, fallbackTx) {
     };
   }
 
-  closeBtn.onclick = () => { overlay.classList.add("hidden"); currentMarketListingId = null; };
-  overlay.onclick = (e) => {
-    if (e.target === overlay) { overlay.classList.add("hidden"); currentMarketListingId = null; }
+  const closeHandler = () => {
+    overlay.classList.add("hidden");
+    currentMarketListingId = null;
+    if (typeof onClose === "function") {
+      try { onClose(); } catch (e) { /* silent */ }
+    }
   };
+  closeBtn.onclick = closeHandler;
+  overlay.onclick = (e) => { if (e.target === overlay) closeHandler(); };
 
   overlay.classList.remove("hidden");
-  // 🔴 Всегда показываем верх карточки — иначе после долгого скролла
-  // открывается низ.
+  // 🔴 Всегда показываем верх карточки.
   const dlg = overlay.querySelector(".dialog");
   if (dlg) dlg.scrollTop = 0;
 }
@@ -13365,6 +13379,32 @@ function fillGiftPatternsIn(rootEl) {
 // Предзагрузка всех иконок паттернов в кэш браузера.
 // Без этого после покупки подарка паттерн появляется с задержкой —
 // браузер только в этот момент начинает скачивать картинку с i.ibb.co.
+// 🔴 Прогрев ВСЕХ иконок Cell (cell-icon, verified, nectar, паттерны) при старте.
+// Иначе при первом открытии экранов с ними — «мигание» пустых квадратов.
+let allIconsPreloaded = false;
+function preloadAllIcons() {
+  if (allIconsPreloaded) return;
+  allIconsPreloaded = true;
+
+  const seen = new Set();
+  Object.values(ICONS).forEach((url) => {
+    if (typeof url === "string" && /^https?:\/\//.test(url) && !seen.has(url)) {
+      seen.add(url);
+      try {
+        const img = new Image();
+        img.decoding = "async";
+        img.loading = "eager";
+        img.src = url;
+      } catch (e) { /* silent */ }
+    }
+  });
+
+  // Nectar-иконка (используется как <img> и как HTML-фрагмент).
+  if (!seen.has(NECTAR_ICON_URL)) {
+    try { const i = new Image(); i.src = NECTAR_ICON_URL; } catch (e) {}
+  }
+}
+
 let patternIconsPreloaded = false;
 function preloadPatternIcons() {
   if (patternIconsPreloaded) return;
