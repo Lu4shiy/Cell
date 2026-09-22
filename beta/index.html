@@ -75,7 +75,7 @@
         <input type="text" id="reg-username" placeholder="Юзернейм" data-i18n-placeholder="auth.field.username" required>
         <input type="text" id="reg-displayname" placeholder="Имя" data-i18n-placeholder="auth.field.displayname" required>
         <input type="email" id="reg-email" placeholder="Email" data-i18n-placeholder="auth.field.email" required>
-        <input type="password" id="reg-password" placeholder="Пароль (мин. 10, A-Z, a-z, 0-9)" data-i18n-placeholder="auth.field.password.strict" required minlength="10">
+        <input type="password" id="reg-password" placeholder="Пароль (мин. 6, A-Z, a-z, 0-9)" data-i18n-placeholder="auth.field.password.strict" required minlength="6">
         <button type="submit" class="btn-primary" data-i18n="auth.register.submit">Создать аккаунт</button>
         <p class="error" id="register-error"></p>
       </form>
@@ -108,8 +108,8 @@
   <div id="reset-new-overlay" class="dialog-overlay hidden" style="z-index:9500;">
     <div class="dialog">
       <div class="dialog-title" data-i18n="auth.reset.newTitle">Новый пароль</div>
-      <div class="dialog-text" data-i18n="auth.reset.newText">Придумайте новый пароль. Требования: минимум 10 символов, заглавная и строчная буквы, цифра.</div>
-      <input type="password" id="reset-new-password" placeholder="Новый пароль (мин. 10, A-Z, a-z, 0-9)" data-i18n-placeholder="auth.reset.newPlaceholder" autocomplete="new-password"
+      <div class="dialog-text" data-i18n="auth.reset.newText">Придумайте новый пароль. Требования: минимум 6 символов, заглавная и строчная буквы, цифра.</div>
+      <input type="password" id="reset-new-password" placeholder="Новый пароль (мин. 6, A-Z, a-z, 0-9)" data-i18n-placeholder="auth.reset.newPlaceholder" autocomplete="new-password"
              style="width:100%;padding:14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;margin-bottom:10px;">
       <input type="password" id="reset-new-password2" placeholder="Повторите пароль" data-i18n-placeholder="auth.reset.repeatPlaceholder" autocomplete="new-password"
              style="width:100%;padding:14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;margin-bottom:12px;">

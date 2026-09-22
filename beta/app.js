@@ -296,7 +296,7 @@ const I18N = {
     "auth.tab.register": "Регистрация",
     "auth.field.email": "Email",
     "auth.field.password": "Пароль",
-    "auth.field.password.strict": "Пароль (мин. 10, A-Z, a-z, 0-9)",
+    "auth.field.password.strict": "Пароль (мин. 6, A-Z, a-z, 0-9)",
     "auth.field.username": "Юзернейм",
     "auth.field.displayname": "Имя",
     "auth.login.submit": "Войти",
@@ -309,7 +309,7 @@ const I18N = {
     "auth.err.username.format": "Юзернейм: 3-32 символа, a-z, 0-9, _ и -",
     "auth.err.displayname.required": "Введите имя",
     "auth.err.email.required": "Введите email",
-    "auth.err.password.short": "Пароль минимум 10 символов",
+    "auth.err.password.short": "Пароль минимум 6 символов",
     "auth.err.password.complex": "Пароль должен содержать заглавную, строчную букву и цифру",
     "auth.err.register.loading": "Регистрирую...",
     "auth.err.register.checkEmail": "Проверь почту и подтверди email.",
@@ -332,14 +332,14 @@ const I18N = {
     "auth.reset.sent": "Если такой email зарегистрирован — на него отправлено письмо со ссылкой.",
     "auth.reset.err": "Не удалось отправить письмо",
     "auth.reset.newTitle": "Новый пароль",
-    "auth.reset.newText": "Придумайте новый пароль. Требования: минимум 10 символов, заглавная и строчная буквы, цифра.",
+    "auth.reset.newText": "Придумайте новый пароль. Требования: минимум 6 символов, заглавная и строчная буквы, цифра.",
     "auth.reset.repeat": "Повторите пароль",
     "auth.reset.save": "Сохранить пароль",
     "auth.reset.saved": "Пароль обновлён. Теперь можно войти.",
     "auth.reset.mismatch": "Пароли не совпадают",
     "auth.reset.saveErr": "Не удалось сохранить пароль",
     "auth.reset.sameAsOld": "Новый пароль должен отличаться от старого.",
-    "auth.reset.newPlaceholder": "Новый пароль (мин. 10, A-Z, a-z, 0-9)",
+    "auth.reset.newPlaceholder": "Новый пароль (мин. 6, A-Z, a-z, 0-9)",
     "auth.reset.repeatPlaceholder": "Повторите пароль",
 
     // ---- Сайдбар ----
@@ -390,6 +390,7 @@ const I18N = {
     "market.cart.buyAll": "Купить всё",
     "market.cart.buyAllText": "Купить все подарки из корзины за {sum}?",
     "market.err.ownListing": "Нельзя купить собственный лот.",
+    "market.err.alreadyListed": "Этот подарок уже выставлен на маркет. Сначала снимите его с продажи.",
     "market.err.notEnoughNectar": "Недостаточно Nectar.",
     "market.err.cartEmpty": "Корзина пуста.",
     "market.err.listingUnavailable": "Этот лот больше недоступен.",
@@ -1128,7 +1129,7 @@ const I18N = {
     "auth.tab.register": "Sign up",
     "auth.field.email": "Email",
     "auth.field.password": "Password",
-    "auth.field.password.strict": "Password (min. 10, A-Z, a-z, 0-9)",
+    "auth.field.password.strict": "Password (min. 6, A-Z, a-z, 0-9)",
     "auth.field.username": "Username",
     "auth.field.displayname": "Name",
     "auth.login.submit": "Log in",
@@ -1141,7 +1142,7 @@ const I18N = {
     "auth.err.username.format": "Username: 3–32 characters, a-z, 0-9, _ and -",
     "auth.err.displayname.required": "Enter a name",
     "auth.err.email.required": "Enter an email",
-    "auth.err.password.short": "Password must be at least 10 characters",
+    "auth.err.password.short": "Password must be at least 6 characters",
     "auth.err.password.complex": "Password must contain an uppercase letter, a lowercase letter and a digit",
     "auth.err.register.loading": "Signing up...",
     "auth.err.register.checkEmail": "Check your email and confirm the address.",
@@ -1164,14 +1165,14 @@ const I18N = {
     "auth.reset.sent": "If such email is registered — a letter with a link has been sent.",
     "auth.reset.err": "Failed to send email",
     "auth.reset.newTitle": "New password",
-    "auth.reset.newText": "Create a new password. Requirements: at least 10 characters, uppercase and lowercase letters, a digit.",
+    "auth.reset.newText": "Create a new password. Requirements: at least 6 characters, uppercase and lowercase letters, a digit.",
     "auth.reset.repeat": "Repeat password",
     "auth.reset.save": "Save password",
     "auth.reset.saved": "Password updated. You can log in now.",
     "auth.reset.mismatch": "Passwords do not match",
     "auth.reset.saveErr": "Failed to save password",
     "auth.reset.sameAsOld": "New password must be different from the old one.",
-    "auth.reset.newPlaceholder": "New password (min. 10, A-Z, a-z, 0-9)",
+    "auth.reset.newPlaceholder": "New password (min. 6, A-Z, a-z, 0-9)",
     "auth.reset.repeatPlaceholder": "Repeat password",
 
     // ---- Sidebar ----
@@ -1222,6 +1223,7 @@ const I18N = {
     "market.cart.buyAll": "Buy all",
     "market.cart.buyAllText": "Buy all gifts from your cart for {sum}?",
     "market.err.ownListing": "You can't buy your own listing.",
+    "market.err.alreadyListed": "This gift is already listed on the market. Unlist it first.",
     "market.err.notEnoughNectar": "Not enough Nectar.",
     "market.err.cartEmpty": "Your cart is empty.",
     "market.err.listingUnavailable": "This listing is no longer available.",
@@ -2150,7 +2152,7 @@ registerForm.addEventListener("submit", async (e) => {
   if (!/^[a-zA-Z0-9_-]{3,32}$/.test(username)) { errEl.textContent = t("auth.err.username.format"); return; }
   if (!displayName) { errEl.textContent = t("auth.err.displayname.required"); return; }
   if (!email) { errEl.textContent = t("auth.err.email.required"); return; }
-  if (!password || password.length < 10) {
+  if (!password || password.length < 6) {
     errEl.textContent = t("auth.err.password.short");
     return;
   }
@@ -12869,6 +12871,18 @@ function renderMarketCartCard(listing) {
 // ======================================================
 
 async function marketListGiftDialog(userGiftId) {
+  // 🔴 Проверяем, нет ли уже активного листинга этого подарка.
+  // Уникальный индекс market_listings_gift_active_uidx не даёт
+  // создать второй — поэтому заранее показываем понятную ошибку.
+  try {
+    const { data: existing } = await supabase.from("market_listings")
+      .select("id").eq("user_gift_id", userGiftId).eq("status", "active").maybeSingle();
+    if (existing) {
+      await showAlertDialog(t("gifts.error"), t("market.err.alreadyListed"));
+      return;
+    }
+  } catch (e) { /* silent — если запрос упадёт, пойдём обычным путём */ }
+
   const priceStr = await showInputDialog(
     t("market.list.title"),
     t("market.list.text"),
@@ -12884,7 +12898,19 @@ async function marketListGiftDialog(userGiftId) {
     p_user_gift_id: userGiftId,
     p_price: price,
   });
-  if (error) { await showAlertDialog(t("gifts.error"), error.message); return; }
+  if (error) {
+    // 🔴 Гонка: кто-то (или второй тап) успел вставить листинг между
+    // нашей проверкой и RPC. Показываем тот же понятный текст, а не
+    // сырое «duplicate key value violates unique constraint…».
+    const m = String(error.message || "").toLowerCase();
+    if (m.includes("duplicate key") || m.includes("unique constraint") ||
+        m.includes("market_listings_gift_active_uidx")) {
+      await showAlertDialog(t("gifts.error"), t("market.err.alreadyListed"));
+      return;
+    }
+    await showAlertDialog(t("gifts.error"), error.message);
+    return;
+  }
 
   // 🔴 Счётчик в профиле обновляем сразу — минус 1 подарок.
   await refreshMyGiftsCount();
@@ -12992,9 +13018,12 @@ async function openMarketFilterPicker(type) {
 
   if (type === "gift") {
     const items = [{ value: null, label: t("market.filter.all"), icon: "" }];
-    giftCatalogCache.forEach((c) => {
-      items.push({ value: c.id, label: c.name, icon: renderGiftIcon(c.emoji, 22) });
-    });
+    // 🔴 Сортируем по алфавиту A→Z.
+    [...giftCatalogCache]
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), localeId(), { sensitivity: "base" }))
+      .forEach((c) => {
+        items.push({ value: c.id, label: c.name, icon: renderGiftIcon(c.emoji, 22) });
+      });
     openMarketPicker({
       title: t("market.filter.gift"),
       items,
@@ -13013,9 +13042,12 @@ async function openMarketFilterPicker(type) {
     const cat = giftCatalogCache.find((c) => c.id === f.giftId);
     if (!cat || !Array.isArray(cat.models) || !cat.models.length) return;
     const items = [{ value: null, label: t("market.filter.all"), icon: "" }];
-    cat.models.forEach((m) => {
-      items.push({ value: m.id, label: m.name || m.id, icon: renderGiftIcon(m.image || "", 22) });
-    });
+    // 🔴 Сортируем по алфавиту A→Z.
+    [...cat.models]
+      .sort((a, b) => String(a.name || a.id || "").localeCompare(String(b.name || b.id || ""), localeId(), { sensitivity: "base" }))
+      .forEach((m) => {
+        items.push({ value: m.id, label: m.name || m.id, icon: renderGiftIcon(m.image || "", 22) });
+      });
     openMarketPicker({
       title: t("market.filter.model"),
       items,
@@ -13029,15 +13061,18 @@ async function openMarketFilterPicker(type) {
   if (type === "background") {
     await ensureMarketBackgroundColors();
     const items = [{ value: null, label: t("market.filter.all"), icon: "" }];
-    Object.keys(BACKGROUND_CHANCES).forEach((name) => {
-      const bg = marketBackgroundColors ? marketBackgroundColors.get(name) : null;
-      const style = bg ? giftBackgroundStyle(bg) : "background: var(--bg-hover);";
-      items.push({
-        value: name,
-        label: name,
-        icon: `<span class="market-picker-swatch" style="${style}"></span>`,
+    // 🔴 Сортируем по алфавиту A→Z.
+    Object.keys(BACKGROUND_CHANCES)
+      .sort((a, b) => a.localeCompare(b, localeId(), { sensitivity: "base" }))
+      .forEach((name) => {
+        const bg = marketBackgroundColors ? marketBackgroundColors.get(name) : null;
+        const style = bg ? giftBackgroundStyle(bg) : "background: var(--bg-hover);";
+        items.push({
+          value: name,
+          label: name,
+          icon: `<span class="market-picker-swatch" style="${style}"></span>`,
+        });
       });
-    });
     openMarketPicker({
       title: t("market.filter.background"),
       items,
@@ -13050,13 +13085,16 @@ async function openMarketFilterPicker(type) {
 
   if (type === "pattern") {
     const items = [{ value: null, label: t("market.filter.all"), icon: "" }];
-    GIFT_PATTERNS.forEach((p) => {
-      items.push({
-        value: p.id,
-        label: p.id,
-        icon: p.icon ? `<img src="${escapeHtml(p.icon)}" style="width:22px;height:22px;object-fit:contain;" alt="" draggable="false">` : "",
+    // 🔴 Сортируем по алфавиту A→Z.
+    [...GIFT_PATTERNS]
+      .sort((a, b) => String(a.id || "").localeCompare(String(b.id || ""), localeId(), { sensitivity: "base" }))
+      .forEach((p) => {
+        items.push({
+          value: p.id,
+          label: p.id,
+          icon: p.icon ? `<img src="${escapeHtml(p.icon)}" style="width:22px;height:22px;object-fit:contain;" alt="" draggable="false">` : "",
+        });
       });
-    });
     openMarketPicker({
       title: t("market.filter.pattern"),
       items,
@@ -17357,7 +17395,7 @@ function setupPasswordReset() {
       const p1 = newPw.value;
       const p2 = newPw2.value;
       newErr.textContent = "";
-      if (!p1 || p1.length < 10) { newErr.textContent = t("auth.err.password.short"); return; }
+      if (!p1 || p1.length < 6) { newErr.textContent = t("auth.err.password.short"); return; }
       if (!/[A-ZА-Я]/.test(p1) || !/[a-zа-я]/.test(p1) || !/\d/.test(p1)) {
         newErr.textContent = t("auth.err.password.complex");
         return;
