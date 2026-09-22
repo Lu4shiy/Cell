@@ -13569,7 +13569,11 @@ function giftShareString(cat, ug) {
 }
 
 function parseGiftShareString(s) {
-  const m = /^cell\/gift\/([A-Za-z0-9]+)-(\d+)$/.exec(String(s || "").trim());
+  const str = String(s || "").trim();
+  // 🔴 Принимаем ОБА формата:
+  //   "cell/gift/MoneyBag-40"  — полная share-строка
+  //   "MoneyBag-40"            — голый slug+номер (из href="#gift=...")
+  const m = /^(?:cell\/gift\/)?([A-Za-z0-9]+)-(\d+)$/.exec(str);
   if (!m) return null;
   return { slug: m[1], serial: parseInt(m[2], 10) };
 }
@@ -14197,9 +14201,16 @@ async function renderGiftsMain(userId) {
   if (allGifts.length) {
     try {
       const ids = allGifts.map((g) => g.id);
-      const { data: listings } = await supabase.from("market_listings")
-        .select("user_gift_id").in("user_gift_id", ids).eq("status", "active");
-      const listedIds = new Set((listings || []).map((l) => l.user_gift_id));
+      // 🔴 Чанкуем по 100 ID. Иначе URL `in.(...)` с 300+ UUID
+      // превышает лимит длины и PostgREST отдаёт 400 Bad Request.
+      const listedIds = new Set();
+      const CHUNK = 100;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const chunk = ids.slice(i, i + CHUNK);
+        const { data: listings } = await supabase.from("market_listings")
+          .select("user_gift_id").in("user_gift_id", chunk).eq("status", "active");
+        (listings || []).forEach((l) => listedIds.add(l.user_gift_id));
+      }
       if (listedIds.size) allGifts = allGifts.filter((g) => !listedIds.has(g.id));
     } catch (e) { /* silent */ }
   }
