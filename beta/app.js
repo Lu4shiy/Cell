@@ -393,6 +393,7 @@ const I18N = {
     "market.err.notEnoughNectar": "Недостаточно Nectar.",
     "market.err.cartEmpty": "Корзина пуста.",
     "market.err.listingUnavailable": "Этот лот больше недоступен.",
+    "market.err.alreadySold": "Ошибка, уже куплено.",
     "market.err.notAuth": "Нужно войти в аккаунт.",
     "market.notif.soldTitle": "Подарок продан",
     "market.notif.soldBody": "«{name}»{model} куплен за {price} Nectar.",
@@ -1221,6 +1222,7 @@ const I18N = {
     "market.err.notEnoughNectar": "Not enough Nectar.",
     "market.err.cartEmpty": "Your cart is empty.",
     "market.err.listingUnavailable": "This listing is no longer available.",
+    "market.err.alreadySold": "Error: already sold.",
     "market.err.notAuth": "Please sign in.",
     "market.notif.soldTitle": "Gift sold",
     "market.notif.soldBody": "\"{name}\"{model} sold for {price} Nectar.",
@@ -3969,6 +3971,7 @@ async function initApp() {
   subscribeToMemberships(); subscribeToReads();
   subscribeToGlobalMessages();
   subscribeToMarketNotifications();
+  subscribeToMarketListingsRealtime();
   await Promise.all([loadMyProfile(), loadBlocks(), loadChatReads()]);
 
   // Пробуем автоматически разблокировать E2EE, если ключ был сохранён
@@ -11775,6 +11778,34 @@ async function loadMarketProfileStats() {
 }
 
 // ======================================================
+// Маркет: realtime-подписка на изменения лотов
+// ======================================================
+
+let marketListingsRealtimeChannel = null;
+
+function subscribeToMarketListingsRealtime() {
+  if (marketListingsRealtimeChannel) return;
+  marketListingsRealtimeChannel = supabase.channel("market-listings-realtime")
+    .on("postgres_changes", {
+      event: "UPDATE", schema: "public", table: "market_listings",
+    }, (payload) => {
+      const n = payload.new;
+      if (!n) return;
+      if (n.status !== "sold" && n.status !== "cancelled") return;
+      // Лот ушёл с маркета — убираем его из всех локальных кэшей.
+      marketRemoveListingEverywhere(n.id);
+      // Если у пользователя открыт список предложений — обновим.
+      if (marketTab === "listings") {
+        const overlay = document.getElementById("market-overlay");
+        if (overlay && !overlay.classList.contains("hidden")) {
+          renderMarketListingsFromCache();
+        }
+      }
+    })
+    .subscribe();
+}
+
+// ======================================================
 // Маркет: уведомления о продаже
 // ======================================================
 
@@ -11896,7 +11927,7 @@ async function openMarketHistory() {
       const badgeClass = isSale ? "sale" : "purchase";
 
       return `
-        <div class="market-history-item">
+        <div class="market-history-item" data-listing-id="${escapeHtml(r.listing_id || "")}">
           <div class="market-history-badge ${badgeClass}">${escapeHtml(badge)}</div>
           <div class="market-history-main">
             <div class="market-history-title">${escapeHtml(catName)} #${ug.serial_number || "?"}${ug.model_name ? " · " + escapeHtml(ug.model_name) : ""}</div>
@@ -11906,6 +11937,18 @@ async function openMarketHistory() {
           <div class="market-history-price">${NECTAR_HTML} <b>${r.price}</b></div>
         </div>`;
     }).join("");
+
+    // 🔴 Клик по строке (кроме клика по @юзеру) → открыть детальную карточку лота.
+    body.querySelectorAll(".market-history-item").forEach((item) => {
+      item.addEventListener("click", (e) => {
+        if (e.target.closest(".market-history-user")) return;
+        const lid = item.dataset.listingId;
+        if (!lid) return;
+        // Скрываем историю (модалка поверх), открываем карточку.
+        overlay.classList.add("hidden");
+        openMarketListingDetail(lid);
+      });
+    });
 
     // Клик по пользователю → открыть чат.
     body.querySelectorAll(".market-history-user").forEach((a) => {
@@ -12056,15 +12099,44 @@ async function refreshMarketBalance() {
 // Переводит строку ошибки от Supabase (обычно на английском) в локализованный ключ.
 function translateMarketError(msg) {
   const m = String(msg || "").toLowerCase();
-  if (m.includes("not enough nectar") || m.includes("not enough nectar")) return t("market.err.notEnoughNectar");
+  if (m.includes("not enough nectar")) return t("market.err.notEnoughNectar");
   if (m.includes("cart is empty")) return t("market.err.cartEmpty");
   if (m.includes("listing not found") ||
       m.includes("listing not active") ||
-      m.includes("listing not available")) return t("market.err.listingUnavailable");
+      m.includes("listing not available")) return t("market.err.alreadySold");
   if (m.includes("cant buy your own") ||
       m.includes("cant add your own listing")) return t("market.err.ownListing");
   if (m.includes("not authenticated")) return t("market.err.notAuth");
   return msg;
+}
+
+// Убирает лот из всех локальных кэшей и, если открыты соответствующие окна,
+// обновляет их. Вызывается после успешной покупки и при "уже куплено".
+function marketRemoveListingEverywhere(listingId) {
+  marketState.listings = marketState.listings.filter((l) => l.id !== listingId);
+  marketCartIds.delete(listingId);
+  updateMarketCartBadge();
+
+  // Если открыта корзина — перерисовать.
+  if (marketTab === "cart") {
+    const overlay = document.getElementById("market-overlay");
+    if (overlay && !overlay.classList.contains("hidden")) {
+      if (typeof renderMarketCart === "function") renderMarketCart();
+    }
+  }
+  // Если открыт профиль маркета — перерисовать «Мои предложения».
+  if (marketTab === "profile") {
+    const overlay = document.getElementById("market-overlay");
+    if (overlay && !overlay.classList.contains("hidden")) {
+      loadMarketMyListings();
+    }
+  }
+  // Если открыт детальный просмотр этого лота — закрыть.
+  if (currentMarketListingId === listingId) {
+    const dOverlay = document.getElementById("market-listing-overlay");
+    if (dOverlay) dOverlay.classList.add("hidden");
+    currentMarketListingId = null;
+  }
 }
 
 // ======================================================
@@ -12296,16 +12368,22 @@ async function marketBuyListing(listingId) {
   if (!ok) return;
 
   const { error } = await supabase.rpc("market_buy_listing", { p_listing_id: listingId });
-  if (error) { await showAlertDialog(t("gifts.error"), translateMarketError(error.message)); return; }
+  if (error) {
+    await showAlertDialog(t("gifts.error"), translateMarketError(error.message));
+    // 🔴 Если лот уже куплен кем-то — убираем из UI моментально.
+    const m = String(error.message || "").toLowerCase();
+    if (m.includes("not active") || m.includes("not found") ||
+        m.includes("not available") || m.includes("already")) {
+      marketRemoveListingEverywhere(listingId);
+      renderMarketListingsFromCache();
+    }
+    return;
+  }
 
-  marketState.listings = marketState.listings.filter((l) => l.id !== listingId);
-  marketCartIds.delete(listingId);
-  updateMarketCartBadge();
-
+  marketRemoveListingEverywhere(listingId);
   await refreshMarketBalance();
   await refreshBalance();
   await refreshMyGiftsCount();
-
   renderMarketListingsFromCache();
 }
 
@@ -12482,10 +12560,16 @@ async function openMarketListingDetail(listingId) {
       );
       if (!ok) return;
       const { error } = await supabase.rpc("market_buy_listing", { p_listing_id: listingId });
-      if (error) { await showAlertDialog(t("gifts.error"), translateMarketError(error.message)); return; }
-      marketState.listings = marketState.listings.filter((l) => l.id !== listingId);
-      marketCartIds.delete(listingId);
-      updateMarketCartBadge();
+      if (error) {
+        await showAlertDialog(t("gifts.error"), translateMarketError(error.message));
+        const m = String(error.message || "").toLowerCase();
+        if (m.includes("not active") || m.includes("not found") ||
+            m.includes("not available") || m.includes("already")) {
+          marketRemoveListingEverywhere(listingId);
+        }
+        return;
+      }
+      marketRemoveListingEverywhere(listingId);
       await refreshMarketBalance();
       await refreshBalance();
       await refreshMyGiftsCount();
@@ -12501,6 +12585,10 @@ async function openMarketListingDetail(listingId) {
   };
 
   overlay.classList.remove("hidden");
+  // 🔴 Всегда показываем верх карточки — иначе после долгого скролла
+  // открывается низ.
+  const dlg = overlay.querySelector(".dialog");
+  if (dlg) dlg.scrollTop = 0;
 }
 
 async function marketContactSeller(seller) {
@@ -12600,9 +12688,16 @@ async function renderMarketCart() {
         );
         if (!ok) return;
         const { error: be } = await supabase.rpc("market_buy_listing", { p_listing_id: listingId });
-        if (be) { await showAlertDialog(t("gifts.error"), translateMarketError(be.message)); return; }
-        marketCartIds.delete(listingId);
-        updateMarketCartBadge();
+        if (be) {
+          await showAlertDialog(t("gifts.error"), translateMarketError(be.message));
+          const m = String(be.message || "").toLowerCase();
+          if (m.includes("not active") || m.includes("not found") ||
+              m.includes("not available") || m.includes("already")) {
+            marketRemoveListingEverywhere(listingId);
+          }
+          return;
+        }
+        marketRemoveListingEverywhere(listingId);
         card.remove();
         await refreshMarketBalance();
         await refreshBalance();
@@ -12623,7 +12718,14 @@ async function renderMarketCart() {
       );
       if (!ok) return;
       const { error: be } = await supabase.rpc("market_buy_cart");
-      if (be) { await showAlertDialog(t("gifts.error"), translateMarketError(be.message)); return; }
+      if (be) {
+        await showAlertDialog(t("gifts.error"), translateMarketError(be.message));
+        // Даже если что-то не купилось — перерисуем корзину,
+        // чтобы убрать уже проданные лоты.
+        await refreshMarketCart();
+        renderMarketCart();
+        return;
+      }
       await refreshMarketBalance();
       await refreshBalance();
       await refreshMyGiftsCount();
