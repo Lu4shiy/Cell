@@ -3812,6 +3812,17 @@ function resetAppState() {
   const msgs = document.getElementById("messages");
   if (msgs) msgs.innerHTML = "";
   document.querySelectorAll(".dialog-overlay").forEach((el) => el.classList.add("hidden"));
+
+  // 🔴 Чистим окно подарков и окно маркета — иначе после logout/логина
+  // под новым аккаунтом на миг показывается чужое содержимое.
+  const giftsContent = document.getElementById("gifts-content");
+  if (giftsContent) giftsContent.innerHTML = "";
+  const marketContent = document.getElementById("market-content");
+  if (marketContent) marketContent.innerHTML = "";
+  const marketMyListings = document.getElementById("market-my-listings");
+  if (marketMyListings) marketMyListings.innerHTML = "";
+  // Сбрасываем «чей профиль открыт в окне подарков».
+  try { currentGiftsUserId = null; } catch (e) { /* silent */ }
   // Сбрасываем поиск
   const searchInput = document.getElementById("search-input");
   if (searchInput) searchInput.value = "";
@@ -12140,11 +12151,19 @@ async function marketUnlist(userGiftId) {
   // 🔴 МОМЕНТАЛЬНО: +1 подарок в счётчиках.
   bumpMyGiftsCount(1);
 
-  // Если окно подарков моего профиля открыто — перерисуем, чтобы подарок вернулся.
+  // 🔴 Обновляем контент окна подарков В ФОНЕ, даже если оно сейчас
+  // закрыто. Иначе при следующем открытии сначала покажется старый
+  // DOM (без только что возвращённого подарка), а потом уже свежий —
+  // это и есть тот самый мигающий «экран без подарка».
   const giftsOverlay = document.getElementById("gifts-overlay");
   const giftsOpen = giftsOverlay && !giftsOverlay.classList.contains("hidden");
-  if (giftsOpen && typeof currentGiftsUserId !== "undefined" && currentGiftsUserId === currentUser.id) {
+  if (giftsOpen) {
+    // Открыто — обычный ре-рендер (плавная замена содержимого).
     setTimeout(() => { renderGiftsMain(currentUser.id); }, 200);
+  } else if (typeof currentGiftsUserId !== "undefined" && currentGiftsUserId === currentUser.id) {
+    // Закрыто, но в DOM остался старый контент этого же пользователя —
+    // перерисуем молча, чтобы к следующему открытию всё было свежим.
+    renderGiftsMain(currentUser.id).catch(() => {});
   }
 
   // Обновляем «Мои предложения» в маркете (лот оттуда пропадает).
@@ -13243,10 +13262,6 @@ function openMarketPicker(opts) {
     });
   }
   renderList();
-  // 🔴 Всегда открываем список фильтра сверху. Иначе после пролистывания
-  // одного фильтра (например, «Паттерн») следующий открывается на той же
-  // позиции скролла (например, «Фон» — внизу).
-  listEl.scrollTop = 0;
 
   searchEl.oninput = () => {
     const q = searchEl.value.trim().toLowerCase();
@@ -13268,9 +13283,17 @@ function openMarketPicker(opts) {
       renderList();
       if (opts.onToggle) opts.onToggle(singleValue);
     }
+    listEl.scrollTop = 0;
   };
 
+  // 🔴 Сначала показываем оверлей, ПОТОМ сбрасываем скролл.
+  // Пока оверлей hidden (display: none) — setting scrollTop не работает.
   overlay.classList.remove("hidden");
+  listEl.scrollTop = 0;
+  // Ещё раз в следующем кадре — на случай, если браузер восстановил
+  // старую позицию при показе.
+  requestAnimationFrame(() => { listEl.scrollTop = 0; });
+
   if (searchable) setTimeout(() => searchEl.focus(), 60);
 }
 
@@ -13832,6 +13855,15 @@ async function loadGiftCatalog() {
 }
 
 function openGiftsOverlay(userId) {
+  // 🔴 Если в окне подарков сейчас лежит контент ДРУГОГО пользователя —
+  // стираем его ДО показа оверлея, чтобы чужие подарки не мигали
+  // ни одного кадра.
+  if (currentGiftsUserId && currentGiftsUserId !== userId) {
+    const content = document.getElementById("gifts-content");
+    if (content) content.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
+    // Сброс — чтобы renderGiftsMain не считал это тем же юзером.
+    currentGiftsUserId = null;
+  }
   document.getElementById("gifts-overlay").classList.remove("hidden");
   refreshBalance();
   preloadPatternIcons();
@@ -13931,16 +13963,20 @@ function closeGiftsOverlay() {
 }
 
 async function renderGiftsMain(userId) {
+  const previousUserId = currentGiftsUserId;
   currentGiftsUserId = userId;
   const content = document.getElementById("gifts-content");
   const title = document.getElementById("gifts-title");
   const backBtn = document.getElementById("gifts-back");
   backBtn.classList.add("hidden");
-  // 🔴 Не показываем «Загрузка...», если в контейнере уже что-то есть.
-  // Иначе при фоновом ре-рендере (например, сразу после выставления
-  // подарка на маркет) экран мигает на пустоту.
-  const hasContent = content.children.length > 0 && !content.querySelector(".empty");
-  if (!hasContent) {
+
+  // 🔴 Если сменился владелец (другой юзер / после logout-логина) —
+  // СРАЗУ стираем чужое содержимое, чтобы подарки прошлого профиля
+  // не мигали перед новыми. Если владелец тот же — оставляем старое
+  // содержимое, чтобы не мигать «Загрузка...» при фоновом ре-рендере.
+  if (previousUserId !== userId) {
+    content.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
+  } else if (!content.children.length) {
     content.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
   }
 
