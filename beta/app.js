@@ -13736,53 +13736,74 @@ function giftCatalogImage(cat) {
 }
 
 // Шансы фонов (в %) — должны совпадать с buy_gift в Supabase
+// 🔴 Шансы в % (сумма ровно 100.0). Дублируются в SQL-функции buy_gift —
+// при правке менять в ОБОИХ местах, иначе подписи «%» в UI разойдутся
+// с реальным роллом.
 const BACKGROUND_CHANCES = {
-  // Tier 1 — 0.5%
+  // Tier 1 — 0.5% (1 фон)
   "Vantablack": 0.5,
 
-  // Tier 2 — 1.2%
-  "Pure Gold": 1.2,
-  "Honey": 1.2,
-  "Absolute Pure": 1.2,
+  // Tier 2 — 1.1% (5 фонов)
+  "Pure Gold": 1.1,
+  "Honey": 1.1,
+  "Absolute Pure": 1.1,
+  "Haki": 1.1,
+  "Blue Moon": 1.1,
 
-  // Tier 3 — 2%
-  "Onyx": 2,
-  "Ice and Fire": 2,
-  "Abyss": 2,
+  // Tier 3 — 1.4% (5 фонов)
+  "Onyx": 1.4,
+  "Ice and Fire": 1.4,
+  "Abyss": 1.4,
+  "Electric Indigo": 1.4,
+  "Navy": 1.4,
 
-  // Tier 4 — 2.9%
-  "Boner": 2.9,
-  "Frosty Day": 2.9,
-  "Aurora": 2.9,
-  "Lavender": 2.9,
-  "Sapphire": 2.9,
+  // Tier 4 — 1.5% (10 фонов)
+  "Boner": 1.5,
+  "Frosty Day": 1.5,
+  "Aurora": 1.5,
+  "Lavender": 1.5,
+  "Sapphire": 1.5,
+  "Burgundy": 1.5,
+  "Electric Purple": 1.5,
+  "Cyan": 1.5,
+  "Celtic Blue": 1.5,
+  "Lotus": 1.5,
 
-  // Tier 5 — 3.05%
-  "Ruby": 3.05,
-  "Emerald": 3.05,
-  "Amethyst": 3.05,
-  "Topaz": 3.05,
-  "Aquamarine": 3.05,
-  "Rose Quartz": 3.05,
-  "Nebula": 3.05,
-  "Comet": 3.05,
-  "Flame": 3.05,
-  "Sunset": 3.05,
-  "Scarlet Blood": 3.05,
-  "Bronze": 3.05,
+  // Tier 5 — 2.0% (16 фонов)
+  "Ruby": 2.0,
+  "Emerald": 2.0,
+  "Amethyst": 2.0,
+  "Topaz": 2.0,
+  "Aquamarine": 2.0,
+  "Rose Quartz": 2.0,
+  "Nebula": 2.0,
+  "Comet": 2.0,
+  "Flame": 2.0,
+  "Sunset": 2.0,
+  "Scarlet Blood": 2.0,
+  "Bronze": 2.0,
+  "Sky Blue": 2.0,
+  "Cherry Red": 2.0,
+  "Coral": 2.0,
+  "Sunset Mauve": 2.0,
 
-  // Tier 6 — 3.527%
-  "Steel": 3.527,
-  "Obsidian": 3.527,
-  "Moss": 3.527,
-  "Autumn": 3.527,
-  "Bark": 3.527,
-  "Mint": 3.527,
-  "Swamp": 3.527,
-  "Acid": 3.527,
-  "Ice": 3.527,
-  "Steel Rain": 3.527,
-  "Pistachio": 3.527
+  // Tier 6 — 2.5% (16 фонов)
+  "Steel": 2.5,
+  "Obsidian": 2.5,
+  "Moss": 2.5,
+  "Autumn": 2.5,
+  "Bark": 2.5,
+  "Mint": 2.5,
+  "Swamp": 2.5,
+  "Acid": 2.5,
+  "Ice": 2.5,
+  "Steel Rain": 2.5,
+  "Pistachio": 2.5,
+  "Forest Green": 2.5,
+  "Silver": 2.5,
+  "Cream": 2.5,
+  "Rose Gold": 2.5,
+  "Matte Matcha": 2.5
 };
 
 function getBackgroundChance(name) {
