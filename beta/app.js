@@ -13098,7 +13098,9 @@ async function marketListGiftDialog(userGiftId) {
   const giftsOverlay = document.getElementById("gifts-overlay");
   const giftsOpen = giftsOverlay && !giftsOverlay.classList.contains("hidden");
   if (giftsOpen && typeof currentGiftsUserId !== "undefined" && currentGiftsUserId) {
-    setTimeout(() => { renderGiftsMain(currentGiftsUserId); }, 200);
+    setTimeout(() => {
+      renderGiftsMain(currentGiftsUserId, { preserveScroll: true });
+    }, 200);
   }
 
   // Синхронизация счётчика с сервером — на случай расхождений.
@@ -13448,14 +13450,14 @@ function setupGiftsUI() {
         const newVal = (ug && ug.pinned_at) ? null : new Date().toISOString();
         const { error } = await supabase.from("user_gifts").update({ pinned_at: newVal }).eq("id", ugId);
         if (error) { await showAlertDialog("Ошибка", error.message); return; }
-        renderGiftsMain(currentUser.id);
+        renderGiftsMain(currentUser.id, { preserveScroll: true });
       } else if (action === "visibility") {
         const { data: ug } = await supabase.from("user_gifts").select("in_profile").eq("id", ugId).maybeSingle();
         const newVal = !(ug && ug.in_profile);
         const { error } = await supabase.from("user_gifts").update({ in_profile: newVal }).eq("id", ugId);
         if (error) { await showAlertDialog("Ошибка", error.message); return; }
         await refreshMyGiftsCount();
-        renderGiftsMain(currentUser.id);
+        renderGiftsMain(currentUser.id, { preserveScroll: true });
       } else if (action === "market") {
         await marketListGiftDialog(ugId);
       }
@@ -14165,7 +14167,8 @@ function closeGiftsOverlay() {
   if (gm) gm.classList.add("hidden");
 }
 
-async function renderGiftsMain(userId) {
+async function renderGiftsMain(userId, opts) {
+  opts = opts || {};
   const previousUserId = currentGiftsUserId;
   currentGiftsUserId = userId;
   const content = document.getElementById("gifts-content");
@@ -14304,8 +14307,11 @@ async function renderGiftsMain(userId) {
     });
   });
 
-  // Сброс прокрутки — список всегда открывается с шапки
-  content.scrollTop = 0;
+  // 🔴 Сброс прокрутки. Пропускаем, если вызвано из pin / in-profile /
+  // market — иначе пользователя выкидывает наверх списка.
+  if (!opts.preserveScroll) {
+    content.scrollTop = 0;
+  }
 
   content.querySelectorAll(".gift-tile").forEach((el) => {
     el.addEventListener("click", () => {
@@ -14582,8 +14588,15 @@ async function renderGiftDetail(ownerId, ug, opts) {
   const content = document.getElementById("gifts-content");
   const title = document.getElementById("gifts-title");
   const backBtn = document.getElementById("gifts-back");
-  backBtn.classList.remove("hidden");
-  backBtn.onclick = () => renderGiftsMain(ownerId);
+  if (readOnly) {
+    // 🔴 Карточка открыта по ссылке — возвращаться некуда,
+    // стрелку «назад» убираем полностью.
+    backBtn.classList.add("hidden");
+    backBtn.onclick = null;
+  } else {
+    backBtn.classList.remove("hidden");
+    backBtn.onclick = () => renderGiftsMain(ownerId);
+  }
   title.textContent = t("gifts.title.detail");
 
   const catalog = await loadGiftCatalog();
@@ -14595,8 +14608,16 @@ async function renderGiftDetail(ownerId, ug, opts) {
   const isInProfile = ug.in_profile === true;
 
   // Владелец
-  const ownerProfile = profileCache.get(ug.owner_id) || await getProfile(ug.owner_id);
+  const ownerProfile = ug.owner_id
+    ? (profileCache.get(ug.owner_id) || await getProfile(ug.owner_id))
+    : null;
   const ownerName = ownerProfile ? ownerProfile.display_name : "—";
+  // 🔴 Если владельца нет (подарок обменян на Nectar / удалён) —
+  // рендерим как обычный текст, а не как ссылку. Иначе «—» выглядит
+  // кликабельным, но никуда не ведёт.
+  const ownerValueHtml = ug.owner_id
+    ? `<a href="#" class="gift-recipient-link" data-uid="${ug.owner_id}">${escapeHtml(ownerName)}</a>`
+    : `<span>${escapeHtml(ownerName)}</span>`;
 
   // Шанс фона
   const bgChance = getBackgroundChance(ug.background_name);
@@ -14685,7 +14706,7 @@ async function renderGiftDetail(ownerId, ug, opts) {
         ${captionHtml}
         <div class="gift-info-row">
           <span class="gir-label">${escapeHtml(t("gifts.detail.owner"))}</span>
-          <span class="gir-value"><a href="#" class="gift-recipient-link" data-uid="${ug.owner_id}">${escapeHtml(ownerName)}</a></span>
+          <span class="gir-value">${ownerValueHtml}</span>
         </div>
         <div class="gift-info-row">
           <span class="gir-label">${escapeHtml(t("gifts.detail.rarity"))}</span>
