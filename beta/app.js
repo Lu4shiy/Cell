@@ -12136,7 +12136,22 @@ async function marketUnlist(userGiftId) {
   if (!ok) return;
   const { error } = await supabase.rpc("market_unlist_gift", { p_user_gift_id: userGiftId });
   if (error) { await showAlertDialog(t("gifts.error"), error.message); return; }
+
+  // 🔴 МОМЕНТАЛЬНО: +1 подарок в счётчиках.
+  bumpMyGiftsCount(1);
+
+  // Если окно подарков моего профиля открыто — перерисуем, чтобы подарок вернулся.
+  const giftsOverlay = document.getElementById("gifts-overlay");
+  const giftsOpen = giftsOverlay && !giftsOverlay.classList.contains("hidden");
+  if (giftsOpen && typeof currentGiftsUserId !== "undefined" && currentGiftsUserId === currentUser.id) {
+    setTimeout(() => { renderGiftsMain(currentUser.id); }, 200);
+  }
+
+  // Обновляем «Мои предложения» в маркете (лот оттуда пропадает).
   await loadMarketMyListings();
+
+  // Синхронизация счётчика с сервером.
+  refreshMyGiftsCount().catch(() => {});
 }
 
 async function refreshMarketBalance() {
@@ -12199,9 +12214,18 @@ function marketRemoveListingEverywhere(listingId) {
 
 async function refreshMarketCart() {
   try {
+    // 🔴 Считаем только АКТИВНЫЕ лоты. Если кто-то купил или снял лот,
+    // который лежал в корзине, — он больше не должен висеть в бейдже.
+    // Иначе бейдж показывал «1» при пустой корзине (и исчезал только
+    // после захода во вкладку «Корзина», которая фильтрует по статусу).
     const { data } = await supabase.from("market_cart")
-      .select("listing_id").eq("user_id", currentUser.id);
-    marketCartIds = new Set((data || []).map((r) => r.listing_id));
+      .select("listing_id, market_listings!inner(status)")
+      .eq("user_id", currentUser.id);
+    marketCartIds = new Set(
+      (data || [])
+        .filter((r) => r.market_listings && r.market_listings.status === "active")
+        .map((r) => r.listing_id)
+    );
     updateMarketCartBadge();
   } catch (e) { /* silent */ }
 }
@@ -12912,15 +12936,32 @@ async function marketListGiftDialog(userGiftId) {
     return;
   }
 
-  // 🔴 Счётчик в профиле обновляем сразу — минус 1 подарок.
-  await refreshMyGiftsCount();
-
-  // Обновляем список подарков (лот пропал) и профиль маркета, если он открыт.
-  if (typeof currentGiftsUserId !== "undefined" && currentGiftsUserId) {
-    renderGiftsMain(currentGiftsUserId);
+  // 🔴 МОМЕНТАЛЬНО: убираем плитку подарка из открытого окна подарков
+  // и уменьшаем счётчик на 1 — не дожидаясь синхронизации с сервером.
+  const tile = document.querySelector(`.gift-tile[data-gift-ug-id="${userGiftId}"]`);
+  if (tile) {
+    tile.style.transition = "opacity 0.15s ease, transform 0.15s ease";
+    tile.style.opacity = "0";
+    tile.style.transform = "scale(0.85)";
+    setTimeout(() => tile.remove(), 160);
   }
-  if (marketTab === "profile" && document.getElementById("market-overlay")
-      && !document.getElementById("market-overlay").classList.contains("hidden")) {
+  bumpMyGiftsCount(-1);
+
+  // Если открыто окно подарков — перерисуем его в фоне (без «Загрузка...»),
+  // чтобы данные пришли с сервера и всё совпало. Небольшая задержка —
+  // даём RPC «доуехать» до чтения.
+  const giftsOverlay = document.getElementById("gifts-overlay");
+  const giftsOpen = giftsOverlay && !giftsOverlay.classList.contains("hidden");
+  if (giftsOpen && typeof currentGiftsUserId !== "undefined" && currentGiftsUserId) {
+    setTimeout(() => { renderGiftsMain(currentGiftsUserId); }, 200);
+  }
+
+  // Синхронизация счётчика с сервером — на случай расхождений.
+  refreshMyGiftsCount().catch(() => {});
+
+  // Профиль маркета (Мои предложения) — если он открыт.
+  const marketOverlay = document.getElementById("market-overlay");
+  if (marketTab === "profile" && marketOverlay && !marketOverlay.classList.contains("hidden")) {
     renderMarketProfile();
   }
 }
@@ -13202,11 +13243,16 @@ function openMarketPicker(opts) {
     });
   }
   renderList();
+  // 🔴 Всегда открываем список фильтра сверху. Иначе после пролистывания
+  // одного фильтра (например, «Паттерн») следующий открывается на той же
+  // позиции скролла (например, «Фон» — внизу).
+  listEl.scrollTop = 0;
 
   searchEl.oninput = () => {
     const q = searchEl.value.trim().toLowerCase();
     rendered = !q ? allItems : allItems.filter((it) => String(it.label).toLowerCase().includes(q));
     renderList();
+    listEl.scrollTop = 0;
   };
 
   cancelBtn.onclick = () => overlay.classList.add("hidden");
@@ -13305,6 +13351,24 @@ function setupGiftsUI() {
     const p = profileCache.get(uid) || await getProfile(uid);
     if (p) await openUserProfileDialog(p);
   }, true);
+}
+
+// 🔴 Мгновенно правит счётчики подарков в UI на delta (+1 / -1),
+// не дожидаясь ответа сервера. Используется при выставлении/снятии
+// с маркета — чтобы число менялось в тот же кадр.
+function bumpMyGiftsCount(delta) {
+  const el = document.getElementById("profile-gifts-count");
+  if (el) {
+    const cur = parseInt(el.textContent, 10) || 0;
+    el.textContent = String(Math.max(0, cur + delta));
+  }
+  // Счётчик в окне «чужого» профиля — правим только если этот профиль наш.
+  const overlay = document.getElementById("user-profile-overlay");
+  const upEl = document.getElementById("user-profile-gifts-count");
+  if (overlay && upEl && overlay.dataset.userId === currentUser.id) {
+    const cur = parseInt(upEl.textContent, 10) || 0;
+    upEl.textContent = String(Math.max(0, cur + delta));
+  }
 }
 
 async function refreshMyGiftsCount() {
@@ -13851,7 +13915,13 @@ async function renderGiftsMain(userId) {
   const title = document.getElementById("gifts-title");
   const backBtn = document.getElementById("gifts-back");
   backBtn.classList.add("hidden");
-  content.innerHTML = '<div class="empty">Загрузка...</div>';
+  // 🔴 Не показываем «Загрузка...», если в контейнере уже что-то есть.
+  // Иначе при фоновом ре-рендере (например, сразу после выставления
+  // подарка на маркет) экран мигает на пустоту.
+  const hasContent = content.children.length > 0 && !content.querySelector(".empty");
+  if (!hasContent) {
+    content.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
+  }
 
   const isMe = userId === currentUser.id;
   if (isMe) {

@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-beta-v21";
+const CACHE_VERSION = "cell-beta-v22";
 
 const CACHE_FILES = [
   "./",
@@ -31,25 +31,32 @@ const CACHE_FILES = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_VERSION).then((cache) => {
-      // 🔴 ВАЖНО: fetch(url, { cache: "reload" }) — обходим HTTP-кэш GitHub Pages.
-      // Без этого браузер отдаёт SW старую версию файлов (у GH Pages max-age=600),
-      // и после обновления приложение показывает старый код.
-      return Promise.all(
-        CACHE_FILES.map((url) =>
-          fetch(url, { cache: "reload" })
-            .then((res) => {
-              if (!res || !res.ok) throw new Error("HTTP " + (res && res.status));
-              return cache.put(url, res);
-            })
-            .catch((err) => {
-              console.warn("[SW] Не удалось закэшировать:", url, err);
-            })
-        )
-      );
-    })
-  );
+  event.waitUntil((async () => {
+    let cache;
+    try {
+      cache = await caches.open(CACHE_VERSION);
+    } catch (e) {
+      // 🔴 CacheStorage может упасть (UnknownError, квота, повреждение).
+      // Не роняем SW — он всё равно перехватит fetch и пойдёт в сеть.
+      console.warn("[SW] caches.open failed on install:", e);
+      return;
+    }
+    // 🔴 ВАЖНО: fetch(url, { cache: "reload" }) — обходим HTTP-кэш GitHub Pages.
+    // Без этого браузер отдаёт SW старую версию файлов (у GH Pages max-age=600),
+    // и после обновления приложение показывает старый код.
+    await Promise.all(
+      CACHE_FILES.map((url) =>
+        fetch(url, { cache: "reload" })
+          .then((res) => {
+            if (!res || !res.ok) throw new Error("HTTP " + (res && res.status));
+            return cache.put(url, res);
+          })
+          .catch((err) => {
+            console.warn("[SW] Не удалось закэшировать:", url, err);
+          })
+      )
+    );
+  })());
   // ⚠️ НЕ вызываем self.skipWaiting() здесь.
   // Ждём, пока пользователь нажмёт «Перезагрузить» в плашке —
   // тогда из index.html придёт сообщение SKIP_WAITING.
@@ -57,16 +64,19 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
+  event.waitUntil((async () => {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(
         keys
           .filter((k) => k !== CACHE_VERSION)
           .map((k) => caches.delete(k))
-      )
-    )
-  );
-  self.clients.claim();
+      );
+    } catch (e) {
+      console.warn("[SW] activate cleanup failed:", e);
+    }
+    try { self.clients.claim(); } catch (e) { /* silent */ }
+  })());
 });
 
 // Слушаем сообщения от страницы.
@@ -95,31 +105,48 @@ self.addEventListener("fetch", (event) => {
   // грузятся МГНОВЕННО на повторных заходах, а свежие версии подтянутся
   // через update-баннер (см. index.html + reg.update()).
   // Первый заход — идём в сеть (кэша нет).
-  event.respondWith(
-    caches.open(CACHE_VERSION).then(async (cache) => {
-      const cached = await cache.match(req);
-
-      const networkPromise = fetch(req)
-        .then((res) => {
-          if (res && res.status === 200 && res.type === "basic") {
-            cache.put(req, res.clone());
-          }
-          return res;
-        })
-        .catch(() => null);
-
-      if (cached) {
-        // Не ждём сеть — отдаём из кэша немедленно.
-        // networkPromise обновит кэш в фоне.
-        event.waitUntil(networkPromise);
-        return cached;
+  //
+  // 🔴 ВСЕ операции с CacheStorage обёрнуты в try/catch: если кэш
+  // повреждён/недоступен (UnknownError), SW не падает, а просто идёт
+  // в сеть. Иначе браузер показывает «FetchEvent ... promise was rejected»
+  // и страница может не загрузиться.
+  event.respondWith((async () => {
+    let cache = null;
+    try {
+      cache = await caches.open(CACHE_VERSION);
+    } catch (e) {
+      console.warn("[SW] caches.open failed on fetch:", e);
+      try { return await fetch(req); }
+      catch (e2) {
+        try { return (await caches.match("./index.html")) || Response.error(); }
+        catch (e3) { return Response.error(); }
       }
+    }
 
-      const fresh = await networkPromise;
-      if (fresh) return fresh;
-      return caches.match("./index.html");
-    })
-  );
+    let cached = null;
+    try { cached = await cache.match(req); } catch (e) { /* silent */ }
+
+    const networkPromise = fetch(req)
+      .then((res) => {
+        if (res && res.status === 200 && res.type === "basic") {
+          try { cache.put(req, res.clone()); } catch (e) { /* silent */ }
+        }
+        return res;
+      })
+      .catch(() => null);
+
+    if (cached) {
+      // Не ждём сеть — отдаём из кэша немедленно.
+      // networkPromise обновит кэш в фоне.
+      event.waitUntil(networkPromise);
+      return cached;
+    }
+
+    const fresh = await networkPromise;
+    if (fresh) return fresh;
+    try { return (await caches.match("./index.html")) || Response.error(); }
+    catch (e) { return Response.error(); }
+  })());
 });
 
 // ======================================================
