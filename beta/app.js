@@ -13591,7 +13591,11 @@ async function openGiftFromShareString(share) {
       p_slug: parsed.slug,
       p_serial: parsed.serial,
     });
-    if (error) console.warn("get_gift_by_link:", error);
+    // 🔴 Диагностика: если ссылка не срабатывает — в консоли будет видно
+    // точную причину (slug, serial, что вернул сервер).
+    console.log("[gift-link] slug:", parsed.slug, "serial:", parsed.serial,
+                "data:", data, "error:", error);
+    if (error) console.warn("get_gift_by_link error:", error);
     ug = data && data[0] ? data[0] : null;
   } catch (e) {
     console.warn("get_gift_by_link (catch):", e);
