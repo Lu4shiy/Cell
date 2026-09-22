@@ -11791,18 +11791,53 @@ function subscribeToMarketListingsRealtime() {
     }, (payload) => {
       const n = payload.new;
       if (!n) return;
+      // Лот ушёл с маркета (sold или cancelled).
       if (n.status !== "sold" && n.status !== "cancelled") return;
-      // Лот ушёл с маркета — убираем его из всех локальных кэшей.
+
+      // Убираем из локальных кэшей.
       marketRemoveListingEverywhere(n.id);
-      // Если у пользователя открыт список предложений — обновим.
-      if (marketTab === "listings") {
-        const overlay = document.getElementById("market-overlay");
-        if (overlay && !overlay.classList.contains("hidden")) {
-          renderMarketListingsFromCache();
-        }
+
+      // Если открыта детальная карточка этого лота — блокируем кнопки.
+      if (currentMarketListingId === n.id) {
+        markListingUnavailableInDetail();
       }
+
+      // Перерисовываем текущую вкладку маркета.
+      marketRefreshCurrentTab();
     })
     .subscribe();
+}
+
+// Перерисовывает содержимое активной вкладки маркета (если окно открыто).
+function marketRefreshCurrentTab() {
+  const overlay = document.getElementById("market-overlay");
+  if (!overlay || overlay.classList.contains("hidden")) return;
+  if (marketTab === "listings") {
+    renderMarketListingsFromCache();
+  } else if (marketTab === "cart") {
+    if (typeof renderMarketCart === "function") renderMarketCart();
+  } else if (marketTab === "profile") {
+    if (typeof loadMarketMyListings === "function") loadMarketMyListings();
+  }
+}
+
+// Скрывает кнопки покупки/корзины в открытой детальной карточке
+// и показывает плашку «Лот больше недоступен».
+function markListingUnavailableInDetail() {
+  const overlay = document.getElementById("market-listing-overlay");
+  if (!overlay || overlay.classList.contains("hidden")) return;
+  const buyBtn = document.getElementById("market-listing-buy");
+  const cartBtn = document.getElementById("market-listing-cart");
+  if (buyBtn) buyBtn.classList.add("hidden");
+  if (cartBtn) cartBtn.classList.add("hidden");
+
+  const body = document.getElementById("market-listing-body");
+  if (body && !body.querySelector(".market-listing-unavailable")) {
+    const n = document.createElement("div");
+    n.className = "market-listing-unavailable";
+    n.textContent = t("market.err.alreadySold");
+    body.appendChild(n);
+  }
 }
 
 // ======================================================
@@ -11825,31 +11860,37 @@ function subscribeToMarketNotifications() {
       if (typeof refreshMarketBalance === "function") refreshMarketBalance();
       if (typeof refreshBalance === "function") refreshBalance();
 
-      // Показываем in-app тост.
       const title = t("market.notif.soldTitle");
       const body = tFmt("market.notif.soldBody", {
         name: n.gift_name || "?",
         model: n.model_name || "",
         price: n.price || 0,
       });
-      try {
-        playNotificationSound();
-        showInAppToast({
-          profile: myProfile,
-          title,
-          body,
-          tag: "market-sold-" + n.id,
-          onClick: () => { openMarket(); },
-        });
-      } catch (e) { /* silent */ }
+      // 🔴 Переход по клику — сразу в профиль маркета.
+      const onClick = () => {
+        openMarket();
+        switchMarketTab("profile");
+      };
 
-      // Системное — если окно в фоне.
-      if (document.visibilityState !== "visible") {
+      if (document.visibilityState === "visible") {
+        // Окно открыто — только in-app тост + звук.
+        try {
+          playNotificationSound();
+          showInAppToast({
+            profile: myProfile,
+            title,
+            body,
+            tag: "market-sold-" + n.id,
+            onClick,
+          });
+        } catch (e) { /* silent */ }
+      } else {
+        // Окно свёрнуто — только системное, без тоста.
         try {
           showAppNotification("Cell", {
             body: title + ": " + body,
             tag: "market-sold-" + n.id,
-            onClick: () => { openMarket(); },
+            onClick,
           });
         } catch (e) { /* silent */ }
       }
@@ -11927,7 +11968,7 @@ async function openMarketHistory() {
       const badgeClass = isSale ? "sale" : "purchase";
 
       return `
-        <div class="market-history-item" data-listing-id="${escapeHtml(r.listing_id || "")}">
+        <div class="market-history-item" data-tx-id="${escapeHtml(r.id)}">
           <div class="market-history-badge ${badgeClass}">${escapeHtml(badge)}</div>
           <div class="market-history-main">
             <div class="market-history-title">${escapeHtml(catName)} #${ug.serial_number || "?"}${ug.model_name ? " · " + escapeHtml(ug.model_name) : ""}</div>
@@ -11942,11 +11983,12 @@ async function openMarketHistory() {
     body.querySelectorAll(".market-history-item").forEach((item) => {
       item.addEventListener("click", (e) => {
         if (e.target.closest(".market-history-user")) return;
-        const lid = item.dataset.listingId;
-        if (!lid) return;
+        const txId = item.dataset.txId;
+        const tx = rows.find((r) => r.id === txId);
+        if (!tx) return;
         // Скрываем историю (модалка поверх), открываем карточку.
         overlay.classList.add("hidden");
-        openMarketListingDetail(lid);
+        openMarketListingDetail(tx.listing_id, tx);
       });
     });
 
@@ -12370,7 +12412,7 @@ async function marketBuyListing(listingId) {
   const { error } = await supabase.rpc("market_buy_listing", { p_listing_id: listingId });
   if (error) {
     await showAlertDialog(t("gifts.error"), translateMarketError(error.message));
-    // 🔴 Если лот уже куплен кем-то — убираем из UI моментально.
+    // 🔴 Если лот уже куплен/снят кем-то — убираем из UI моментально.
     const m = String(error.message || "").toLowerCase();
     if (m.includes("not active") || m.includes("not found") ||
         m.includes("not available") || m.includes("already")) {
@@ -12379,9 +12421,12 @@ async function marketBuyListing(listingId) {
     }
     return;
   }
-
   marketRemoveListingEverywhere(listingId);
   await refreshMarketBalance();
+  await refreshBalance();
+  await refreshMyGiftsCount();
+  renderMarketListingsFromCache();
+}
   await refreshBalance();
   await refreshMyGiftsCount();
   renderMarketListingsFromCache();
@@ -12393,20 +12438,52 @@ async function marketBuyListing(listingId) {
 
 let currentMarketListingId = null;
 
-async function openMarketListingDetail(listingId) {
-  // Лот может быть не в marketState.listings (например, открыт из корзины
-  // или из «Мои предложения») — тогда догружаем с сервера.
-  let listing = marketState.listings.find((l) => l.id === listingId);
-  if (!listing) {
+async function openMarketListingDetail(listingId, fallbackTx) {
+  let listing = null;
+  let sellerId = null;
+  let priceVal = null;
+  let listedAtVal = null;
+  let ugForUi = null;
+
+  // 1) Из текущего кэша.
+  if (listingId) {
+    listing = marketState.listings.find((l) => l.id === listingId) || null;
+  }
+  // 2) С сервера.
+  if (!listing && listingId) {
     try {
       const { data, error } = await supabase.from("market_listings")
         .select("id, price, created_at, seller_id, status, user_gift_id, user_gifts!inner(id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name)")
         .eq("id", listingId).maybeSingle();
-      if (error || !data) return;
-      listing = data;
-    } catch (e) { return; }
+      if (!error && data) listing = data;
+    } catch (e) { /* silent */ }
   }
-  currentMarketListingId = listingId;
+  if (listing) {
+    sellerId = listing.seller_id;
+    priceVal = listing.price;
+    listedAtVal = listing.created_at;
+    ugForUi = listing.user_gifts;
+  } else if (fallbackTx) {
+    // 3) Fallback из истории сделок — лот мог быть удалён (on delete set null).
+    sellerId = fallbackTx.seller_id;
+    priceVal = fallbackTx.price;
+    listedAtVal = fallbackTx.created_at;
+    const ugId = fallbackTx.user_gift_id;
+    if (ugId) {
+      try {
+        const { data: ug } = await supabase.from("user_gifts")
+          .select("id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name")
+          .eq("id", ugId).maybeSingle();
+        ugForUi = ug || null;
+      } catch (e) { /* silent */ }
+    }
+  }
+
+  if (!ugForUi) {
+    await showAlertDialog(t("gifts.error"), t("market.err.listingUnavailable"));
+    return;
+  }
+  currentMarketListingId = listingId || null;
 
   const overlay = document.getElementById("market-listing-overlay");
   const nameEl = document.getElementById("market-listing-name");
@@ -12416,16 +12493,16 @@ async function openMarketListingDetail(listingId) {
   const closeBtn = document.getElementById("market-listing-close");
   if (!overlay) return;
 
-  const ug = listing.user_gifts || {};
+  const ug = ugForUi;
   const cat = giftCatalogCache.find((c) => c.id === ug.gift_id);
   if (!cat) return;
 
-  // Продавец — из кэша, если нет — догружаем.
-  let seller = profileCache.get(listing.seller_id);
+  // Продавец.
+  let seller = profileCache.get(sellerId);
   if (!seller) {
     try {
       const { data } = await supabase.from("profiles")
-        .select("id, username, display_name, avatar_url").eq("id", listing.seller_id).single();
+        .select("id, username, display_name, avatar_url").eq("id", sellerId).single();
       if (data) { seller = data; profileCache.set(data.id, data); }
     } catch (e) { /* silent */ }
   }
@@ -12444,8 +12521,8 @@ async function openMarketListingDetail(listingId) {
     ? `#${ug.serial_number} · ${tFmt("gifts.detail.limit", { n: maxSupply })}`
     : `#${ug.serial_number}`;
 
-  const listedAt = listing.created_at
-    ? new Date(listing.created_at).toLocaleString(localeId(), { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+  const listedAt = listedAtVal
+    ? new Date(listedAtVal).toLocaleString(localeId(), { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
     : "—";
 
   const patternRow = ug.pattern_id
@@ -12491,7 +12568,7 @@ async function openMarketListingDetail(listingId) {
       </div>
       <div class="gift-info-row">
         <span class="gir-label">${escapeHtml(t("gifts.detail.value"))}</span>
-        <span class="gir-value">${NECTAR_HTML} <b>${listing.price}</b></span>
+        <span class="gir-value">${NECTAR_HTML} <b>${priceVal}</b></span>
       </div>
       ${modelRow}
       ${patternRow}
@@ -12517,7 +12594,7 @@ async function openMarketListingDetail(listingId) {
   }
 
   // 🔴 Свой лот: не показываем CTA «Связаться с продавцом».
-  const isMine = listing.seller_id === currentUser.id;
+  const isMine = sellerId === currentUser.id;
   const sellerRow = document.getElementById("market-listing-seller");
   if (sellerRow) {
     if (isMine) {
@@ -12531,7 +12608,7 @@ async function openMarketListingDetail(listingId) {
   }
 
   // 🔴 Свой лот — никаких кнопок покупки/корзины.
-  const isMineFinal = listing.seller_id === currentUser.id;
+  const isMineFinal = sellerId === currentUser.id;
   if (isMineFinal) {
     buyBtn.classList.add("hidden");
     cartBtn.classList.add("hidden");
@@ -12550,7 +12627,7 @@ async function openMarketListingDetail(listingId) {
       cartBtn.classList.toggle("in-cart", nowIn);
     };
 
-    // Кнопка «Купить».
+    // Кнопка «Купить». Если открыто из истории — `listingId` может быть null.
     buyBtn.onclick = async () => {
       const ok = await showConfirmDialog(
         t("market.buy.title"),
@@ -12565,11 +12642,11 @@ async function openMarketListingDetail(listingId) {
         const m = String(error.message || "").toLowerCase();
         if (m.includes("not active") || m.includes("not found") ||
             m.includes("not available") || m.includes("already")) {
-          marketRemoveListingEverywhere(listingId);
+          if (listingId) marketRemoveListingEverywhere(listingId);
         }
         return;
       }
-      marketRemoveListingEverywhere(listingId);
+      if (listingId) marketRemoveListingEverywhere(listingId);
       await refreshMarketBalance();
       await refreshBalance();
       await refreshMyGiftsCount();
