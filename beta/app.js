@@ -12427,10 +12427,6 @@ async function marketBuyListing(listingId) {
   await refreshMyGiftsCount();
   renderMarketListingsFromCache();
 }
-  await refreshBalance();
-  await refreshMyGiftsCount();
-  renderMarketListingsFromCache();
-}
 
 // ======================================================
 // Маркет: детальная карточка лота
