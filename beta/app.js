@@ -697,6 +697,11 @@ const I18N = {
     "gifts.sell.confirm": "Продать",
     "gifts.notFound": "Не найдено",
     "gifts.error": "Ошибка",
+    "gifts.share.share": "Поделиться",
+    "gifts.share.copy": "Скопировать ссылку",
+    "gifts.share.copyOk": "Ссылка скопирована",
+    "gifts.share.copyFail": "Не удалось скопировать ссылку",
+    "gifts.share.notFound": "Такого подарка не существует",
 
     // ---- Превью в списке чатов ----
     "preview.gift": "🎁 Подарок",
@@ -1530,6 +1535,11 @@ const I18N = {
     "gifts.sell.confirm": "Sell",
     "gifts.notFound": "Not found",
     "gifts.error": "Error",
+    "gifts.share.share": "Share",
+    "gifts.share.copy": "Copy link",
+    "gifts.share.copyOk": "Link copied",
+    "gifts.share.copyFail": "Couldn't copy the link",
+    "gifts.share.notFound": "This gift doesn't exist",
 
     // ---- Chat list previews ----
     "preview.gift": "🎁 Gift",
@@ -2622,6 +2632,11 @@ function applyFormatting(escaped) {
     const cleanUrl = url.replace(/&amp;/g, "&");
     return `${pre}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
   });
+  // 🔴 Автолинковка ссылок на подарки: cell/gift/<Slug>-<Serial>.
+  // Клик обрабатывается отдельно (см. setupMessageMenu) — открывает карточку.
+  html = html.replace(/(^|[\s>])(cell\/gift\/([A-Za-z0-9]+)-(\d+))/g, (m, pre, full, slug, serial) => {
+    return `${pre}<a href="#gift=${slug}-${serial}" class="gift-link">${full}</a>`;
+  });
   return html;
 }
 
@@ -2812,6 +2827,9 @@ let contextChannelForMenu = null;
 let channelAdminsChannel = null;
 let usernameCheckTimeout = null, validatedUsername = null, reactionsRefreshTimer = null;
 let giftCatalogCache = [];
+// 🔴 Подарки, выставленные на маркет в этой сессии. Гарантированно
+// скрываем их из инвентаря, даже если запрос к market_listings подведёт.
+const locallyListedGiftIds = new Set();
 // 🔴 Мультивыбор: в каждой категории может быть выбрано несколько
 // (или все) значений. Пустой сет = не фильтруем эту категорию.
 const giftFilters = {
@@ -3850,6 +3868,7 @@ function resetAppState() {
   channelCache.clear();
   myBlockedIds = new Set(); blockedMeIds = new Set();
   hiddenMsgIds = new Set();
+  locallyListedGiftIds.clear();
   currentOtherUser = null; pendingOtherUser = null;
   currentChannelObj = null; currentChannelIsAdmin = false;
   currentChannelIsSubscribed = false;
@@ -3982,6 +4001,8 @@ async function initApp() {
   subscribeToChannelRequests();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
   setupMarketUI();
+  // 🔴 Дошлём необработанные роллы моделей/паттернов (если были обрывы сети).
+  setTimeout(() => { processGiftRollQueue().catch(() => {}); }, 3000);
   // 🔴 Прогрев всех иконок при старте — чтобы не «мигали» пустыми квадратами.
   preloadAllIcons();
   setupAvatarCropper();
@@ -4084,7 +4105,10 @@ async function initApp() {
   setTimeout(() => { tryJoinFromInviteUrl(); }, 400);
   // Реакция на смену #invite=... в текущей вкладке
   window.addEventListener("hashchange", () => {
-    if (currentUser) tryJoinFromInviteUrl();
+    if (currentUser) {
+      tryJoinFromInviteUrl();
+      handleGiftHash();
+    }
   });
 
   // Страховочный опрос членств — на случай, если realtime не доставил событие
@@ -10381,6 +10405,21 @@ function setupMessageMenu() {
     window.location.hash = "invite=" + m[1];
   }, true);
 
+  // 🔴 Клик по ссылке на подарок (cell/gift/<Slug>-<Serial>) — открываем
+  // read-only карточку. Работает и для href="#gift=...", и для старого
+  // варианта с "cell/gift/..." — оба нормализуются.
+  document.getElementById("messages").addEventListener("click", (e) => {
+    const a = e.target.closest("a");
+    if (!a) return;
+    const href = a.getAttribute("href") || "";
+    let m = /#gift=([A-Za-z0-9]+-\d+)/.exec(href);
+    if (!m) m = /(cell\/gift\/[A-Za-z0-9]+-\d+)/.exec(href);
+    if (!m) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openGiftFromShareString(m[1]).catch((err) => console.warn("open gift link:", err));
+  }, true);
+
   document.getElementById("messages").addEventListener("click", (e) => {
     const video = e.target.closest("video.msg-attachment-video");
     if (!video) return;
@@ -12148,6 +12187,9 @@ async function marketUnlist(userGiftId) {
   const { error } = await supabase.rpc("market_unlist_gift", { p_user_gift_id: userGiftId });
   if (error) { await showAlertDialog(t("gifts.error"), error.message); return; }
 
+  // 🔴 Убираем из локального фильтра — подарок должен вернуться в инвентарь.
+  locallyListedGiftIds.delete(userGiftId);
+
   // 🔴 МОМЕНТАЛЬНО: +1 подарок в счётчиках.
   bumpMyGiftsCount(1);
 
@@ -12955,6 +12997,9 @@ async function marketListGiftDialog(userGiftId) {
     return;
   }
 
+  // 🔴 Запоминаем ID локально — гарантированный фильтр в renderGiftsMain.
+  locallyListedGiftIds.add(userGiftId);
+
   // 🔴 МОМЕНТАЛЬНО: убираем плитку подарка из открытого окна подарков
   // и уменьшаем счётчик на 1 — не дожидаясь синхронизации с сервером.
   const tile = document.querySelector(`.gift-tile[data-gift-ug-id="${userGiftId}"]`);
@@ -13350,6 +13395,15 @@ function setupGiftsUI() {
 
   // Клик по имени в «Подарок для X»:
   // закрываем окно подарка → открываем профиль → запоминаем контекст для возврата
+  // 🔴 Закрываем меню «три точки» при клике вне его.
+  document.addEventListener("pointerdown", (e) => {
+    const menuEl = document.getElementById("gift-detail-menu");
+    if (!menuEl || menuEl.classList.contains("hidden")) return;
+    if (menuEl.contains(e.target)) return;
+    if (e.target.closest("#gift-detail-menu-btn")) return;
+    menuEl.classList.add("hidden");
+  }, true);
+
   document.addEventListener("click", async (e) => {
     const link = e.target.closest(".gift-recipient-link");
     if (!link) return;
@@ -13418,6 +13472,61 @@ async function refreshBalance() {
     const el = document.getElementById("gifts-balance");
     if (el) el.textContent = String(data.imagi_tokens);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Ссылки на подарки (cell/gift/<Slug>-<Serial>)
+// Slug — имя подарка без пробелов и спецсимволов. "Money Bag" → "MoneyBag".
+// ─────────────────────────────────────────────────────────────────
+function giftSlug(name) {
+  return String(name || "").replace(/[^A-Za-z0-9]/g, "");
+}
+
+function giftShareString(cat, ug) {
+  if (!cat || !ug) return "";
+  return `cell/gift/${giftSlug(cat.name)}-${ug.serial_number}`;
+}
+
+function parseGiftShareString(s) {
+  const m = /^cell\/gift\/([A-Za-z0-9]+)-(\d+)$/.exec(String(s || "").trim());
+  if (!m) return null;
+  return { slug: m[1], serial: parseInt(m[2], 10) };
+}
+
+// Открывает read-only карточку подарка по ссылке (slug + serial).
+// Если подарок не найден — показывает «Такого подарка не существует».
+async function openGiftFromShareString(share) {
+  const parsed = typeof share === "string" ? parseGiftShareString(share) : share;
+  if (!parsed || !parsed.slug || !parsed.serial) {
+    await showAlertDialog(t("gifts.title.detail"), t("gifts.share.notFound"));
+    return;
+  }
+  const catalog = await loadGiftCatalog();
+  const slugLower = parsed.slug.toLowerCase();
+  const cat = catalog.find((c) => giftSlug(c.name).toLowerCase() === slugLower);
+  if (!cat) {
+    await showAlertDialog(t("gifts.title.detail"), t("gifts.share.notFound"));
+    return;
+  }
+  const { data: ug } = await supabase.from("user_gifts")
+    .select("*").eq("gift_id", cat.id).eq("serial_number", parsed.serial).maybeSingle();
+  if (!ug) {
+    await showAlertDialog(t("gifts.title.detail"), t("gifts.share.notFound"));
+    return;
+  }
+  document.getElementById("gifts-overlay").classList.remove("hidden");
+  await refreshBalance();
+  await renderGiftDetail(ug.owner_id, ug, { readOnly: true });
+}
+
+// Обработка #gift=... в URL (например, при открытии ссылки из браузера).
+async function handleGiftHash() {
+  const m = /[#&]gift=([A-Za-z0-9]+-\d+)/.exec(window.location.hash || "");
+  if (!m) return;
+  const share = m[1];
+  try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch (e) {}
+  await new Promise((r) => setTimeout(r, 800));
+  try { await openGiftFromShareString(share); } catch (e) { console.warn("gift hash:", e); }
 }
 
 function giftRarityLabel(r) {
@@ -14004,6 +14113,11 @@ async function renderGiftsMain(userId) {
       if (listedIds.size) allGifts = allGifts.filter((g) => !listedIds.has(g.id));
     } catch (e) { /* silent */ }
   }
+  // 🔴 Дополнительный локальный фильтр — на случай, если запрос выше
+  // не вернул наши лоты (RLS, гонка). Живёт в памяти до перезагрузки.
+  if (locallyListedGiftIds.size) {
+    allGifts = allGifts.filter((g) => !locallyListedGiftIds.has(g.id));
+  }
   const pinned = allGifts.filter((g) => g.pinned_at)
     .sort((a, b) => new Date(b.pinned_at) - new Date(a.pinned_at));
   const unpinned = allGifts.filter((g) => !g.pinned_at);
@@ -14187,6 +14301,66 @@ async function renderCatalog(recipientId) {
   });
 }
 
+// 🔴 Роллит модель + паттерн для эпического подарка и пишет их в user_gifts
+// с ретраями. Если совсем не получилось — складывает в очередь в
+// localStorage, которую разберём при следующем запуске приложения.
+async function rollAndUpdateEpicGift(gift, newGiftId) {
+  if (!gift || gift.rarity !== "epic" || !newGiftId) return;
+
+  const updatePayload = {};
+  const model = rollModelForGift(gift);
+  if (model) {
+    updatePayload.model_id = model.id;
+    updatePayload.model_name = model.name;
+  }
+  const patternId = rollPatternForEpic(gift.collection || null);
+  if (patternId) updatePayload.pattern_id = patternId;
+
+  if (!Object.keys(updatePayload).length) return;
+
+  // 4 попытки с нарастающей паузой.
+  const DELAYS = [0, 600, 1500, 3500];
+  for (let attempt = 0; attempt < DELAYS.length; attempt++) {
+    if (DELAYS[attempt]) await new Promise((r) => setTimeout(r, DELAYS[attempt]));
+    try {
+      const { error } = await supabase.from("user_gifts")
+        .update(updatePayload).eq("id", newGiftId);
+      if (!error) return true;
+    } catch (e) { /* silent */ }
+  }
+
+  // Всё упало — кладём в очередь на потом.
+  try {
+    const queue = JSON.parse(localStorage.getItem("cell_gift_roll_queue") || "[]");
+    queue.push({ id: newGiftId, payload: updatePayload, ts: Date.now() });
+    localStorage.setItem("cell_gift_roll_queue", JSON.stringify(queue));
+  } catch (e) { /* silent */ }
+  return false;
+}
+
+// 🔴 Разбирает очередь необработанных роллов (см. выше). Вызывается при старте.
+async function processGiftRollQueue() {
+  let queue;
+  try {
+    queue = JSON.parse(localStorage.getItem("cell_gift_roll_queue") || "[]");
+  } catch (e) { return; }
+  if (!queue || !queue.length) return;
+
+  const remaining = [];
+  for (const item of queue) {
+    try {
+      const { error } = await supabase.from("user_gifts")
+        .update(item.payload).eq("id", item.id);
+      if (error) remaining.push(item);
+    } catch (e) {
+      remaining.push(item);
+    }
+  }
+  try {
+    localStorage.setItem("cell_gift_roll_queue", JSON.stringify(remaining));
+  } catch (e) { /* silent */ }
+}
+
 function openGiftPurchase(gift, recipientId) {
   const overlay = document.getElementById("gift-purchase-overlay");
   const titleEl = document.getElementById("gift-purchase-title");
@@ -14235,27 +14409,10 @@ function openGiftPurchase(gift, recipientId) {
       return;
     }
 
-    // Роллим модель + паттерн для epic-подарка
-    if (gift.rarity === "epic" && newGiftId) {
-      const updatePayload = {};
-      // Модель — если у подарка заданы models
-      const model = rollModelForGift(gift);
-      if (model) {
-        updatePayload.model_id = model.id;
-        updatePayload.model_name = model.name;
-      }
-      // Паттерн — как было
-      const patternId = rollPatternForEpic(gift.collection || null);
-      if (patternId) updatePayload.pattern_id = patternId;
-
-      if (Object.keys(updatePayload).length) {
-        try {
-          await supabase.from("user_gifts")
-            .update(updatePayload)
-            .eq("id", newGiftId);
-        } catch (e) { console.warn("gift roll:", e); }
-      }
-    }
+    // Роллим модель + паттерн для epic-подарка.
+    // 🔴 Если сеть упадёт — дорабатываем ретраями, потом кладём в очередь
+    // localStorage. Иначе подарок останется без модели/паттерна.
+    await rollAndUpdateEpicGift(gift, newGiftId);
 
     // Если отмечена галочка «С моим именем» — сохраняем ИМЯ ПОКУПАТЕЛЯ (моё).
     //    Работает одинаково: и когда покупаешь себе, и когда другому.
@@ -14312,7 +14469,9 @@ function openGiftPurchase(gift, recipientId) {
   cancelBtn.onclick = () => overlay.classList.add("hidden");
 }
 
-async function renderGiftDetail(ownerId, ug) {
+async function renderGiftDetail(ownerId, ug, opts) {
+  opts = opts || {};
+  const readOnly = !!opts.readOnly;
   // Данные уже приходят свежими из списка — не делаем лишний запрос
 
   // Запоминаем контекст — чтобы вернуться именно к этому подарку
@@ -14398,6 +14557,13 @@ async function renderGiftDetail(ownerId, ug) {
 
   content.innerHTML = `
     <div class="gift-detail">
+      <button type="button" class="gift-detail-menu-btn" id="gift-detail-menu-btn" title="${escapeHtml(t("gifts.share.share"))}">
+        <span class="cell-icon" data-icon="menuVertical"></span>
+      </button>
+      <div class="gift-detail-menu hidden" id="gift-detail-menu">
+        <button type="button" data-action="share">${escapeHtml(t("gifts.share.share"))}</button>
+        <button type="button" data-action="copy">${escapeHtml(t("gifts.share.copy"))}</button>
+      </div>
       <div class="gift-hero" style="${bg}">
         <div class="gift-hero-pattern" style="${patternStyle}"></div>
         <div class="gift-hero-emoji">${renderGiftModel(giftDisplayImage(cat, ug), 170)}</div>
@@ -14435,6 +14601,7 @@ async function renderGiftDetail(ownerId, ug) {
         </div>
       </div>
 
+      ${readOnly ? "" : `
       <div class="gift-detail-actions">
         ${isOwner ? `
           <button class="dialog-btn ${isInProfile ? "dialog-cancel" : "dialog-primary"}" id="gift-toggle-visible">
@@ -14446,7 +14613,7 @@ async function renderGiftDetail(ownerId, ug) {
         ` : `
           <div class="dialog-text" style="text-align:center;">${escapeHtml(t("gifts.detail.notOwner"))}</div>
         `}
-      </div>
+      </div>`}
     </div>`;
 
   // Асинхронно дорисовываем паттерн
@@ -14461,7 +14628,49 @@ async function renderGiftDetail(ownerId, ug) {
     });
   }
 
-  if (isOwner) {
+  // 🔴 Меню «три точки»: поделиться / скопировать ссылку.
+  const menuBtn = document.getElementById("gift-detail-menu-btn");
+  const menuEl = document.getElementById("gift-detail-menu");
+  if (menuBtn && menuEl) {
+    menuBtn.onclick = (e) => {
+      e.stopPropagation();
+      menuEl.classList.toggle("hidden");
+    };
+    menuEl.onclick = async (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      e.stopPropagation();
+      menuEl.classList.add("hidden");
+      const shareStr = giftShareString(cat, ug);
+      if (!shareStr) return;
+      const action = b.dataset.action;
+      if (action === "share" && navigator.share) {
+        try {
+          await navigator.share({ title: `${cat.name} #${ug.serial_number}`, text: shareStr });
+          return;
+        } catch (err) {
+          if (err && err.name === "AbortError") return;
+        }
+      }
+      // Fallback для «Поделиться» и основной путь для «Скопировать».
+      try {
+        if (navigator.clipboard) {
+          await navigator.clipboard.writeText(shareStr);
+        } else {
+          const tmp = document.createElement("textarea");
+          tmp.value = shareStr;
+          document.body.appendChild(tmp);
+          tmp.select();
+          document.execCommand("copy");
+          document.body.removeChild(tmp);
+        }
+        await showAlertDialog(t("gifts.share.share"), t("gifts.share.copyOk"));
+      } catch (err) {
+        await showAlertDialog(t("gifts.error"), t("gifts.share.copyFail"));
+      }
+    };
+  }
+
+  if (isOwner && !readOnly) {
     document.getElementById("gift-toggle-visible").addEventListener("click", async () => {
       const newVal = !isInProfile;
       const { error } = await supabase.from("user_gifts").update({ in_profile: newVal }).eq("id", ug.id);
@@ -17584,6 +17793,8 @@ setupLocalLogin();
     // Если в URL есть #open-chat=<id> (клик по push-уведомлению на закрытом
     // приложении) — открываем нужный чат после загрузки.
     handleOpenChatHash();
+    // Если в URL есть #gift=<Slug>-<Serial> — открываем карточку подарка.
+    handleGiftHash();
     return;
   }
 
@@ -17613,6 +17824,7 @@ setupLocalLogin();
       } catch (e) { /* silent */ }
       showApp(data.session.user);
       handleOpenChatHash();
+      handleGiftHash();
       return;
     }
     // Токены отозваны/протухли — чистим backup, чтобы не пытаться снова

@@ -4244,7 +4244,61 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 /* НОВОЕ ОКНО ПОДАРКА                                      */
 /* ====================================================== */
 
-.gift-detail { text-align: center; }
+.gift-detail { text-align: center; position: relative; }
+
+/* ── Меню в карточке подарка (три точки) ── */
+.gift-detail-menu-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 0;
+  transition: background 0.15s;
+}
+.gift-detail-menu-btn:hover { background: rgba(0, 0, 0, 0.65); }
+.gift-detail-menu-btn .cell-icon {
+  background-color: #fff;
+  width: 18px;
+  height: 18px;
+}
+.gift-detail-menu {
+  position: absolute;
+  top: 54px;
+  right: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px;
+  min-width: 210px;
+  z-index: 20;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  animation: popIn 0.12s ease-out;
+}
+.gift-detail-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+.gift-detail-menu button:hover { background: var(--bg-hover); }
 
 /* Hero — прямоугольник с фоном-градиентом и эмодзи */
 .gift-hero {
