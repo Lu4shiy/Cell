@@ -390,6 +390,12 @@ const I18N = {
     "market.cart.buyAll": "Купить всё",
     "market.cart.buyAllText": "Купить все подарки из корзины за {sum}?",
     "market.err.ownListing": "Нельзя купить собственный лот.",
+    "market.err.notEnoughNectar": "Недостаточно Nectar.",
+    "market.err.cartEmpty": "Корзина пуста.",
+    "market.err.listingUnavailable": "Этот лот больше недоступен.",
+    "market.err.notAuth": "Нужно войти в аккаунт.",
+    "market.notif.soldTitle": "Подарок продан",
+    "market.notif.soldBody": "«{name}»{model} куплен за {price} Nectar.",
     // Профиль продавца
     "market.profile.level": "Уровень продавца",
     "market.profile.bought": "Куплено за всё время",
@@ -1212,6 +1218,12 @@ const I18N = {
     "market.cart.buyAll": "Buy all",
     "market.cart.buyAllText": "Buy all gifts from your cart for {sum}?",
     "market.err.ownListing": "You can't buy your own listing.",
+    "market.err.notEnoughNectar": "Not enough Nectar.",
+    "market.err.cartEmpty": "Your cart is empty.",
+    "market.err.listingUnavailable": "This listing is no longer available.",
+    "market.err.notAuth": "Please sign in.",
+    "market.notif.soldTitle": "Gift sold",
+    "market.notif.soldBody": "\"{name}\"{model} sold for {price} Nectar.",
     // Seller profile
     "market.profile.level": "Seller level",
     "market.profile.bought": "Bought all time",
@@ -3954,7 +3966,9 @@ async function initApp() {
   setupBirthdayClose(); setupTokensDialog(); setupChannelCreate(); setupChannelEdit();
   supabase.from("profiles").select("id").limit(1).then(() => {});
   subscribeToBlocks(); subscribeToGlobalChanges(); subscribeToProfiles();
-  subscribeToMemberships(); subscribeToReads(); subscribeToGlobalMessages();
+  subscribeToMemberships(); subscribeToReads();
+  subscribeToGlobalMessages();
+  subscribeToMarketNotifications();
   await Promise.all([loadMyProfile(), loadBlocks(), loadChatReads()]);
 
   // Пробуем автоматически разблокировать E2EE, если ключ был сохранён
@@ -11761,6 +11775,58 @@ async function loadMarketProfileStats() {
 }
 
 // ======================================================
+// Маркет: уведомления о продаже
+// ======================================================
+
+let marketNotifChannel = null;
+
+function subscribeToMarketNotifications() {
+  if (marketNotifChannel) return;
+  marketNotifChannel = supabase.channel("market-notif-" + currentUser.id)
+    .on("postgres_changes", {
+      event: "INSERT", schema: "public", table: "market_notifications",
+      filter: `user_id=eq.${currentUser.id}`,
+    }, async (payload) => {
+      const n = payload.new;
+      if (!n || n.kind !== "sold") return;
+
+      // Обновляем баланс, если маркет открыт — чтобы сразу увидели +N.
+      if (typeof refreshMarketBalance === "function") refreshMarketBalance();
+      if (typeof refreshBalance === "function") refreshBalance();
+
+      // Показываем in-app тост.
+      const title = t("market.notif.soldTitle");
+      const body = tFmt("market.notif.soldBody", {
+        name: n.gift_name || "?",
+        model: n.model_name || "",
+        price: n.price || 0,
+      });
+      try {
+        playNotificationSound();
+        showInAppToast({
+          profile: myProfile,
+          title,
+          body,
+          tag: "market-sold-" + n.id,
+          onClick: () => { openMarket(); },
+        });
+      } catch (e) { /* silent */ }
+
+      // Системное — если окно в фоне.
+      if (document.visibilityState !== "visible") {
+        try {
+          showAppNotification("Cell", {
+            body: title + ": " + body,
+            tag: "market-sold-" + n.id,
+            onClick: () => { openMarket(); },
+          });
+        } catch (e) { /* silent */ }
+      }
+    })
+    .subscribe();
+}
+
+// ======================================================
 // Маркет: история сделок
 // ======================================================
 
@@ -11779,8 +11845,9 @@ async function openMarketHistory() {
   overlay.onclick = (e) => { if (e.target === overlay) overlay.classList.add("hidden"); };
 
   try {
+    // 🔴 Без join — PostgREST не знает связи между market_transactions и user_gifts.
     const { data, error } = await supabase.from("market_transactions")
-      .select("id, price, created_at, seller_id, buyer_id, user_gift_id, user_gifts!inner(gift_id, serial_number, model_id, model_name)")
+      .select("id, price, created_at, seller_id, buyer_id, user_gift_id")
       .or(`seller_id.eq.${currentUser.id},buyer_id.eq.${currentUser.id}`)
       .order("created_at", { ascending: false });
 
@@ -11790,6 +11857,15 @@ async function openMarketHistory() {
     if (!rows.length) {
       body.innerHTML = `<div class="empty">${escapeHtml(t("market.history.empty"))}</div>`;
       return;
+    }
+
+    // Второй запрос — сами подарки.
+    const ugIds = [...new Set(rows.map((r) => r.user_gift_id).filter(Boolean))];
+    const ugMap = new Map();
+    if (ugIds.length) {
+      const { data: ugs } = await supabase.from("user_gifts")
+        .select("id, gift_id, serial_number, model_id, model_name").in("id", ugIds);
+      (ugs || []).forEach((u) => ugMap.set(u.id, u));
     }
 
     if (!giftCatalogCache.length) await loadGiftCatalog();
@@ -11810,7 +11886,7 @@ async function openMarketHistory() {
       const isSale = r.seller_id === currentUser.id;
       const otherId = isSale ? r.buyer_id : r.seller_id;
       const other = profileCache.get(otherId) || { display_name: "?", username: "" };
-      const ug = r.user_gifts || {};
+      const ug = ugMap.get(r.user_gift_id) || {};
       const cat = giftCatalogCache.find((c) => c.id === ug.gift_id);
       const catName = cat ? cat.name : "?";
       const date = r.created_at
@@ -11894,7 +11970,7 @@ function renderMyListingCard(listing) {
     <div class="market-card" data-listing-id="${listing.id}">
       <div class="market-card-media" style="${bg}">
         ${patternIcon ? `<div class="gift-tile-pattern" data-icon="${escapeHtml(patternIcon)}"></div>` : ""}
-        <span class="gift-tile-emoji-symbol">${renderGiftModel(displayImg, 51)}</span>
+        <span class="gift-tile-emoji-symbol">${renderGiftModel(displayImg, 96)}</span>
         <div class="market-card-ribbon">#${ug.serial_number}</div>
       </div>
       <div class="market-card-info">
@@ -11916,6 +11992,12 @@ function bindMyListingCards(rows) {
     const listingId = card.dataset.listingId;
     const listing = rows.find((r) => r.id === listingId);
     if (!listing) return;
+
+    // Клик по карточке (не по кнопкам) → детальная информация.
+    card.addEventListener("click", (e) => {
+      if (e.target.closest(".market-card-actions")) return;
+      openMarketListingDetail(listingId);
+    });
 
     const changeBtn = card.querySelector('[data-action="change-price"]');
     if (changeBtn) changeBtn.addEventListener("click", (e) => {
@@ -11971,6 +12053,20 @@ async function refreshMarketBalance() {
   } catch (e) { /* silent */ }
 }
 
+// Переводит строку ошибки от Supabase (обычно на английском) в локализованный ключ.
+function translateMarketError(msg) {
+  const m = String(msg || "").toLowerCase();
+  if (m.includes("not enough nectar") || m.includes("not enough nectar")) return t("market.err.notEnoughNectar");
+  if (m.includes("cart is empty")) return t("market.err.cartEmpty");
+  if (m.includes("listing not found") ||
+      m.includes("listing not active") ||
+      m.includes("listing not available")) return t("market.err.listingUnavailable");
+  if (m.includes("cant buy your own") ||
+      m.includes("cant add your own listing")) return t("market.err.ownListing");
+  if (m.includes("not authenticated")) return t("market.err.notAuth");
+  return msg;
+}
+
 // ======================================================
 // Маркет: корзина
 // ======================================================
@@ -12004,7 +12100,7 @@ async function marketCartToggle(listingId) {
   }
   const rpcName = inCart ? "market_cart_remove" : "market_cart_add";
   const { error } = await supabase.rpc(rpcName, { p_listing_id: listingId });
-  if (error) { await showAlertDialog(t("gifts.error"), error.message); return; }
+  if (error) { await showAlertDialog(t("gifts.error"), translateMarketError(error.message)); return; }
   if (inCart) marketCartIds.delete(listingId);
   else marketCartIds.add(listingId);
   updateMarketCartBadge();
@@ -12142,7 +12238,7 @@ function renderMarketListingCard(listing) {
     <div class="market-card" data-listing-id="${listing.id}">
       <div class="market-card-media" style="${bg}">
         ${patternIcon ? `<div class="gift-tile-pattern" data-icon="${escapeHtml(patternIcon)}"></div>` : ""}
-        <span class="gift-tile-emoji-symbol">${renderGiftModel(displayImg, 51)}</span>
+        <span class="gift-tile-emoji-symbol">${renderGiftModel(displayImg, 96)}</span>
         <div class="market-card-ribbon">#${ug.serial_number}</div>
       </div>
       <div class="market-card-info">
@@ -12200,7 +12296,7 @@ async function marketBuyListing(listingId) {
   if (!ok) return;
 
   const { error } = await supabase.rpc("market_buy_listing", { p_listing_id: listingId });
-  if (error) { await showAlertDialog(t("gifts.error"), error.message); return; }
+  if (error) { await showAlertDialog(t("gifts.error"), translateMarketError(error.message)); return; }
 
   marketState.listings = marketState.listings.filter((l) => l.id !== listingId);
   marketCartIds.delete(listingId);
@@ -12220,8 +12316,18 @@ async function marketBuyListing(listingId) {
 let currentMarketListingId = null;
 
 async function openMarketListingDetail(listingId) {
-  const listing = marketState.listings.find((l) => l.id === listingId);
-  if (!listing) return;
+  // Лот может быть не в marketState.listings (например, открыт из корзины
+  // или из «Мои предложения») — тогда догружаем с сервера.
+  let listing = marketState.listings.find((l) => l.id === listingId);
+  if (!listing) {
+    try {
+      const { data, error } = await supabase.from("market_listings")
+        .select("id, price, created_at, seller_id, status, user_gift_id, user_gifts!inner(id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name)")
+        .eq("id", listingId).maybeSingle();
+      if (error || !data) return;
+      listing = data;
+    } catch (e) { return; }
+  }
   currentMarketListingId = listingId;
 
   const overlay = document.getElementById("market-listing-overlay");
@@ -12346,38 +12452,48 @@ async function openMarketListingDetail(listingId) {
     }
   }
 
-  // Кнопка «В корзину» — динамически переключаем текст.
-  const inCart = marketCartIds.has(listingId);
-  cartBtn.textContent = inCart ? t("market.card.removeFromCart") : t("market.card.toCart");
-  cartBtn.classList.toggle("in-cart", inCart);
-  cartBtn.onclick = async () => {
-    await marketCartToggle(listingId);
-    const nowIn = marketCartIds.has(listingId);
-    cartBtn.textContent = nowIn ? t("market.card.removeFromCart") : t("market.card.toCart");
-    cartBtn.classList.toggle("in-cart", nowIn);
-  };
+  // 🔴 Свой лот — никаких кнопок покупки/корзины.
+  const isMineFinal = listing.seller_id === currentUser.id;
+  if (isMineFinal) {
+    buyBtn.classList.add("hidden");
+    cartBtn.classList.add("hidden");
+  } else {
+    buyBtn.classList.remove("hidden");
+    cartBtn.classList.remove("hidden");
 
-  // Кнопка «Купить».
-  buyBtn.onclick = async () => {
-    const ok = await showConfirmDialog(
-      t("market.buy.title"),
-      tFmt("market.buy.text", { price: `${NECTAR_HTML} <b>${listing.price}</b>` }),
-      t("market.buy.confirm"),
-      { html: true }
-    );
-    if (!ok) return;
-    const { error } = await supabase.rpc("market_buy_listing", { p_listing_id: listingId });
-    if (error) { await showAlertDialog(t("gifts.error"), error.message); return; }
-    marketState.listings = marketState.listings.filter((l) => l.id !== listingId);
-    marketCartIds.delete(listingId);
-    updateMarketCartBadge();
-    await refreshMarketBalance();
-    await refreshBalance();
-    await refreshMyGiftsCount();
-    overlay.classList.add("hidden");
-    currentMarketListingId = null;
-    renderMarketListingsFromCache();
-  };
+    // Кнопка «В корзину».
+    const inCart = marketCartIds.has(listingId);
+    cartBtn.textContent = inCart ? t("market.card.removeFromCart") : t("market.card.toCart");
+    cartBtn.classList.toggle("in-cart", inCart);
+    cartBtn.onclick = async () => {
+      await marketCartToggle(listingId);
+      const nowIn = marketCartIds.has(listingId);
+      cartBtn.textContent = nowIn ? t("market.card.removeFromCart") : t("market.card.toCart");
+      cartBtn.classList.toggle("in-cart", nowIn);
+    };
+
+    // Кнопка «Купить».
+    buyBtn.onclick = async () => {
+      const ok = await showConfirmDialog(
+        t("market.buy.title"),
+        tFmt("market.buy.text", { price: `${NECTAR_HTML} <b>${listing.price}</b>` }),
+        t("market.buy.confirm"),
+        { html: true }
+      );
+      if (!ok) return;
+      const { error } = await supabase.rpc("market_buy_listing", { p_listing_id: listingId });
+      if (error) { await showAlertDialog(t("gifts.error"), translateMarketError(error.message)); return; }
+      marketState.listings = marketState.listings.filter((l) => l.id !== listingId);
+      marketCartIds.delete(listingId);
+      updateMarketCartBadge();
+      await refreshMarketBalance();
+      await refreshBalance();
+      await refreshMyGiftsCount();
+      overlay.classList.add("hidden");
+      currentMarketListingId = null;
+      renderMarketListingsFromCache();
+    };
+  }
 
   closeBtn.onclick = () => { overlay.classList.add("hidden"); currentMarketListingId = null; };
   overlay.onclick = (e) => {
@@ -12452,6 +12568,12 @@ async function renderMarketCart() {
     content.querySelectorAll(".market-cart-card").forEach((card) => {
       const listingId = card.dataset.listingId;
 
+      // Клик по карточке (не по кнопкам) → детальная информация.
+      card.addEventListener("click", (e) => {
+        if (e.target.closest(".market-card-actions")) return;
+        openMarketListingDetail(listingId);
+      });
+
       const removeBtn = card.querySelector('[data-action="cart-remove"]');
       if (removeBtn) removeBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
@@ -12478,7 +12600,7 @@ async function renderMarketCart() {
         );
         if (!ok) return;
         const { error: be } = await supabase.rpc("market_buy_listing", { p_listing_id: listingId });
-        if (be) { await showAlertDialog(t("gifts.error"), be.message); return; }
+        if (be) { await showAlertDialog(t("gifts.error"), translateMarketError(be.message)); return; }
         marketCartIds.delete(listingId);
         updateMarketCartBadge();
         card.remove();
@@ -12501,7 +12623,7 @@ async function renderMarketCart() {
       );
       if (!ok) return;
       const { error: be } = await supabase.rpc("market_buy_cart");
-      if (be) { await showAlertDialog(t("gifts.error"), be.message); return; }
+      if (be) { await showAlertDialog(t("gifts.error"), translateMarketError(be.message)); return; }
       await refreshMarketBalance();
       await refreshBalance();
       await refreshMyGiftsCount();
@@ -12539,7 +12661,7 @@ function renderMarketCartCard(listing) {
     <div class="market-card market-cart-card" data-listing-id="${listing.id}" data-price="${listing.price}">
       <div class="market-card-media" style="${bg}">
         ${patternIcon ? `<div class="gift-tile-pattern" data-icon="${escapeHtml(patternIcon)}"></div>` : ""}
-        <span class="gift-tile-emoji-symbol">${renderGiftModel(displayImg, 51)}</span>
+        <span class="gift-tile-emoji-symbol">${renderGiftModel(displayImg, 96)}</span>
         <div class="market-card-ribbon">#${ug.serial_number}</div>
       </div>
       <div class="market-card-info">

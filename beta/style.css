@@ -4918,10 +4918,11 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   z-index: 0;
   display: none;
 }
+/* Размер задаётся inline через renderGiftModel() — правило-обёртка только
+   для позиционирования. */
 .market-card-media .gift-tile-emoji-symbol {
   position: relative;
   z-index: 1;
-  font-size: 78px;
   line-height: 1;
 }
 
