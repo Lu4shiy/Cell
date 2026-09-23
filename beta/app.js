@@ -3965,10 +3965,21 @@ function showAuth() {
   cachedProfilesForBirthday = []; replyToMsg = null; editingMsgId = null;
   selectionMode = false; validatedUsername = null;
   contextChatUser = null; contextChatCustomName = null;
+  // 🔴 Закрываем ВСЕ realtime-каналы, включая те, что открываются позже
+  // (pins, requests, admins, market, channel-profile, views).
+  // Раньше часть каналов оставалась висеть на старом аккаунте после logout.
   [currentChannel, reactionsChannel, blocksChannel, globalChannel, globalMsgsChannel,
-   profilesChannel, membershipChannel, readsChannel].forEach((ch) => ch && supabase.removeChannel(ch));
+   profilesChannel, membershipChannel, readsChannel,
+   pinsChannel, channelRequestsChannel, channelAdminsChannel,
+   channelProfileUpdatesChannel, currentChannelViewsChannel,
+   marketNotifChannel, marketListingsRealtimeChannel].forEach((ch) => {
+    try { ch && supabase.removeChannel(ch); } catch (e) {}
+  });
   currentChannel = reactionsChannel = blocksChannel = globalChannel = globalMsgsChannel =
-    profilesChannel = membershipChannel = readsChannel = null;
+    profilesChannel = membershipChannel = readsChannel =
+    pinsChannel = channelRequestsChannel = channelAdminsChannel =
+    channelProfileUpdatesChannel = currentChannelViewsChannel =
+    marketNotifChannel = marketListingsRealtimeChannel = null;
   [lastSeenInterval, otherUserInterval, statusPollInterval, deliveredInterval].forEach((i) => i && clearInterval(i));
   lastSeenInterval = otherUserInterval = statusPollInterval = deliveredInterval = null;
   lastSeenThrottleAt = 0;
@@ -3980,6 +3991,31 @@ function showAuth() {
 
 // ======================= 5. ИНИЦИАЛИЗАЦИЯ =======================
 async function initApp() {
+  // 🔴 Второй и последующие входы в этой же вкладке — НЕ вызываем setup-функции
+  // заново: они навешивают addEventListener на одни и те же DOM-элементы и
+  // накапливаются. Из-за этого клики/меню/paste срабатывали по 2–4 раза
+  // (удвоение ссылки при вставке, «мёртвое» меню чата, рывки pinch).
+  // Повторно перезагружаем только данные и создаём realtime-подписки.
+  if (initApp.__done) {
+    try { await Promise.all([loadMyProfile(), loadBlocks(), loadChatReads()]); } catch (e) {}
+    try { tryRestoreE2eeSession(); } catch (e) {}
+    try { applyGrandmaModeUI(); } catch (e) {}
+    try { await loadRecentChats(); } catch (e) {}
+    try { subscribeToBlocks(); } catch (e) {}
+    try { subscribeToGlobalChanges(); } catch (e) {}
+    try { subscribeToProfiles(); } catch (e) {}
+    try { subscribeToMemberships(); } catch (e) {}
+    try { subscribeToReads(); } catch (e) {}
+    try { subscribeToGlobalMessages(); } catch (e) {}
+    try { subscribeToMarketNotifications(); } catch (e) {}
+    try { subscribeToMarketListingsRealtime(); } catch (e) {}
+    try { subscribeToPins(); } catch (e) {}
+    try { subscribeToChannelRequests(); } catch (e) {}
+    try { subscribeToChannelAdmins(); } catch (e) {}
+    return;
+  }
+  initApp.__done = true;
+
   setupSidebarMenu();
   setupMobileBackButton();
   setupE2eeUI();
@@ -13733,10 +13769,6 @@ async function openGiftFromShareString(share) {
       p_slug: parsed.slug,
       p_serial: parsed.serial,
     });
-    // 🔴 Диагностика: если ссылка не срабатывает — в консоли будет видно
-    // точную причину (slug, serial, что вернул сервер).
-    console.log("[gift-link] slug:", parsed.slug, "serial:", parsed.serial,
-                "data:", data, "error:", error);
     if (error) console.warn("get_gift_by_link error:", error);
     ug = data && data[0] ? data[0] : null;
   } catch (e) {
@@ -14196,15 +14228,12 @@ async function loadGiftCatalog() {
 }
 
 function openGiftsOverlay(userId) {
-  // 🔴 Если в окне подарков сейчас лежит контент ДРУГОГО пользователя —
-  // стираем его ДО показа оверлея, чтобы чужие подарки не мигали
-  // ни одного кадра.
-  if (currentGiftsUserId && currentGiftsUserId !== userId) {
-    const content = document.getElementById("gifts-content");
-    if (content) content.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
-    // Сброс — чтобы renderGiftsMain не считал это тем же юзером.
-    currentGiftsUserId = null;
-  }
+  // 🔴 ВСЕГДА чистим контент до показа overlay. Иначе видно старую
+  // карточку подарка (ту, что смотрели последней), пока async-загрузка
+  // списка ещё идёт — и кажется, что открылся именно подарок.
+  const content = document.getElementById("gifts-content");
+  if (content) content.innerHTML = '<div class="empty">' + escapeHtml(t("empty.loading")) + '</div>';
+  currentGiftsUserId = null;
   document.getElementById("gifts-overlay").classList.remove("hidden");
   refreshBalance();
   preloadPatternIcons();
@@ -14431,41 +14460,65 @@ async function renderGiftsMain(userId, opts) {
   const filterBtn = document.getElementById("open-gift-filter-btn");
   if (filterBtn) filterBtn.addEventListener("click", () => openGiftFilterDialog(userId));
 
-  // Асинхронно дорисовываем паттерны на плитках
-  content.querySelectorAll(".gift-tile-pattern[data-icon]").forEach((el) => {
-    const iconUrl = el.dataset.icon;
-    if (!iconUrl) return;
-    buildPatternMaskUrl(iconUrl).then((bgUrl) => {
-      if (!bgUrl) return;
-      el.style.display = "block";
-      el.style.backgroundImage = bgUrl;
-      el.style.backgroundRepeat = "repeat";
-    });
-  });
+  // 🔴 Паттерны ставим БАТЧАМИ через requestAnimationFrame. На 800 плитках
+  // синхронная установка background-image блокирует главный поток и
+  // приложение виснет. По 10 элементов за кадр — UI остаётся живым.
+  const patternEls = [...content.querySelectorAll(".gift-tile-pattern[data-icon]")];
+  let patternIdx = 0;
+  const runPatternBatch = () => {
+    const end = Math.min(patternIdx + 10, patternEls.length);
+    for (; patternIdx < end; patternIdx++) {
+      const el = patternEls[patternIdx];
+      const iconUrl = el.dataset.icon;
+      if (!iconUrl) continue;
+      buildPatternMaskUrl(iconUrl).then((bgUrl) => {
+        if (!bgUrl) return;
+        el.style.display = "block";
+        el.style.backgroundImage = bgUrl;
+        el.style.backgroundRepeat = "repeat";
+      });
+    }
+    if (patternIdx < patternEls.length) requestAnimationFrame(runPatternBatch);
+  };
+  requestAnimationFrame(runPatternBatch);
 
-  // 🔴 Сброс прокрутки. Пропускаем, если вызвано из pin / in-profile /
-  // market — иначе пользователя выкидывает наверх списка.
+  // Сброс прокрутки — только если не просили сохранить.
   if (!opts.preserveScroll) {
     content.scrollTop = 0;
   }
 
-  content.querySelectorAll(".gift-tile").forEach((el) => {
-    el.addEventListener("click", () => {
-      const ugId = el.dataset.giftUgId;
-      const ug = gifts.find((g) => g.id === ugId);
-      if (ug) renderGiftDetail(userId, ug);
-    });
-    if (isMe) {
-      const ctxHandler = (ev) => {
-        if (ev.preventDefault) ev.preventDefault();
-        if (ev.stopPropagation) ev.stopPropagation();
-        const ug = gifts.find((g) => g.id === el.dataset.giftUgId);
-        if (ug) openGiftTileContextMenu(ev, ug.id, !!ug.pinned_at, !!ug.in_profile);
-      };
-      el.addEventListener("contextmenu", ctxHandler);
-      attachLongPress(el, ctxHandler);
-    }
-  });
+  // 🔴 Делегирование: один обработчик на весь контейнер вместо 800×2
+  // навешиваний. Список подарков, отсортированный по pinned/created.
+  const giftsById = new Map(gifts.map((g) => [g.id, g]));
+
+  // Снимаем возможные прошлые делегированные обработчики.
+  if (content.__giftClickBound) {
+    content.removeEventListener("click", content.__giftClickBound);
+    content.removeEventListener("contextmenu", content.__giftContextBound);
+  }
+
+  // Left-click по плитке → детальный просмотр.
+  content.__giftClickBound = (e) => {
+    const tile = e.target.closest(".gift-tile");
+    if (!tile || !content.contains(tile)) return;
+    const ugId = tile.dataset.giftUgId;
+    const ug = giftsById.get(ugId);
+    if (ug) renderGiftDetail(userId, ug);
+  };
+  content.addEventListener("click", content.__giftClickBound);
+
+  // ПКМ по плитке → контекстное меню (только для своих).
+  if (isMe) {
+    content.__giftContextBound = (e) => {
+      const tile = e.target.closest(".gift-tile");
+      if (!tile || !content.contains(tile)) return;
+      if (e.preventDefault) e.preventDefault();
+      if (e.stopPropagation) e.stopPropagation();
+      const ug = giftsById.get(tile.dataset.giftUgId);
+      if (ug) openGiftTileContextMenu(e, ug.id, !!ug.pinned_at, !!ug.in_profile);
+    };
+    content.addEventListener("contextmenu", content.__giftContextBound);
+  }
 }
 
 function openGiftTileContextMenu(ev, ugId, isPinned, inProfile) {

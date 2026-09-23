@@ -5589,3 +5589,22 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
     transform: none !important;
   }
 }
+
+/* ====================================================== */
+/* ОПТИМИЗАЦИЯ БОЛЬШИХ СПИСКОВ (подарки, маркет)           */
+/* ====================================================== */
+/* content-visibility: auto — браузер не считает layout и paint
+   для плиток вне видимой области. При 500–1000 подарках
+   даёт кратный прирост скорости отрисовки и скролла.
+   contain-intrinsic-size — заглушка размера, чтобы не прыгал
+   скроллбар (браузер не знает реальную высоту «замороженных» плиток). */
+.gifts-grid .gift-tile {
+  content-visibility: auto;
+  contain-intrinsic-size: 120px 120px;
+}
+
+/* Та же оптимизация для сетки лотов в маркете. */
+.market-grid .market-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 180px 260px;
+}
