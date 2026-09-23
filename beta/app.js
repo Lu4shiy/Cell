@@ -634,6 +634,9 @@ const I18N = {
     "gifts.filter.rarityLabel": "Редкость",
     "gifts.filter.pinnedLabel": "Закрепление",
     "gifts.filter.profileLabel": "В профиле",
+    "gifts.filter.sortLabel": "Сортировка",
+    "gifts.filter.sort.newFirst": "Сначала новые",
+    "gifts.filter.sort.oldFirst": "Сначала старые",
     "gifts.filter.common": "Обычные",
     "gifts.filter.rare": "Редкие",
     "gifts.filter.epic": "Эпические",
@@ -1472,6 +1475,9 @@ const I18N = {
     "gifts.filter.rarityLabel": "Rarity",
     "gifts.filter.pinnedLabel": "Pin status",
     "gifts.filter.profileLabel": "Profile visibility",
+    "gifts.filter.sortLabel": "Sort",
+    "gifts.filter.sort.newFirst": "Newest first",
+    "gifts.filter.sort.oldFirst": "Oldest first",
     "gifts.filter.common": "Common",
     "gifts.filter.rare": "Rare",
     "gifts.filter.epic": "Epic",
@@ -2838,11 +2844,13 @@ const giftFilters = {
   rarities: new Set(["common", "rare", "epic"]),
   pinnedStatus: new Set(["pinned", "unpinned"]),
   profileStatus: new Set(["inProfile", "notInProfile"]),
+  sort: "new-first", // "new-first" | "old-first"
 };
 function resetGiftFilters() {
   giftFilters.rarities = new Set(["common", "rare", "epic"]);
   giftFilters.pinnedStatus = new Set(["pinned", "unpinned"]);
   giftFilters.profileStatus = new Set(["inProfile", "notInProfile"]);
+  giftFilters.sort = "new-first";
 }
 // Какой userId сейчас открыт в окне подарков (нужно для перерисовки
 // при изменении чекбоксов фильтра).
@@ -14261,6 +14269,14 @@ function openGiftFilterDialog(userId) {
     cb.checked = isOn;
   });
 
+  // 🔴 Подсветка активной кнопки сортировки.
+  const sortToggle = document.getElementById("gift-filter-sort");
+  if (sortToggle) {
+    sortToggle.querySelectorAll("button[data-sort]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.sort === giftFilters.sort);
+    });
+  }
+
   overlay.classList.remove("hidden");
 }
 
@@ -14294,16 +14310,33 @@ function setupGiftFilterUI() {
       if (on) giftFilters.profileStatus.add(key);
       else giftFilters.profileStatus.delete(key);
     }
-    // Перерисовываем список сзади (диалог перекрывает его частично,
-    // но список обновляется — пользователь сразу увидит результат,
-    // если закрыть окно).
     const giftsOverlay = document.getElementById("gifts-overlay");
     if (giftsOverlay && !giftsOverlay.classList.contains("hidden")) {
       if (typeof currentGiftsUserId !== "undefined" && currentGiftsUserId) {
-        renderGiftsMain(currentGiftsUserId);
+        renderGiftsMain(currentGiftsUserId, { preserveScroll: true });
       }
     }
   });
+
+  // 🔴 Клик по кнопке сортировки: обновляем giftFilters.sort и
+  // перерисовываем список сразу.
+  const sortToggle = document.getElementById("gift-filter-sort");
+  if (sortToggle) {
+    sortToggle.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-sort]");
+      if (!b) return;
+      giftFilters.sort = b.dataset.sort;
+      sortToggle.querySelectorAll("button[data-sort]").forEach((x) => {
+        x.classList.toggle("active", x.dataset.sort === giftFilters.sort);
+      });
+      const giftsOverlay = document.getElementById("gifts-overlay");
+      if (giftsOverlay && !giftsOverlay.classList.contains("hidden")) {
+        if (typeof currentGiftsUserId !== "undefined" && currentGiftsUserId) {
+          renderGiftsMain(currentGiftsUserId, { preserveScroll: true });
+        }
+      }
+    });
+  }
 
   document.getElementById("gift-filter-apply").addEventListener("click", () => {
     closeGiftFilterDialog();
@@ -14315,10 +14348,15 @@ function setupGiftFilterUI() {
 
   document.getElementById("gift-filter-reset").addEventListener("click", () => {
     resetGiftFilters();
-    // Перерисовываем чекбоксы
     overlay.querySelectorAll("[data-gift-filter-check]").forEach((cb) => { cb.checked = true; });
+    const sortToggle2 = document.getElementById("gift-filter-sort");
+    if (sortToggle2) {
+      sortToggle2.querySelectorAll("button[data-sort]").forEach((x) => {
+        x.classList.toggle("active", x.dataset.sort === giftFilters.sort);
+      });
+    }
     if (typeof currentGiftsUserId !== "undefined" && currentGiftsUserId) {
-      renderGiftsMain(currentGiftsUserId);
+      renderGiftsMain(currentGiftsUserId, { preserveScroll: true });
     }
   });
 }
@@ -14341,6 +14379,10 @@ async function renderGiftsMain(userId, opts) {
   const backBtn = document.getElementById("gifts-back");
   backBtn.classList.add("hidden");
 
+  // 🔴 Запоминаем scrollTop ДО перерисовки — чтобы при preserveScroll
+  // вернуть ту же позицию (иначе после innerHTML прокрутка сбрасывается).
+  const savedScrollTop = content.scrollTop;
+
   // 🔴 Если сменился владелец (другой юзер / после logout-логина) —
   // СРАЗУ стираем чужое содержимое, чтобы подарки прошлого профиля
   // не мигали перед новыми. Если владелец тот же — оставляем старое
@@ -14359,40 +14401,69 @@ async function renderGiftsMain(userId, opts) {
     title.textContent = tFmt("gifts.title.user", { name: p ? p.display_name : "" });
   }
 
-  let giftsQuery = supabase.from("user_gifts").select("*").eq("owner_id", userId);
+  // 🔴 ОПТИМИЗАЦИЯ: параллельно грузим user_gifts, каталог и (для своих)
+  // активные листинги маркета. Раньше это было последовательно — на 800
+  // подарков уходило 2–3 сек. Плюс урезаем select до реально нужных
+  // полей: полные данные (caption, sender_*, recipient_*) тянутся
+  // отдельным запросом только при открытии детальной карточки.
+  let giftsQuery = supabase.from("user_gifts")
+    .select("id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name, pinned_at, in_profile, created_at")
+    .eq("owner_id", userId);
   if (!isMe) giftsQuery = giftsQuery.eq("in_profile", true);
-  const { data: giftsRaw } = await giftsQuery.order("created_at", { ascending: false });
 
-  // Закреплённые — наверх (свежезакреплённые выше), затем по дате создания.
-  // 🔴 Подарки, выставленные на маркет, в списке не показываем.
-  let allGifts = giftsRaw || [];
-  if (allGifts.length) {
-    try {
+  // Для СВОИХ подарков — один быстрый запрос по seller_id (без .in()
+  // с 800 UUID). Для чужих профилей подарков мало, там .in() уместен.
+  const marketListingsPromise = isMe
+    ? supabase.from("market_listings")
+        .select("user_gift_id").eq("seller_id", userId).eq("status", "active")
+        .then((r) => (r && r.data) || [], () => [])
+    : null;
+
+  const [giftsRes, catalog, ownListings] = await Promise.all([
+    giftsQuery.order("created_at", { ascending: false }),
+    loadGiftCatalog(),
+    marketListingsPromise,
+  ]);
+
+  const giftsRaw = (giftsRes && giftsRes.data) || [];
+
+  // 🔴 Фильтр «не показываем выставленные на маркет».
+  let allGifts = giftsRaw;
+  try {
+    const listedIds = new Set();
+    if (isMe && ownListings) {
+      ownListings.forEach((l) => listedIds.add(l.user_gift_id));
+    } else if (!isMe && allGifts.length) {
+      // Для чужих профилей — чанками, но параллельно через Promise.all.
       const ids = allGifts.map((g) => g.id);
-      // 🔴 Чанкуем по 100 ID. Иначе URL `in.(...)` с 300+ UUID
-      // превышает лимит длины и PostgREST отдаёт 400 Bad Request.
-      const listedIds = new Set();
       const CHUNK = 100;
-      for (let i = 0; i < ids.length; i += CHUNK) {
-        const chunk = ids.slice(i, i + CHUNK);
-        const { data: listings } = await supabase.from("market_listings")
-          .select("user_gift_id").in("user_gift_id", chunk).eq("status", "active");
-        (listings || []).forEach((l) => listedIds.add(l.user_gift_id));
-      }
-      if (listedIds.size) allGifts = allGifts.filter((g) => !listedIds.has(g.id));
-    } catch (e) { /* silent */ }
-  }
+      const chunks = [];
+      for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK));
+      const results = await Promise.all(chunks.map((chunk) =>
+        supabase.from("market_listings")
+          .select("user_gift_id").in("user_gift_id", chunk).eq("status", "active")
+          .then((r) => (r && r.data) || [], () => [])
+      ));
+      results.forEach((rows) => rows.forEach((l) => listedIds.add(l.user_gift_id)));
+    }
+    if (listedIds.size) allGifts = allGifts.filter((g) => !listedIds.has(g.id));
+  } catch (e) { /* silent */ }
+
   // 🔴 Дополнительный локальный фильтр — на случай, если запрос выше
   // не вернул наши лоты (RLS, гонка). Живёт в памяти до перезагрузки.
   if (locallyListedGiftIds.size) {
     allGifts = allGifts.filter((g) => !locallyListedGiftIds.has(g.id));
   }
+
+  // 🔴 Сортировка: pinned всегда сверху по pinned_at desc.
+  // Unpinned — по выбранному sort-режиму ("new-first" / "old-first").
+  const sortDir = giftFilters.sort === "old-first" ? 1 : -1;
   const pinned = allGifts.filter((g) => g.pinned_at)
     .sort((a, b) => new Date(b.pinned_at) - new Date(a.pinned_at));
-  const unpinned = allGifts.filter((g) => !g.pinned_at);
+  const unpinned = allGifts.filter((g) => !g.pinned_at)
+    .sort((a, b) => sortDir * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
   const gifts = [...pinned, ...unpinned];
 
-  const catalog = await loadGiftCatalog();
   const catalogMap = new Map(catalog.map((g) => [g.id, g]));
 
   let html = "";
@@ -14482,8 +14553,10 @@ async function renderGiftsMain(userId, opts) {
   };
   requestAnimationFrame(runPatternBatch);
 
-  // Сброс прокрутки — только если не просили сохранить.
-  if (!opts.preserveScroll) {
+  // Восстанавливаем прокрутку: ту же — если preserveScroll, или в начало.
+  if (opts.preserveScroll) {
+    content.scrollTop = savedScrollTop;
+  } else {
     content.scrollTop = 0;
   }
 
@@ -14768,7 +14841,18 @@ function openGiftPurchase(gift, recipientId) {
 async function renderGiftDetail(ownerId, ug, opts) {
   opts = opts || {};
   const readOnly = !!opts.readOnly;
-  // Данные уже приходят свежими из списка — не делаем лишний запрос
+
+  // 🔴 Если ug пришёл из урезанного списка (без caption / sender_* /
+  // recipient_*) — догружаем полные данные по id. Один быстрый запрос
+  // по первичному ключу — незаметно для UX, зато список в профиле
+  // открывается в разы быстрее.
+  if (ug && ug.id && (ug.caption === undefined || ug.sender_id === undefined)) {
+    try {
+      const { data: full } = await supabase.from("user_gifts")
+        .select("*").eq("id", ug.id).maybeSingle();
+      if (full) ug = full;
+    } catch (e) { /* silent */ }
+  }
 
   // Запоминаем контекст — чтобы вернуться именно к этому подарку
   currentGiftDetailUserId = ownerId;
