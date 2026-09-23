@@ -2000,7 +2000,9 @@ function previewTextForMsg(m, isMine) {
     return t("preview.file");
   }
   if (m.encrypted) return t("preview.encrypted");
-  return (isMine ? t("preview.you") : "") + stripMarkdown(m.content || "");
+  // 🔴 «Вы:» здесь НЕ добавляем — это делает единая точка updateChatItemPreview.
+  // Иначе получается «Вы: Вы: …».
+  return stripMarkdown(m.content || "");
 }
 
 // Переключить язык и перерисовать все видимые тексты.
@@ -3988,6 +3990,15 @@ async function initApp() {
   setupChatSearch(); setupScrollBottomButton();
   setupMessagesScrollPagination();
   setupMessagesResizeObserver();
+  // 🔴 Глобальный «оглушитель» фантомных кликов после long-press.
+  // Каждый раз, когда сработал long-press, ставится метка lastLongPressAt.
+  // Любой click, пришедший в течение 600 мс после этого, отменяется —
+  // он не дойдёт ни до кнопок меню, ни до элементов под ними.
+  document.addEventListener("click", (e) => {
+    if (!justLongPressed()) return;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
   setupVerifiedTooltip();
   setupChatPins(); setupInviteUI();
   setupMessagesDelegates();
@@ -5634,6 +5645,13 @@ function renderDmItemHtml(it, profileMap) {
   let preview = "";
   if (it.lastMsg) {
     preview = previewTextForMsg(it.lastMsg, it.lastMsg.sender_id === currentUser.id);
+    // 🔴 «Вы:» — здесь, при первом рендере. previewTextForMsg его не ставит.
+    const isSpecial = preview.startsWith("🧩") || preview.startsWith("🎁") ||
+                      preview.startsWith("📷") || preview.startsWith("🎥") ||
+                      preview.startsWith("📎") || preview.startsWith("🔒");
+    if (preview && !isSpecial && it.lastMsg.sender_id === currentUser.id) {
+      preview = t("preview.you") + preview;
+    }
   } else {
     preview = t("preview.noMessages");
   }
@@ -8806,35 +8824,40 @@ function setupMediaViewer() {
     applyMediaTransform();
   }, { passive: false, capture: true });
 
-  // 2. Пинч-зум и панорамирование (тач)
-  body.addEventListener("touchstart", (e) => {
+  // 2. Пинч-зум и панорамирование (тач).
+  // 🔴 Обработчики висят на overlay, а не на body: часть касаний
+  // уходит на родителя, из-за чего события «теряются» и фото дёргается.
+  let pinchStartScale = 1;
+  let pinchStartDist = 0;
+  let pinchAnchorX = 0;   // координаты контента под midpoint в системе контента
+  let pinchAnchorY = 0;
+  let pinchStartMidX = 0;
+  let pinchStartMidY = 0;
+
+  function getViewportCenter() {
+    const r = overlay.getBoundingClientRect();
+    return { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+  }
+
+  overlay.addEventListener("touchstart", (e) => {
     const content = document.getElementById("media-viewer-content");
+    if (!content) return;
     if (e.touches.length === 2) {
-      // Pinch start — запоминаем всё, что нужно для anchor-зума.
       mediaPinchActive = true;
       if (mediaPinchEndTimer) { clearTimeout(mediaPinchEndTimer); mediaPinchEndTimer = null; }
-      e.stopPropagation();
-      // Отключаем CSS-переход, пока идёт активный жест — иначе лаг и «прыжки».
-      if (content) content.style.transition = "none";
+      content.style.transition = "none";
 
-      const bodyRect = body.getBoundingClientRect();
-      const cx = bodyRect.left + bodyRect.width / 2;
-      const cy = bodyRect.top + bodyRect.height / 2;
-
+      const { cx, cy } = getViewportCenter();
       const t0 = e.touches[0], t1 = e.touches[1];
-      mediaPinchStartDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY) || 1;
-      mediaPinchStartScale = mediaScale;
-      mediaPinchStartMidX = (t0.clientX + t1.clientX) / 2;
-      mediaPinchStartMidY = (t0.clientY + t1.clientY) / 2;
-      // Точка контента, которая сейчас под midpoint (в координатах контента
-      // относительно его центра). Её мы удержим на месте при зуме.
-      mediaPinchStartPointX =
-        (mediaPinchStartMidX - cx - mediaTranslateX) / mediaScale;
-      mediaPinchStartPointY =
-        (mediaPinchStartMidY - cy - mediaTranslateY) / mediaScale;
-    } else if (e.touches.length === 1) {
-      // Pan start
-      if (content) content.style.transition = "none";
+      pinchStartDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY) || 1;
+      pinchStartScale = mediaScale;
+      pinchStartMidX = (t0.clientX + t1.clientX) / 2;
+      pinchStartMidY = (t0.clientY + t1.clientY) / 2;
+      pinchAnchorX = (pinchStartMidX - cx - mediaTranslateX) / mediaScale;
+      pinchAnchorY = (pinchStartMidY - cy - mediaTranslateY) / mediaScale;
+    } else if (e.touches.length === 1 && !mediaPinchActive) {
+      const content2 = document.getElementById("media-viewer-content");
+      if (content2) content2.style.transition = "none";
       mediaDragStartX = e.touches[0].clientX;
       mediaDragStartY = e.touches[0].clientY;
       mediaDragStartTranslateX = mediaTranslateX;
@@ -8843,38 +8866,27 @@ function setupMediaViewer() {
     }
   }, { passive: true });
 
-  body.addEventListener("touchmove", (e) => {
+  overlay.addEventListener("touchmove", (e) => {
     if (e.touches.length === 2) {
       e.preventDefault();
       e.stopPropagation();
-      const bodyRect = body.getBoundingClientRect();
-      const cx = bodyRect.left + bodyRect.width / 2;
-      const cy = bodyRect.top + bodyRect.height / 2;
+      const { cx, cy } = getViewportCenter();
 
       const t0 = e.touches[0], t1 = e.touches[1];
       const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
-      const ratio = dist / mediaPinchStartDist;
-      const newScale = Math.max(1, Math.min(5, mediaPinchStartScale * ratio));
+      const ratio = dist / pinchStartDist;
+      const newScale = Math.max(1, Math.min(5, pinchStartScale * ratio));
       const midX = (t0.clientX + t1.clientX) / 2;
       const midY = (t0.clientY + t1.clientY) / 2;
 
-      // 🔴 Anchor-зум: точка под пальцами остаётся под пальцами.
+      // Anchor-зум: точка под пальцами остаётся под пальцами.
+      // Никакого «гашения» translate — иначе при отдалении фото «улетает».
       mediaScale = newScale;
-      mediaTranslateX = midX - cx - mediaPinchStartPointX * newScale;
-      mediaTranslateY = midY - cy - mediaPinchStartPointY * newScale;
-      // 🔴 Плавно гасим остаточное смещение при стремлении scale к 1.
-      // Иначе при отдалении фото «уползает» от центра (особенно по
-      // вертикали), потому что midpoint пальцев обычно не совпадает с
-      // центром экрана. При scale ≥ 1.4 коэффициент = 1 (anchor
-      // работает полностью), при scale = 1 смещение = 0.
-      if (newScale < 1.4) {
-        const t = Math.max(0, (newScale - 1) / 0.4);
-        mediaTranslateX *= t;
-        mediaTranslateY *= t;
-      }
+      mediaTranslateX = midX - cx - pinchAnchorX * newScale;
+      mediaTranslateY = midY - cy - pinchAnchorY * newScale;
       clampMediaTranslate();
       applyMediaTransform();
-    } else if (e.touches.length === 1 && mediaIsDragging) {
+    } else if (e.touches.length === 1 && mediaIsDragging && !mediaPinchActive) {
       if (mediaScale > 1) {
         e.preventDefault();
         e.stopPropagation();
@@ -8886,12 +8898,12 @@ function setupMediaViewer() {
     }
   }, { passive: false });
 
-  body.addEventListener("touchend", (e) => {
+  overlay.addEventListener("touchend", (e) => {
     if (mediaPinchActive) e.stopPropagation();
 
+    // Переход «2 пальца → 1 палец» — пересобираем стартовые точки,
+    // иначе фото «прыгает» на старую позицию при следующем движении.
     if (e.touches.length === 1) {
-      // Переход «2 пальца → 1 палец»: пересобираем стартовые точки, иначе
-      // фото «прыгает» на старую позицию.
       mediaDragStartX = e.touches[0].clientX;
       mediaDragStartY = e.touches[0].clientY;
       mediaDragStartTranslateX = mediaTranslateX;
@@ -8902,13 +8914,11 @@ function setupMediaViewer() {
     if (e.touches.length === 0) {
       mediaIsDragging = false;
       const content = document.getElementById("media-viewer-content");
-      if (content) content.style.transition = "transform 0.1s ease-out";
+      if (content) content.style.transition = "transform 0.15s ease-out";
 
-      // Если вернулись к масштабу 1 — плавно центрируем.
       if (mediaScale <= 1.05) {
         resetMediaTransform();
       } else {
-        // Иначе — мягко подтягиваем в допустимые границы.
         clampMediaTranslate();
         applyMediaTransform();
       }
@@ -8920,7 +8930,7 @@ function setupMediaViewer() {
         mediaPinchEndTimer = setTimeout(() => {
           mediaPinchActive = false;
           mediaPinchEndTimer = null;
-        }, 350);
+        }, 300);
       }
     }
   });
@@ -9166,11 +9176,21 @@ function openMediaViewer(url, kind, mediaList, startIndex) {
 }
 
 function renderMediaViewer() {
+  const overlay = document.getElementById("media-viewer");
   const body = document.getElementById("media-viewer-body");
   const content = document.getElementById("media-viewer-content");
   const prevBtn = document.getElementById("media-viewer-prev");
   const nextBtn = document.getElementById("media-viewer-next");
   if (!body || !content) return;
+
+  // 🔴 На телефоне фото растягивается от левого края экрана до правого.
+  // Ставим inline-стили, чтобы не зависеть от media queries:
+  // они ненадёжны на некоторых Android-устройствах с pointer: fine.
+  const isNarrow = window.matchMedia("(max-width: 768px)").matches;
+  if (overlay) {
+    overlay.style.paddingLeft = isNarrow ? "0" : "";
+    overlay.style.paddingRight = isNarrow ? "0" : "";
+  }
 
   document.querySelectorAll("#media-viewer video").forEach((v) => {
     try { v.pause(); } catch (e) {}
@@ -9187,6 +9207,11 @@ function renderMediaViewer() {
     v.controls = true;
     v.autoplay = true;
     v.playsInline = true;
+    if (isNarrow) {
+      v.style.maxWidth = "100vw";
+      v.style.width = "100vw";
+      v.style.borderRadius = "0";
+    }
     v.onerror = () => {
       content.innerHTML = `<div style="color:#fff;font-size:16px;text-align:center;padding:20px;">${escapeHtml(t("media.loadVideoFailed"))}<br><span style="font-size:13px;opacity:0.7;">${escapeHtml(t("media.loadVideoFailedHint"))}</span></div>`;
     };
@@ -9195,6 +9220,11 @@ function renderMediaViewer() {
     const img = document.createElement("img");
     img.src = cur.url;
     img.alt = "";
+    if (isNarrow) {
+      img.style.maxWidth = "100vw";
+      img.style.width = "100vw";
+      img.style.borderRadius = "0";
+    }
     img.onerror = () => {
       content.innerHTML = `<div style="color:#fff;font-size:16px;text-align:center;padding:20px;">${escapeHtml(t("media.loadImageFailed"))}<br><span style="font-size:13px;opacity:0.7;">${escapeHtml(t("media.loadImageFailedHint"))}</span></div>`;
     };
