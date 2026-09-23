@@ -5967,11 +5967,7 @@ async function openChannel(chatId) {
   subscribeToChat(chatId);
   subscribeToReactions();
 
-  // Параллельно: подзаголовок, состояние composer, меню
-  await Promise.all([
-    updateChannelSubtitle(ch.id),
-    updateChannelComposerState(),
-  ]).catch(() => {});
+  // 🔴 Меню канала — сразу, без ожидания.
   configureChatMenuForChannel(ch);
   if (mySeq !== openSeq) return;
 
@@ -5981,11 +5977,17 @@ async function openChannel(chatId) {
   highlightChatInList(chatId);
   notifySwActiveChat(chatId);
 
-  // Фаза 4: если я владелец/админ и E2EE разблокирована —
-  // синхронизируем ключ канала (создание, раздача подписчикам).
+  // Фаза 4: синхронизация ключа канала — фоном.
   syncChannelKeys(chatId).catch((e) => console.warn("syncChannelKeys:", e));
 
-  await loadMessages(chatId, mySeq);
+  // 🔴 Параллельно: счётчик подписчиков + состав composer + сообщения.
+  // Раньше всё шло последовательно — старт канала растягивался.
+  await Promise.all([
+    updateChannelSubtitle(ch.id).catch(() => {}),
+    updateChannelComposerState().catch(() => {}),
+    loadMessages(chatId, mySeq),
+  ]);
+  if (mySeq !== openSeq) return;
   if (mySeq !== openSeq) return;
   await loadReactionsForVisibleMessages();
   if (mySeq !== openSeq) return;
@@ -7257,26 +7259,9 @@ async function loadMessages(chatId, mySeq) {
     return;
   }
 
-  // Закрепы — до рендера, чтобы значки сразу были
-  await loadPinned(chatId);
-  if (mySeq !== undefined && mySeq !== openSeq) return;
-  if (currentChatId !== chatId) return;
-
-  // Счётчики просмотров — параллельно
-  let viewsPromise = null;
-  if (isChannel) {
-    const ids = visible.map((m) => m.id);
-    viewsPromise = supabase.rpc("get_message_view_counts", { p_message_ids: ids }).then(({ data: views }) => {
-      (views || []).forEach((v) => currentChannelViewsMap.set(v.message_id, Number(v.views) || 0));
-    }).catch(() => {});
-  }
-
-  // 🔴 Оптимизация: предзагружаем пачкой всё, что нужно для рендера.
-  // Раньше на каждое сообщение делалось до 2-3 запросов (профиль для reply,
-  // signed URL для вложения) — на 100+ сообщениях это десятки секунд.
-  // Теперь — 1 запрос на все профили + 1 на все signed URL.
-
-  // 1) Профили авторов reply-сообщений
+  // 🔴 ПАРАЛЛЕЛЬНО: pins + профили reply-авторов + signed URL для вложений
+  // + счётчики просмотров (для канала). Раньше всё шло последовательно,
+  // на 50 сообщениях с вложениями это давало 2–4 секунды.
   const replySenderIds = new Set();
   visible.forEach((m) => {
     if (m.reply_to_id && msgCache.has(m.reply_to_id)) {
@@ -7286,16 +7271,7 @@ async function loadMessages(chatId, mySeq) {
       }
     }
   });
-  if (replySenderIds.size) {
-    try {
-      const { data } = await supabase.from("profiles")
-        .select("id, username, display_name, avatar_url, accent_color, last_seen, gender, created_at, birthday, verified, bio")
-        .in("id", [...replySenderIds]);
-      (data || []).forEach((p) => profileCache.set(p.id, p));
-    } catch (e) { /* silent */ }
-  }
 
-  // 2) Batch signed URLs для незашифрованных вложений
   const pathsToSign = [];
   visible.forEach((m) => {
     if (m.message_type === "attachment" && m.image_url && !(m.file_key_enc && m.file_iv)) {
@@ -7303,46 +7279,62 @@ async function loadMessages(chatId, mySeq) {
       if (path && !signedUrlCache.has(path)) pathsToSign.push(path);
     }
   });
-  if (pathsToSign.length) {
-    try {
-      const { data } = await supabase.storage.from("attachments").createSignedUrls(pathsToSign, 3600);
-      const now = Date.now();
-      (data || []).forEach((item, i) => {
-        if (item && item.signedUrl) {
-          signedUrlCache.set(pathsToSign[i], {
-            url: rewriteSupabaseUrl(item.signedUrl),
-            expiresAt: now + 55 * 60 * 1000,
-          });
-        }
-      });
-    } catch (e) { /* silent */ }
-  }
 
-  // Рендерим все сообщения ПАРАЛЛЕЛЬНО и вставляем одним куском —
-  // иначе пользователь видит, как сообщения «доезжают» по одному
-  // (сначала старые, потом новые), и экран прыгает.
+  const viewsPromise = isChannel
+    ? supabase.rpc("get_message_view_counts", { p_message_ids: visible.map((m) => m.id) })
+        .then(({ data: views }) => {
+          (views || []).forEach((v) => currentChannelViewsMap.set(v.message_id, Number(v.views) || 0));
+        }, () => {})
+    : Promise.resolve();
+
+  await Promise.all([
+    loadPinned(chatId),
+    replySenderIds.size
+      ? supabase.from("profiles")
+          .select("id, username, display_name, avatar_url, accent_color, last_seen, gender, created_at, birthday, verified, bio")
+          .in("id", [...replySenderIds])
+          .then(({ data }) => { (data || []).forEach((p) => profileCache.set(p.id, p)); }, () => {})
+      : Promise.resolve(),
+    pathsToSign.length
+      ? supabase.storage.from("attachments").createSignedUrls(pathsToSign, 3600)
+          .then(({ data }) => {
+            const now = Date.now();
+            (data || []).forEach((item, i) => {
+              if (item && item.signedUrl) {
+                signedUrlCache.set(pathsToSign[i], {
+                  url: rewriteSupabaseUrl(item.signedUrl),
+                  expiresAt: now + 55 * 60 * 1000,
+                });
+              }
+            });
+          }, () => {})
+      : Promise.resolve(),
+  ]);
+  if (mySeq !== undefined && mySeq !== openSeq) return;
+  if (currentChatId !== chatId) return;
+
+  // Рендерим все сообщения ПАРАЛЛЕЛЬНО и вставляем одним куском.
   const renderedElements = await Promise.all(visible.map((m) => createMessageElement(m)));
   if (mySeq !== undefined && mySeq !== openSeq) return;
   if (currentChatId !== chatId) return;
   const frag = document.createDocumentFragment();
   renderedElements.forEach((el) => { if (el) frag.appendChild(el); });
   box.appendChild(frag);
-  // Реакции рисуем после вставки в DOM
+  // Реакции рисуем после вставки в DOM — это быстро (уже готово из кэша).
   visible.forEach((m) => renderReactionsUI(m.id));
   scrollToBottom();
   rerenderPinMarks();
   refreshMessageGroups();
   buildChatTimeline();
 
-  // Если у каких-то вложений URL не отрисовался сразу — повторим попытку
-  // через небольшую задержку. Закрывает гонку «realtime INSERT → signed URL ещё не готов».
   setTimeout(() => { refreshAttachmentUrls().catch(() => {}); }, 800);
 
+  // 🔴 Для канала: НЕ ждём счётчики просмотров — обновим их фоном.
   if (isChannel) {
-    await viewsPromise;
-    if (mySeq !== undefined && mySeq !== openSeq) return;
-    if (currentChatId !== chatId) return;
-    currentChannelViewsMap.forEach((cnt, mid) => updateMessageViewsInUI(mid, cnt));
+    viewsPromise.then(() => {
+      if (currentChatId !== chatId) return;
+      currentChannelViewsMap.forEach((cnt, mid) => updateMessageViewsInUI(mid, cnt));
+    });
 
     const ids = visible.map((m) => m.id);
     (async () => {
@@ -7353,6 +7345,7 @@ async function loadMessages(chatId, mySeq) {
           try { await supabase.rpc("mark_message_viewed", { p_message_id: id }); } catch (e) {}
         }));
       }
+      if (currentChatId !== chatId) return;
       try {
         const { data: views } = await supabase.rpc("get_message_view_counts", { p_message_ids: ids });
         (views || []).forEach((v) => {
@@ -7439,11 +7432,13 @@ async function appendMessageBefore(msg, firstExisting) {
     const el = document.createElement("div");
     el.className = "msg-system" + (msg.message_type === "gift" ? " gift-msg" : "");
     el.dataset.id = msg.id;
-    el.innerHTML = await renderSystemMessage(msg);
+    el.innerHTML = await renderSystemMessage(msg)
+      + `<div class="msg-reactions" data-reactions-for="${msg.id}"></div>`;
     el.addEventListener("click", onMsgClick);
     box.insertBefore(el, firstExisting);
     msgCache.set(msg.id, msg);
     fillGiftPatternsIn(el);
+    renderReactionsUI(msg.id);
     return;
   }
 
@@ -7464,6 +7459,10 @@ function setupMessagesScrollPagination() {
   const box = document.getElementById("messages");
   if (!box) return;
   box.addEventListener("scroll", () => {
+    // 🔴 Не триггерим подгрузку старых во время программного скролла
+    // (прыжок вниз, автопрокрутка при открытии). Иначе содержимое
+    // прыгает, и пользователь видит «застревание по кускам».
+    if (programmaticScroll) return;
     if (box.scrollTop < 80 && messagesHasMore && !messagesLoadingMore) {
       loadOlderMessages();
     }
@@ -7628,7 +7627,10 @@ async function _createMessageElementImpl(msg) {
     const el = document.createElement("div");
     el.className = "msg-system" + (msg.message_type === "gift" ? " gift-msg" : "");
     el.dataset.id = msg.id;
-    el.innerHTML = await renderSystemMessage(msg);
+    // 🔴 Добавляем контейнер реакций — иначе чипсы под сообщением
+    // не отрисовываются (renderReactionsUI не находит куда вставлять).
+    el.innerHTML = await renderSystemMessage(msg)
+      + `<div class="msg-reactions" data-reactions-for="${msg.id}"></div>`;
     el.addEventListener("click", onMsgClick);
     msgCache.set(msg.id, msg);
     fillGiftPatternsIn(el);
@@ -8364,8 +8366,10 @@ async function updateMessageInUI(msg) {
   if (!el) return;
   msgCache.set(msg.id, msg);
   if (msg.message_type === "tokens" || msg.message_type === "gift") {
-    el.innerHTML = await renderSystemMessage(msg);
+    el.innerHTML = await renderSystemMessage(msg)
+      + `<div class="msg-reactions" data-reactions-for="${msg.id}"></div>`;
     fillGiftPatternsIn(el);
+    renderReactionsUI(msg.id);
   } else {
     el.innerHTML = await buildMsgHtml(msg);
     renderReactionsUI(msg.id);
@@ -8469,8 +8473,18 @@ function setupScrollBottomButton() {
   const box = document.getElementById("messages");
   if (!btn || !box) return;
 
+  // 🔴 Мгновенный прыжок вниз. Smooth-scroll ломался: во время
+  // анимации scroll-событие наверху вызывало подгрузку старых
+  // сообщений, содержимое прыгало, и скролл «застревал по кускам».
   btn.addEventListener("click", () => {
-    box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
+    stickToBottom = true;
+    programmaticScroll = true;
+    box.scrollTop = box.scrollHeight;
+    // Пересчёт после следующего кадра (если картинки не догрузились).
+    requestAnimationFrame(() => {
+      box.scrollTop = box.scrollHeight;
+      requestAnimationFrame(() => { programmaticScroll = false; });
+    });
   });
 
   box.addEventListener("scroll", () => {
@@ -10734,6 +10748,7 @@ function openMsgContextMenu(e, msgId) {
   } else if (isGift) {
     if (replyBtn) replyBtn.classList.remove("hidden");
     if (delBtn)   delBtn.classList.remove("hidden");
+    // Реакции доступны всегда — бар рисуется независимо выше.
   } else if (isTokens) {
     if (delBtn)   delBtn.classList.remove("hidden");
   } else if (isPhoto || isVideo) {
@@ -14825,11 +14840,13 @@ function openGiftPurchase(gift, recipientId) {
     giftCatalogCache = [];
     await loadGiftCatalog();
 
-    // Открываем страницу только что купленного подарка
+    // Открываем страницу только что купленного подарка.
+    // 🔴 Помечаем, что пришли из магазина — стрелка «назад» вернёт
+    // в каталог, а не в список подарков.
     if (newGiftId) {
       const { data: created } = await supabase.from("user_gifts").select("*").eq("id", newGiftId).maybeSingle();
       if (created) {
-        await renderGiftDetail(recipientId, created);
+        await renderGiftDetail(recipientId, created, { fromCatalog: true });
         return;
       }
     }
@@ -14862,10 +14879,14 @@ async function renderGiftDetail(ownerId, ug, opts) {
   const title = document.getElementById("gifts-title");
   const backBtn = document.getElementById("gifts-back");
   if (readOnly) {
-    // 🔴 Карточка открыта по ссылке — возвращаться некуда,
+    // Карточка открыта по ссылке — возвращаться некуда,
     // стрелку «назад» убираем полностью.
     backBtn.classList.add("hidden");
     backBtn.onclick = null;
+  } else if (opts.fromCatalog) {
+    // 🔴 Пришли из магазина — возвращаемся в каталог.
+    backBtn.classList.remove("hidden");
+    backBtn.onclick = () => renderCatalog(ownerId);
   } else {
     backBtn.classList.remove("hidden");
     backBtn.onclick = () => renderGiftsMain(ownerId);
@@ -18176,6 +18197,27 @@ setupMfaUI();
 setupPasswordReset();
 setupLocalLogin();
 
+// 🔴 Пробуем найти сессию в ОБОИХ ключах — PWA (imaginer-auth-pwa)
+// и браузер (imaginer-auth). На некоторых устройствах детект PWA
+// на первом кадре может сработать не так, как ожидалось.
+async function findAnyStoredSession() {
+  try {
+    const keys = ["imaginer-auth-pwa", "imaginer-auth"];
+    for (const k of keys) {
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        // Supabase хранит { currentSession: {...}, ... }
+        if (parsed && parsed.currentSession && parsed.currentSession.access_token) {
+          return parsed.currentSession;
+        }
+      } catch (e) { /* silent */ }
+    }
+  } catch (e) { /* silent */ }
+  return null;
+}
+
 (async () => {
   const { data: { session } } = await supabase.auth.getSession();
   if (session) {
@@ -18199,14 +18241,28 @@ setupLocalLogin();
     return;
   }
 
-  // 🔴 Фолбэк: основной сессии в AUTH_STORAGE_KEY нет, но есть backup
-  // локального аккаунта — пробуем восстановить его автоматически.
-  // Так local-сессия переживает перезапуск устройства, смену
-  // PWA ↔ браузер и потерю основной сессии в localStorage.
+  // 🔴 Фолбэк: основной сессии в AUTH_STORAGE_KEY нет — проверяем
+  // ВСЕ возможные места, где могла сохраниться сессия.
   try {
-    // 🔴 Если пользователь ЯВНО вышел — не восстанавливаем автоматически.
+    // Если пользователь ЯВНО вышел — не восстанавливаем автоматически.
     if (localStorage.getItem("cell_logged_out") === "1") return;
 
+    // 1) Может, сессия в другом auth-ключе (PWA vs браузер)?
+    const altSession = await findAnyStoredSession();
+    if (altSession && altSession.access_token && altSession.refresh_token) {
+      const { data, error } = await supabase.auth.setSession({
+        access_token: altSession.access_token,
+        refresh_token: altSession.refresh_token,
+      });
+      if (!error && data && data.session) {
+        showApp(data.session.user);
+        handleOpenChatHash();
+        handleGiftHash();
+        return;
+      }
+    }
+
+    // 2) Иначе — backup локальной сессии.
     const raw = localStorage.getItem("cell_local_session");
     if (!raw) return;
     const saved = JSON.parse(raw);
@@ -18232,3 +18288,43 @@ setupLocalLogin();
     localStorage.removeItem("cell_local_session");
   } catch (e) { /* silent */ }
 })();
+
+// 🔴 Периодическая попытка восстановить локальную сессию.
+// Бывает, что при перезагрузке устройства Supabase ещё не готов
+// (или refresh-токен ещё валиден, но sessionStorage пуст), и сессия
+// «теряется» на первой попытке. Догоняем фоновой проверкой.
+setInterval(async () => {
+  try {
+    if (currentUser) return;
+    const authScreen = document.getElementById("auth-screen");
+    if (!authScreen || authScreen.classList.contains("hidden")) return;
+    if (localStorage.getItem("cell_logged_out") === "1") return;
+
+    // Основная сессия уже в PWA-ключе?
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session && session.user) {
+      showApp(session.user);
+      return;
+    }
+
+    // Пробуем backup локальной сессии.
+    const raw = localStorage.getItem("cell_local_session");
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (!saved || !saved.access_token || !saved.refresh_token) return;
+
+    const { data, error } = await supabase.auth.setSession({
+      access_token: saved.access_token,
+      refresh_token: saved.refresh_token,
+    });
+    if (!error && data && data.session) {
+      try {
+        localStorage.setItem("cell_local_session", JSON.stringify({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        }));
+      } catch (e) { /* silent */ }
+      showApp(data.session.user);
+    }
+  } catch (e) { /* silent */ }
+}, 10000);
