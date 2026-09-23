@@ -6222,6 +6222,7 @@ function setupMessagesDelegates() {
   let longPressTimer = null;
   let lpStartX = 0, lpStartY = 0;
   let lpTriggered = false;
+  let lpTargetEl = null;
   let lastTapAt = 0;
   let lastTapEl = null;
 
@@ -6232,10 +6233,14 @@ function setupMessagesDelegates() {
     const t = e.touches[0];
     lpStartX = t.clientX; lpStartY = t.clientY;
     lpTriggered = false;
+    lpTargetEl = el;
+    // 🔴 Плавный отклик: сообщение чуть уменьшается, пока палец на нём.
+    el.classList.add("pressing");
     longPressTimer = setTimeout(() => {
       lpTriggered = true;
       lastLongPressAt = Date.now();
       try { if (navigator.vibrate) navigator.vibrate(15); } catch (ex) {}
+      el.classList.remove("pressing");
       const fake = {
         clientX: lpStartX, clientY: lpStartY, target: el,
         preventDefault: () => {}, stopPropagation: () => {},
@@ -6250,11 +6255,13 @@ function setupMessagesDelegates() {
     if (!t) return;
     if (Math.abs(t.clientX - lpStartX) > 10 || Math.abs(t.clientY - lpStartY) > 10) {
       clearTimeout(longPressTimer); longPressTimer = null;
+      if (lpTargetEl) { lpTargetEl.classList.remove("pressing"); lpTargetEl = null; }
     }
   }, { passive: true });
 
   box.addEventListener("touchend", (e) => {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    if (lpTargetEl) { lpTargetEl.classList.remove("pressing"); lpTargetEl = null; }
     if (lpTriggered) {
       e.preventDefault();
       lpTriggered = false;
@@ -6338,10 +6345,13 @@ function attachLongPress(el, handler) {
     startX = t.clientX;
     startY = t.clientY;
     triggered = false;
+    // 🔴 Плавный отклик на долгое нажатие.
+    el.classList.add("pressing");
     timer = setTimeout(() => {
       triggered = true;
       lastLongPressAt = Date.now();
       try { if (navigator.vibrate) navigator.vibrate(15); } catch (ex) {}
+      el.classList.remove("pressing");
       const fake = {
         clientX: startX,
         clientY: startY,
@@ -6362,11 +6372,13 @@ function attachLongPress(el, handler) {
     if (dx > LONG_PRESS_MOVE_TOLERANCE || dy > LONG_PRESS_MOVE_TOLERANCE) {
       clearTimeout(timer);
       timer = null;
+      el.classList.remove("pressing");
     }
   }, { passive: true });
 
   el.addEventListener("touchend", (e) => {
     if (timer) { clearTimeout(timer); timer = null; }
+    el.classList.remove("pressing");
     if (triggered) {
       e.preventDefault();
       e.stopPropagation();
@@ -6376,6 +6388,7 @@ function attachLongPress(el, handler) {
 
   el.addEventListener("touchcancel", () => {
     if (timer) { clearTimeout(timer); timer = null; }
+    el.classList.remove("pressing");
     triggered = false;
   });
 }
@@ -6401,41 +6414,95 @@ function setupMobileBackButton() {
 // Порог: сдвиг вправо > 100px и вертикальный сдвиг < 60px.
 function setupSwipeBackGesture() {
   const chatContent = document.getElementById("chat-content");
-  if (!chatContent) return;
+  const app = document.getElementById("app-screen");
+  if (!chatContent || !app) return;
+
   let startX = 0, startY = 0;
-  let tracking = false, fired = false;
+  let tracking = false, animating = false;
+  // null — ещё не решили, false — это вертикальный скролл, true — тянем вправо
+  let isHorizontal = null;
+
+  const vw = () => window.innerWidth;
+
+  function beginReveal() {
+    if (app.classList.contains("swipe-back-active")) return;
+    app.classList.add("swipe-back-active");
+    chatContent.style.transition = "none";
+    chatContent.style.transform = "translateX(0px)";
+  }
+
+  function endReveal() {
+    app.classList.remove("swipe-back-active");
+    chatContent.style.transition = "";
+    chatContent.style.transform = "";
+  }
 
   chatContent.addEventListener("touchstart", (e) => {
     if (!isMobileView()) return;
     if (e.touches.length !== 1) return;
-    // Не срабатываем, если тап был по интерактивным элементам,
-    // которые сами умеют свайпать (медиа-вьюер отсекается отдельно).
+    if (animating) return;
     const t = e.touches[0];
     startX = t.clientX;
     startY = t.clientY;
     tracking = true;
-    fired = false;
+    isHorizontal = null;
   }, { passive: true });
 
   chatContent.addEventListener("touchmove", (e) => {
-    if (!tracking || fired) return;
+    if (!tracking || animating) return;
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
     const dx = t.clientX - startX;
     const dy = t.clientY - startY;
-    // Свайп вправо: dx > 100, |dy| < 60, и движение горизонтальное
-    if (dx > 100 && Math.abs(dy) < Math.abs(dx) * 0.6) {
-      fired = true;
-      exitMobileChat();
+
+    // Определяем направление один раз — либо горизонтальный, либо скролл.
+    if (isHorizontal === null) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      isHorizontal = dx > 0 && Math.abs(dx) > Math.abs(dy) * 1.15;
+    }
+    if (!isHorizontal) return;
+
+    // Тянем чат пальцем вправо 1:1.
+    const clamped = Math.max(0, Math.min(vw(), dx));
+    if (clamped > 6) beginReveal();
+    if (app.classList.contains("swipe-back-active")) {
+      chatContent.style.transform = `translateX(${clamped}px)`;
     }
   }, { passive: true });
 
-  chatContent.addEventListener("touchend", () => {
+  function finishSwipe(e) {
+    if (!tracking) return;
     tracking = false;
-  });
-  chatContent.addEventListener("touchcancel", () => {
-    tracking = false;
-  });
+    if (!isHorizontal) {
+      isHorizontal = null;
+      return;
+    }
+    const t = e.changedTouches && e.changedTouches[0];
+    const dx = t ? t.clientX - startX : 0;
+    const shouldClose = dx > vw() * 0.3;
+
+    chatContent.style.transition = "transform 0.25s cubic-bezier(0.22, 1, 0.36, 1)";
+
+    if (shouldClose) {
+      animating = true;
+      chatContent.style.transform = `translateX(${vw()}px)`;
+      setTimeout(() => {
+        try { exitMobileChat(); } catch (err) { /* silent */ }
+        endReveal();
+        animating = false;
+        isHorizontal = null;
+      }, 260);
+    } else {
+      chatContent.style.transform = "translateX(0px)";
+      setTimeout(() => {
+        endReveal();
+        isHorizontal = null;
+      }, 260);
+    }
+  }
+
+  chatContent.addEventListener("touchend", finishSwipe);
+  chatContent.addEventListener("touchcancel", finishSwipe);
 }
 
 // ============ Меню сайдбара (бургер) ============
@@ -6753,6 +6820,7 @@ document.addEventListener("pointerdown", (e) => {
 }, true);
 
 document.getElementById("chat-list-context-menu").addEventListener("click", async (e) => {
+  if (justLongPressed()) return;
   const btn = e.target.closest("button"); if (!btn) return;
   e.stopPropagation();
   const action = btn.dataset.action;
@@ -8992,29 +9060,64 @@ function setupMediaViewer() {
     const dy = t.clientY - touchStartY;
     const dt = Date.now() - touchStartAt;
     const media = body.querySelector("img, video");
-    if (media) {
+    if (!media) return;
+
+    // Быстрый тап — не реагируем.
+    if (!swipeMoved && dt < 300) {
       media.style.transition = "transform 0.22s ease, opacity 0.22s ease";
       media.style.transform = "";
       media.style.opacity = "";
-    }
-
-    // Быстрый тап — не реагируем (пойдёт через pointerup-handler).
-    if (!swipeMoved && dt < 300) return;
-
-    const ABS_X = 50;
-    const ABS_Y = 100;
-
-    // Свайп вниз/вверх → закрыть
-    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > ABS_Y) {
-      closeMediaViewer();
       return;
     }
 
-    // Свайп влево/вправо → переключить
-    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > ABS_X) {
-      if (dx < 0) mediaViewerNavigate(1);
-      else mediaViewerNavigate(-1);
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const ABS_X = Math.max(60, vw * 0.15);
+    const ABS_Y = Math.max(100, vh * 0.12);
+    const isVertical = Math.abs(dy) > Math.abs(dx);
+
+    // Вертикальный свайп — уезжает вниз/вверх с плавным «дожимом».
+    if (isVertical && Math.abs(dy) > ABS_Y) {
+      const dir = dy > 0 ? 1 : -1;
+      media.style.transition = "transform 0.22s ease-in, opacity 0.22s ease-in";
+      media.style.transform = `translateY(${dir * vh}px) scale(0.85)`;
+      media.style.opacity = "0";
+      setTimeout(() => { try { closeMediaViewer(); } catch (err) {} }, 210);
+      return;
     }
+
+    // Горизонтальный свайп — сначала уводим текущее фото за экран,
+    // затем подгружаем соседнее и анимируем его «выезд» с другой стороны.
+    if (!isVertical && Math.abs(dx) > ABS_X) {
+      const dir = dx < 0 ? 1 : -1;   // 1 = вперёд (след. фото), -1 = назад
+      const canNav = dir === 1
+        ? mediaViewerIndex < mediaViewerList.length - 1
+        : mediaViewerIndex > 0;
+      if (canNav) {
+        media.style.transition = "transform 0.2s ease-in, opacity 0.2s ease-in";
+        media.style.transform = `translateX(${-dir * vw}px)`;
+        media.style.opacity = "0";
+        setTimeout(() => {
+          mediaViewerNavigate(dir);
+          const newMedia = body.querySelector("img, video");
+          if (!newMedia) return;
+          newMedia.style.transition = "none";
+          newMedia.style.transform = `translateX(${dir * vw * 0.35}px)`;
+          newMedia.style.opacity = "0.6";
+          requestAnimationFrame(() => {
+            newMedia.style.transition = "transform 0.22s ease-out, opacity 0.22s ease-out";
+            newMedia.style.transform = "";
+            newMedia.style.opacity = "";
+          });
+        }, 190);
+        return;
+      }
+    }
+
+    // Не дотянули до порога — возвращаем на место.
+    media.style.transition = "transform 0.22s ease-out, opacity 0.22s ease-out";
+    media.style.transform = "";
+    media.style.opacity = "";
   }, { passive: true });
 
   document.addEventListener("keydown", (e) => {
@@ -10193,6 +10296,8 @@ async function copyMessageText(id) {
 function setupMessageMenu() {
   const menuEl = document.getElementById("msg-context-menu");
   menuEl.addEventListener("click", async (e) => {
+    // 🔴 Игнорируем «фантомный» клик сразу после long-press.
+    if (justLongPressed()) return;
     const btn = e.target.closest("button");
     if (!btn) return;
     e.stopPropagation();
@@ -13438,6 +13543,7 @@ function setupGiftsUI() {
   const giftMenu = document.getElementById("gift-context-menu");
   if (giftMenu) {
     giftMenu.addEventListener("click", async (e) => {
+      if (justLongPressed()) return;
       const btn = e.target.closest("button"); if (!btn) return;
       e.stopPropagation();
       const ugId = giftMenu.dataset.ugId;
@@ -14765,6 +14871,7 @@ async function renderGiftDetail(ownerId, ug, opts) {
       menuEl.classList.toggle("hidden");
     };
     menuEl.onclick = async (e) => {
+      if (justLongPressed()) return;
       const b = e.target.closest("button"); if (!b) return;
       e.stopPropagation();
       menuEl.classList.add("hidden");

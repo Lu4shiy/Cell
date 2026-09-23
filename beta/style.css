@@ -5497,6 +5497,60 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
    оказался под пальцем при свайпе, остаётся подсвеченным
    до следующего тапа. Это даёт ложную подсветку чата при
    свайпах по списку. Отключаем hover-эффект полностью. */
+/* ====================================================== */
+/* ПЛАВНЫЙ СВАЙП-ВОЗВРАТ ИЗ ЧАТА (мобильные)              */
+/* ====================================================== */
+/* Во время перетаскивания чата вправо показываем список
+   чатов ПОД ним, а сам чат сдвигаем пальцем. */
+.app.swipe-back-active {
+  position: relative;
+}
+.app.swipe-back-active .sidebar {
+  display: flex !important;
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 0;
+  border-right: none;
+}
+.app.swipe-back-active .chat-area {
+  position: relative;
+  z-index: 1;
+  background: transparent !important;
+}
+.app.swipe-back-active .chat-area::before {
+  display: none !important;
+}
+.app.swipe-back-active .chat-content {
+  background: var(--bg);
+  box-shadow: 0 0 28px rgba(0, 0, 0, 0.55);
+  will-change: transform;
+}
+
+/* На мобильном фото в медиа-вьюере — от края до края. */
+@media (max-width: 768px) and (pointer: coarse) {
+  .media-viewer {
+    padding: calc(40px + env(safe-area-inset-top, 0)) 0
+             calc(40px + env(safe-area-inset-bottom, 0)) 0;
+  }
+  .media-viewer-content img,
+  .media-viewer-content video {
+    max-width: 100vw;
+    border-radius: 0;
+  }
+}
+
+/* Визуальный отклик на долгое нажатие (как в Telegram). */
+.msg.pressing,
+.msg-system.pressing,
+.gift-tile.pressing,
+.user-item.pressing,
+.market-card.pressing {
+  transform: scale(0.97);
+  transition: transform 0.12s ease-out;
+}
+
 @media (hover: none), (pointer: coarse) {
   .user-item:hover {
     background: transparent !important;
