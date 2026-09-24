@@ -13984,6 +13984,8 @@ const GIFT_PATTERNS = [
   { id: "Honeycomb",          icon: "https://i.ibb.co/VWx1VhTJ/icons8.png",                      tier: 1, collection: null },
   { id: "Avocado",            icon: "https://i.ibb.co/vMsQ6zt/icons8-avocado-100.png",           tier: 1, collection: null },
   { id: "Cow Skull",          icon: "https://i.ibb.co/BK658J03/icons8-cow-skull-100.png",        tier: 1, collection: null },
+  { id: "Raven",              icon: "https://i.ibb.co/bkqpRKZ/icons8-full-body-crow-100.png",    tier: 1, collection: null },
+  { id: "Anonymous",          icon: "https://i.ibb.co/qqt9j91/icons8-anonymous-mask-100.png",    tier: 1, collection: null },
   // Tier 2 — 🟩 (1% каждый)
   { id: "Dragon",             icon: "https://i.ibb.co/BHmvdSfj/icons8-dragon-100.png",           tier: 2, collection: null },
   { id: "Turtle Fight",       icon: "https://i.ibb.co/LXnkDyqs/icons8-ninja-turtle-100.png",     tier: 2, collection: null },
@@ -13994,6 +13996,9 @@ const GIFT_PATTERNS = [
   { id: "Raspberry",          icon: "https://i.ibb.co/R4MKW7Wg/icons8-raspberry-100.png",        tier: 2, collection: null },
   { id: "Maple Leaves",       icon: "https://i.ibb.co/jkX6gBkf/icons8-autumn-100.png",           tier: 2, collection: null },
   { id: "Poop",               icon: "https://i.ibb.co/jkfgWpPx/icons8-100.png",                  tier: 2, collection: null },
+  { id: "Panther",            icon: "https://i.ibb.co/BHVfLZ80/icons8-100.png",                  tier: 2, collection: null },
+  { id: "Roman Helmet",       icon: "https://i.ibb.co/CpmGtgyt/icons8-roman-helmet-100.png",     tier: 2, collection: null },
+  { id: "Beer",               icon: "https://i.ibb.co/PXQR3Sc/icons8-beer-100.png",              tier: 2, collection: null },
   // Tier 3 — 🟨 (2% каждый)
   { id: "Pizza",              icon: "https://i.ibb.co/35DsZYKS/icons8-salami-pizza-100.png",     tier: 3, collection: null },
   { id: "Champion's Trophey", icon: "https://i.ibb.co/HJ7cKK7/icons8-trophy-100.png",            tier: 3, collection: null },
@@ -14005,6 +14010,10 @@ const GIFT_PATTERNS = [
   { id: "Bull",               icon: "https://i.ibb.co/7NVw2wr7/icons8-bull-100.png",             tier: 3, collection: null },
   { id: "Unicorn",            icon: "https://i.ibb.co/m5zthc0B/icons8-unicorn-100.png",          tier: 3, collection: null },
   { id: "Dirty Prank",        icon: "https://i.ibb.co/0y1HSJvR/icons8-100.png",                  tier: 3, collection: null },
+  { id: "Donut",              icon: "https://i.ibb.co/XgS7stG/icons8-100.png",                   tier: 3, collection: null },
+  { id: "Cocktail",           icon: "https://i.ibb.co/jPKpFZ7v/icons8-cocktail-100.png",         tier: 3, collection: null },
+  { id: "Wine Bottle",        icon: "https://i.ibb.co/VkxHgBd/icons8-wine-bar-100.png",          tier: 3, collection: null },
+  { id: "Whiskey",            icon: "https://i.ibb.co/RpgQ9BJ3/icons8-glass-of-whiskey-100.png", tier: 3, collection: null },
   // Tier 4 — 🟧 (3% каждый)
   { id: "Compass",            icon: "https://i.ibb.co/39JNnHLp/icons8-adventures-100.png",       tier: 4, collection: null },
   { id: "Crescent",           icon: "https://i.ibb.co/zTcHnrst/icons8-crescent-moon-100.png",    tier: 4, collection: null },
@@ -14018,6 +14027,10 @@ const GIFT_PATTERNS = [
   { id: "King's Guard",       icon: "https://i.ibb.co/3mBWW1MD/icons8-queen-s-guard-100.png",    tier: 4, collection: null },
   { id: "Toilet Paper",       icon: "https://i.ibb.co/wrQb3pV8/icons8-100.png",                  tier: 4, collection: null },
   { id: "Toilet",             icon: "https://i.ibb.co/35P7d21m/icons8-100.png",                  tier: 4, collection: null },
+  { id: "Bandit",             icon: "https://i.ibb.co/HTdW3m9B/icons8-bandit-100.png",           tier: 4, collection: null },
+  { id: "Tea",                icon: "https://i.ibb.co/xQ6RC7g/icons8-tea-100.png",               tier: 4, collection: null },
+  { id: "Cafe",               icon: "https://i.ibb.co/1SvqSFL/icons8-cafe-100.png",              tier: 4, collection: null },
+  { id: "Ice Cream",          icon: "https://i.ibb.co/rf0x0kS3/icons8-ice-cream-cone-100.png",   tier: 4, collection: null },
   // Tier 5 — 🟥 (4% каждый)
   { id: "Happy Ice Cream",    icon: "https://i.ibb.co/mCJycjJZ/icons8-kawaii-ice-cream-100.png", tier: 5, collection: null },
   { id: "Wolf",               icon: "https://i.ibb.co/cK67rPXt/icons8-wolf-100.png",             tier: 5, collection: null },
@@ -14028,6 +14041,9 @@ const GIFT_PATTERNS = [
   { id: "Citrus",             icon: "https://i.ibb.co/pv1jLytN/icons8-citrus-100.png",           tier: 5, collection: null },
   { id: "Magician",           icon: "https://i.ibb.co/1fQVV2BS/icons8-magician-100.png",         tier: 5, collection: null },
   { id: "Confetti",           icon: "https://i.ibb.co/gMvXFMB1/icons8-confetti-100.png",         tier: 5, collection: null },
+  { id: "Ocean Wave",         icon: "https://i.ibb.co/k65PHddj/icons8-ocean-wave-100.png",       tier: 5, collection: null },
+  { id: "Theatre Mask",       icon: "https://i.ibb.co/nsGZgZNq/icons8-comedy-100.png",           tier: 5, collection: null },
+  { id: "Champagne",          icon: "https://i.ibb.co/sJbfdczd/icons8-champagne-bottle-100.png", tier: 5, collection: null },
   // Tier 6 — 🟫 (5% каждый)
   { id: "Badminton",          icon: "https://i.ibb.co/gZtJJZ2W/icons8-badminton-100.png",        tier: 6, collection: null },
   { id: "Basketball",         icon: "https://i.ibb.co/7NKNK0pw/icons8-basketball-100.png",       tier: 6, collection: null },
@@ -14038,7 +14054,11 @@ const GIFT_PATTERNS = [
   { id: "Football",           icon: "https://i.ibb.co/ymkH14jy/icons8-100.png",                  tier: 6, collection: null },
   { id: "Hamburger",          icon: "https://i.ibb.co/20RhBX2B/icons8-hamburger-100.png",        tier: 6, collection: null },
   { id: "Hot Dog",            icon: "https://i.ibb.co/zVbSJkj0/icons8-hot-dog-100.png",          tier: 6, collection: null },
-  { id: "Cupid on Target",    icon: "https://i.ibb.co/ymqYGfKf/icons8-cupid-target-100.png",     tier: 6, collection: null }
+  { id: "Cupid on Target",    icon: "https://i.ibb.co/ymqYGfKf/icons8-cupid-target-100.png",     tier: 6, collection: null },
+  { id: "Butterfly",          icon: "https://i.ibb.co/6cS2t0sC/icons8-butterfly-100.png",        tier: 6, collection: null },
+  { id: "Brain",              icon: "https://i.ibb.co/S7vwqbNf/icons8-brain-100.png",            tier: 6, collection: null },
+  { id: "Rocket",             icon: "https://i.ibb.co/N6BgTvr9/icons8-rocket-100.png",           tier: 6, collection: null },
+  { id: "Soda",               icon: "https://i.ibb.co/spLb7Z3j/icons8-soda-100.png",             tier: 6, collection: null }
 ];
 
 const PATTERN_TIER_CHANCE = { 1: 0.75, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5 };
