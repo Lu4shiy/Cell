@@ -8421,11 +8421,35 @@ function setupMessagesResizeObserver() {
   const box = document.getElementById("messages");
   if (!box || messagesResizeObserver) return;
 
+  // 1) Размер самого контейнера (актуально при изменении окна).
   messagesResizeObserver = new ResizeObserver(() => {
-    if (!stickToBottom) return;
+    if (!stickToBottom || programmaticScroll) return;
     scrollMessagesToBottomNow(box);
   });
   messagesResizeObserver.observe(box);
+
+  // 2) 🔴 Контент растёт ВНУТРИ контейнера (подарки, картинки, реакции),
+  // но .messages имеет фиксированную flex-высоту — ResizeObserver молчит.
+  // MutationObserver ловит добавление узлов и их подгрузку.
+  if (!box.__msgMO) {
+    box.__msgMO = new MutationObserver(() => {
+      if (!stickToBottom || programmaticScroll) return;
+      scrollMessagesToBottomNow(box);
+    });
+    box.__msgMO.observe(box, { childList: true, subtree: true });
+  }
+
+  // 3) 🔴 load картинок/видео: когда у <img> появляется src, высота
+  // растёт уже ПОСЛЕ мутации — этот обработчик доводит скролл.
+  if (!box.__loadBound) {
+    box.__loadBound = true;
+    box.addEventListener("load", (e) => {
+      const t = e.target;
+      if (!t || (t.tagName !== "IMG" && t.tagName !== "VIDEO")) return;
+      if (!stickToBottom || programmaticScroll) return;
+      scrollMessagesToBottomNow(box);
+    }, true);
+  }
 
   // Пользователь сам скроллит: если ушёл наверх — снимаем флаг,
   // если вернулся вниз — ставим обратно.
@@ -8441,13 +8465,14 @@ function scrollToBottom() {
   if (!box) return;
   stickToBottom = true;
   scrollMessagesToBottomNow(box);
-  // Пересчёт после того, как подгрузятся картинки/видео/файлы —
-  // без этого чат при перезагрузке остаётся чуть выше низа
   const adjust = () => {
     if (!stickToBottom) return;
+    // 🔴 scrollMessagesToBottomNow ставит programmaticScroll=true на кадр —
+    // этот же хелпер отлично работает и здесь, MutationObserver не сработает.
     scrollMessagesToBottomNow(box);
   };
   requestAnimationFrame(adjust);
+  // Привязываем к картинкам/видео — их загрузка меняет высоту.
   box.querySelectorAll("img:not([data-scrollbound]), video:not([data-scrollbound])").forEach((el) => {
     el.dataset.scrollbound = "1";
     if (el.tagName === "IMG") {
@@ -8459,13 +8484,17 @@ function scrollToBottom() {
       el.addEventListener("loadeddata", adjust, { once: true });
     }
   });
-  // Резервные таймеры — на случай очень медленной сети и ленивой
-  // расшифровки E2EE-вложений.
-  setTimeout(adjust, 120);
-  setTimeout(adjust, 400);
-  setTimeout(adjust, 900);
-  setTimeout(adjust, 1800);
-  setTimeout(adjust, 3000);
+  // 🔴 Уплотняем сетку «доводчиков»: первые 2 секунды — каждые 80 мс,
+  // потом реже. Так чат с подарочными картинками приземляется в самый низ
+  // даже при медленной сети.
+  let ticks = 0;
+  const denseTimer = setInterval(() => {
+    ticks++;
+    if (!stickToBottom || ticks > 25) { clearInterval(denseTimer); return; }
+    scrollMessagesToBottomNow(box);
+  }, 80);
+  setTimeout(adjust, 2200);
+  setTimeout(adjust, 3500);
 }
 
 function setupScrollBottomButton() {
@@ -8473,18 +8502,21 @@ function setupScrollBottomButton() {
   const box = document.getElementById("messages");
   if (!btn || !box) return;
 
-  // 🔴 Мгновенный прыжок вниз. Smooth-scroll ломался: во время
-  // анимации scroll-событие наверху вызывало подгрузку старых
-  // сообщений, содержимое прыгало, и скролл «застревал по кускам».
+  // 🔴 Анимация smooth возвращена. Защита от «прыжков по кускам»:
+  // на всё время анимации держим programmaticScroll=true — пагинация
+  // в этот момент игнорирует scroll-события, а MutationObserver не
+  // пытается доскроллить мгновенно. Через 800 мс (дольше любой
+  // smooth-анимации) — финальный доводчик и снятие флага.
   btn.addEventListener("click", () => {
     stickToBottom = true;
     programmaticScroll = true;
-    box.scrollTop = box.scrollHeight;
-    // Пересчёт после следующего кадра (если картинки не догрузились).
-    requestAnimationFrame(() => {
-      box.scrollTop = box.scrollHeight;
-      requestAnimationFrame(() => { programmaticScroll = false; });
-    });
+    box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
+    clearTimeout(box.__scrollBottomTimer);
+    box.__scrollBottomTimer = setTimeout(() => {
+      // Финальная доводка без анимации — на случай, если smooth не дотянул.
+      if (stickToBottom) box.scrollTop = box.scrollHeight;
+      programmaticScroll = false;
+    }, 800);
   });
 
   box.addEventListener("scroll", () => {
@@ -9952,6 +9984,26 @@ async function toggleReaction(msgId, emoji) {
     renderReactionsUI(msgId);
     await supabase.from("reactions").insert({ message_id: msgId, user_id: currentUser.id, emoji });
   }
+  // 🔴 Если сообщение последнее и мы прилипли ко дну — реакция добавила
+  // строку высотой ~24px, страница «поднялась». Догоняем вниз.
+  ensureBottomAfterHeightChange(msgId);
+}
+
+function ensureBottomAfterHeightChange(msgId) {
+  const box = document.getElementById("messages");
+  if (!box) return;
+  const el = box.querySelector(`[data-id="${msgId}"]`);
+  if (!el) return;
+  // Учитываем .empty и «пустышки» — считаем последним тот, после
+  // которого в контейнере больше нет .msg/.msg-system.
+  const all = box.querySelectorAll(".msg, .msg-system");
+  const last = all.length ? all[all.length - 1] : null;
+  const isLast = last === el;
+  if (!isLast || !stickToBottom) return;
+  // Реакция вставляется сразу, но высота пересчитывается на следующем кадре.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => scrollMessagesToBottomNow(box));
+  });
 }
 
 // ======================================================
