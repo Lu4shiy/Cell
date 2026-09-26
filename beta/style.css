@@ -3605,6 +3605,7 @@ button:not(:disabled):active { transform: scale(0.97); }
 .cell-icon[data-icon="attach"]       { --icon: url("https://i.ibb.co/WWKScFby/icons8-attach-100.png"); }
 .cell-icon[data-icon="happy"]        { --icon: url("https://i.ibb.co/MyFyBjCp/icons8-happy-100.png"); }
 .cell-icon[data-icon="sent"]         { --icon: url("https://i.ibb.co/2YLJqjGy/icons8-sent-100.png"); }
+.cell-icon[data-icon="microphone"]   { --icon: url("https://i.ibb.co/Y48CfW0F/icons8-microphone-100.png"); }
 .cell-icon[data-icon="addFile"]      { --icon: url("https://i.ibb.co/4yWy9LL/icons8-add-file-100.png"); }
 .cell-icon[data-icon="checkboxOff"]  { --icon: url("https://i.ibb.co/GfgpKzW2/icons8-unchecked-checkbox-100.png"); }
 .cell-icon[data-icon="checkboxOn"]   { --icon: url("https://i.ibb.co/VdVLWCy/icons8-checked-checkbox-100.png"); }
@@ -5607,4 +5608,109 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 .market-grid .market-card {
   content-visibility: auto;
   contain-intrinsic-size: 180px 260px;
+}
+
+/* ====================================================== */
+/* ГОЛОСОВЫЕ СООБЩЕНИЯ                                     */
+/* ====================================================== */
+
+.voice-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-sub);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+  padding: 0;
+}
+.voice-btn:hover { background: var(--bg-hover); color: var(--accent); }
+
+.voice-recording-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--bg-side);
+  border-top: 1px solid var(--border);
+  min-height: 68px;
+}
+
+.voice-rec-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: voicePulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes voicePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.85); }
+}
+
+.voice-timer {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 48px;
+  flex-shrink: 0;
+}
+
+.voice-rec-hint {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.voice-cancel-btn,
+.voice-send-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 0.15s, transform 0.1s, filter 0.15s;
+}
+.voice-cancel-btn { background: transparent; color: var(--text-sub); }
+.voice-cancel-btn:hover { background: var(--bg-hover); color: var(--danger); }
+.voice-send-btn {
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  color: #15110d;
+}
+.voice-send-btn:hover { filter: brightness(1.08); }
+.voice-cancel-btn:active, .voice-send-btn:active { transform: scale(0.92); }
+.voice-cancel-btn .cell-icon, .voice-send-btn .cell-icon {
+  background-color: currentColor;
+}
+
+.msg-attachment-voice {
+  width: 260px;
+  max-width: 100%;
+  height: 42px;
+  border-radius: 12px;
+  display: block;
+  outline: none;
+}
+
+@media (max-width: 768px) and (pointer: coarse) {
+  .voice-btn { width: 40px; height: 40px; }
+  .voice-recording-bar {
+    padding: 10px 12px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0));
+    min-height: 60px;
+  }
 }

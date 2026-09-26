@@ -50,23 +50,35 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 supabase.auth.onAuthStateChange((event, session) => {
   if (event === "PASSWORD_RECOVERY") {
     inRecoveryFlow = true;
-    // Скрываем приложение и показываем экран входа как фон
     const appEl = document.getElementById("app-screen");
     const authEl = document.getElementById("auth-screen");
     if (appEl) appEl.classList.add("hidden");
     if (authEl) authEl.classList.remove("hidden");
-    // Поверх всего — форма нового пароля
     const overlay = document.getElementById("reset-new-overlay");
     if (overlay) overlay.classList.remove("hidden");
     return;
   }
 
-  // 🔴 Backup для локального (anonymous) аккаунта: сохраняем актуальные
-  // токены в cell_local_session при КАЖДОМ событии. Это позволяет
-  // восстановить сессию даже если основной ключ AUTH_STORAGE_KEY был
-  // потерян (перезагрузка устройства, чистка storage Chrome, смена PWA/браузер).
   if (!session || !session.user) return;
   const u = session.user;
+
+  // 🔴 УНИВЕРСАЛЬНЫЙ бэкап: сохраняем токены при КАЖДОМ событии — для
+  // любых аккаунтов. Если AUTH_STORAGE_KEY когда-нибудь потеряется
+  // (чистка Chrome, смена PWA ↔ браузер, баг с getSession), сессия
+  // восстановится из этого бэкапа. Он не чистится, пока пользователь
+  // не нажмёт «Выйти».
+  if (session.access_token && session.refresh_token) {
+    try {
+      localStorage.setItem("cell_session_backup", JSON.stringify({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        user_id: u.id,
+        saved_at: Date.now(),
+      }));
+    } catch (e) { /* silent */ }
+  }
+
+  // Отдельно — backup локальной сессии (для логики «Войти локально»).
   const isLocal = u.is_anonymous === true ||
                   !u.email ||
                   (u.app_metadata && u.app_metadata.provider === "anonymous");
@@ -118,6 +130,7 @@ const ICONS = {
   attach:          "https://i.ibb.co/WWKScFby/icons8-attach-100.png",
   happy:           "https://i.ibb.co/MyFyBjCp/icons8-happy-100.png",
   sent:            "https://i.ibb.co/2YLJqjGy/icons8-sent-100.png",
+  microphone:      "https://i.ibb.co/Y48CfW0F/icons8-microphone-100.png",
   addFile:         "https://i.ibb.co/4yWy9LL/icons8-add-file-100.png",
   checkboxOff:     "https://i.ibb.co/GfgpKzW2/icons8-unchecked-checkbox-100.png",
   checkboxOn:      "https://i.ibb.co/VdVLWCy/icons8-checked-checkbox-100.png",
@@ -463,7 +476,13 @@ const I18N = {
     "composer.placeholder": "Написать сообщение...",
     "composer.attach": "Прикрепить файл",
     "composer.emoji": "Эмодзи",
+    "composer.voice": "Голосовое сообщение",
     "composer.send": "Отправить",
+    "voice.recording": "Запись…",
+    "voice.unsupportedTitle": "Не поддерживается",
+    "voice.unsupportedText": "Ваш браузер не поддерживает запись голосовых сообщений.",
+    "voice.micDeniedTitle": "Нет доступа к микрофону",
+    "voice.micDeniedText": "Разрешите доступ к микрофону в настройках браузера и попробуйте снова.",
 
     // ---- Канал ----
     "channel.action.subscribe": "Подписаться",
@@ -710,6 +729,7 @@ const I18N = {
     "preview.gift": "🎁 Подарок",
     "preview.photo": "📷 Фото",
     "preview.video": "🎥 Видео",
+    "preview.voice": "🎤 Голосовое",
     "preview.file": "📎 Файл",
     "preview.you": "Вы: ",
     "preview.noMessages": "Нет сообщений",
@@ -1304,7 +1324,13 @@ const I18N = {
     "composer.placeholder": "Write a message...",
     "composer.attach": "Attach file",
     "composer.emoji": "Emoji",
+    "composer.voice": "Voice message",
     "composer.send": "Send",
+    "voice.recording": "Recording…",
+    "voice.unsupportedTitle": "Not supported",
+    "voice.unsupportedText": "Your browser doesn't support voice message recording.",
+    "voice.micDeniedTitle": "Microphone access denied",
+    "voice.micDeniedText": "Allow microphone access in your browser settings and try again.",
 
     // ---- Channel ----
     "channel.action.subscribe": "Subscribe",
@@ -1551,6 +1577,7 @@ const I18N = {
     "preview.gift": "🎁 Gift",
     "preview.photo": "📷 Photo",
     "preview.video": "🎥 Video",
+    "preview.voice": "🎤 Voice",
     "preview.file": "📎 File",
     "preview.you": "You: ",
     "preview.noMessages": "No messages",
@@ -2003,6 +2030,7 @@ function previewTextForMsg(m, isMine) {
   if (m.message_type === "attachment") {
     if (m.file_kind === "image") return t("preview.photo");
     if (m.file_kind === "video") return t("preview.video");
+    if (m.file_kind === "voice") return t("preview.voice");
     return t("preview.file");
   }
   if (m.encrypted) return t("preview.encrypted");
@@ -2227,8 +2255,6 @@ loginForm.addEventListener("submit", async (e) => {
 });
 
 document.getElementById("logout-btn").addEventListener("click", async () => {
-  // 🔴 В режиме «Бабушка» выход заблокирован — кнопка обычно скрыта,
-  // но на всякий случай блокируем и здесь.
   if (isGrandmaMode()) {
     await showAlertDialog(
       t("grandma.logoutBlocked.title"),
@@ -2237,9 +2263,14 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
     return;
   }
 
-  // 🔴 Помечаем ЯВНЫЙ выход — чтобы фолбэк автовосстановления
-  // local-сессии не залогинил пользователя обратно после перезагрузки.
   try { localStorage.setItem("cell_logged_out", "1"); } catch (e) {}
+
+  // 🔴 Явный выход — чистим бэкапы, чтобы при перезапуске НЕ залогинило
+  // обратно. Это единственное место, где бэкапы удаляются.
+  try {
+    localStorage.removeItem("cell_session_backup");
+    localStorage.removeItem("cell_local_session");
+  } catch (e) {}
 
   // Локальный (анонимный) аккаунт: НЕ вызываем signOut — он отзывает
   // refresh-токен на сервере (даже со scope:"local"), и вернуться потом
@@ -2609,6 +2640,7 @@ function renderPreviewHtml(text) {
   html = html.replace(/📷/g, iconInline("camera"));
   html = html.replace(/🎥/g, iconInline("camera"));
   html = html.replace(/📎/g, iconInline("attach"));
+  html = html.replace(/🎤/g, iconInline("microphone"));
   html = html.replace(/🔒/g, iconInline("lock"));
   return html;
 }
@@ -2855,6 +2887,11 @@ function resetGiftFilters() {
 // Какой userId сейчас открыт в окне подарков (нужно для перерисовки
 // при изменении чекбоксов фильтра).
 let currentGiftsUserId = null;
+
+// 🔴 Черновик фильтров. Открыли окно → копируем applied → draft. Меняем
+// только draft. Применяем (applied ← draft) — ТОЛЬКО по кнопке «Применить».
+// «Отмена» — draft выбрасывается, applied не тронут.
+let giftFiltersDraft = null;
 let lastSeenInterval = null, otherUserInterval = null, statusPollInterval = null, deliveredInterval = null;
 // Throttle для last_seen — не чаще одного раза в 25 секунд.
 // Порог «в сети» у собеседника — 45 сек (см. isUserOnline), так что 25 сек безопасно.
@@ -4028,7 +4065,7 @@ async function initApp() {
   setupMobileBackButton();
   setupE2eeUI();
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
-  setupAttachments(); setupMediaViewer(); setupEmojiPicker(); setupAboutDialog();
+  setupAttachments(); setupVoiceMessages(); setupMediaViewer(); setupEmojiPicker(); setupAboutDialog();
   setupWheel(); setupCommandPalette(); setupMiniProfile(); setupDateFloat();
   setupSettings(); applyScrollMode();
   setupChatSearch(); setupScrollBottomButton();
@@ -5362,6 +5399,7 @@ async function showMessageNotification(m) {
   else if (m.message_type === "attachment") {
     if (m.file_kind === "image") body = t("preview.photo");
     else if (m.file_kind === "video") body = t("preview.video");
+    else if (m.file_kind === "voice") body = t("preview.voice");
     else body = t("preview.file");
   } else if (m.encrypted) {
     body = t("preview.encrypted");
@@ -8837,12 +8875,161 @@ function setupAttachments() {
     const files = [...e.target.files];
     e.target.value = "";
     if (!files.length) return;
-    // Открываем диалог предпросмотра — отправка пойдёт оттуда
     openAttachmentDialog(files);
   });
 
-  // Инициализируем диалог предпросмотра
   setupAttachPreviewDialog();
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ГОЛОСОВЫЕ СООБЩЕНИЯ
+// ─────────────────────────────────────────────────────────────────
+function setupVoiceMessages() {
+  const micBtn = document.getElementById("voice-btn");
+  const cancelBtn = document.getElementById("voice-cancel-btn");
+  const sendBtn = document.getElementById("voice-send-btn");
+  if (micBtn) micBtn.addEventListener("click", () => startVoiceRecording());
+  if (cancelBtn) cancelBtn.addEventListener("click", () => cancelVoiceRecording());
+  if (sendBtn) sendBtn.addEventListener("click", () => stopAndSendVoice());
+}
+
+async function startVoiceRecording() {
+  if (voiceRecorder) return;
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia
+      || typeof MediaRecorder === "undefined") {
+    await showAlertDialog(t("voice.unsupportedTitle"), t("voice.unsupportedText"));
+    return;
+  }
+
+  try {
+    voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    await showAlertDialog(t("voice.micDeniedTitle"), t("voice.micDeniedText"));
+    return;
+  }
+
+  voiceChunks = [];
+  try {
+    let mime = "audio/webm";
+    if (MediaRecorder.isTypeSupported) {
+      if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) mime = "audio/webm;codecs=opus";
+      else if (MediaRecorder.isTypeSupported("audio/mp4")) mime = "audio/mp4";
+      else if (MediaRecorder.isTypeSupported("audio/ogg")) mime = "audio/ogg";
+    }
+    voiceRecorder = new MediaRecorder(voiceStream, { mimeType: mime });
+  } catch (e) {
+    try { voiceRecorder = new MediaRecorder(voiceStream); }
+    catch (e2) {
+      try { voiceStream.getTracks().forEach((x) => x.stop()); } catch (ex) {}
+      voiceStream = null;
+      await showAlertDialog(t("voice.unsupportedTitle"), t("voice.unsupportedText"));
+      return;
+    }
+  }
+
+  voiceRecorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) voiceChunks.push(e.data);
+  };
+  try { voiceRecorder.start(); }
+  catch (e) {
+    try { voiceStream.getTracks().forEach((x) => x.stop()); } catch (ex) {}
+    voiceStream = null;
+    voiceRecorder = null;
+    return;
+  }
+
+  voiceStartTime = Date.now();
+  const composer = document.getElementById("composer");
+  const bar = document.getElementById("voice-recording-bar");
+  if (composer) composer.classList.add("hidden");
+  if (bar) bar.classList.remove("hidden");
+
+  voiceTimerInterval = setInterval(updateVoiceTimer, 200);
+  updateVoiceTimer();
+}
+
+function updateVoiceTimer() {
+  const el = document.getElementById("voice-timer");
+  if (!el) return;
+  const ms = Date.now() - voiceStartTime;
+  const sec = Math.floor(ms / 1000);
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  el.textContent = m + ":" + String(s).padStart(2, "0");
+  if (ms >= VOICE_MAX_MS) stopAndSendVoice();
+}
+
+async function stopAndSendVoice() {
+  if (!voiceRecorder) return;
+  const duration = Date.now() - voiceStartTime;
+  if (voiceTimerInterval) { clearInterval(voiceTimerInterval); voiceTimerInterval = null; }
+
+  const done = new Promise((resolve) => {
+    try { voiceRecorder.addEventListener("stop", () => resolve(), { once: true }); }
+    catch (e) { resolve(); }
+  });
+  try { voiceRecorder.stop(); } catch (e) {}
+  await done;
+
+  try { voiceStream && voiceStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+  voiceStream = null;
+
+  const composer = document.getElementById("composer");
+  const bar = document.getElementById("voice-recording-bar");
+  if (bar) bar.classList.add("hidden");
+  if (composer) composer.classList.remove("hidden");
+
+  if (duration < VOICE_MIN_MS || !voiceChunks.length) {
+    voiceRecorder = null;
+    voiceChunks = [];
+    return;
+  }
+
+  const blob = new Blob(voiceChunks, { type: voiceChunks[0].type || "audio/webm" });
+  voiceRecorder = null;
+  voiceChunks = [];
+
+  try { await sendVoiceBlob(blob, duration); }
+  catch (e) { console.warn("sendVoiceBlob:", e); }
+}
+
+function cancelVoiceRecording() {
+  if (!voiceRecorder) return;
+  if (voiceTimerInterval) { clearInterval(voiceTimerInterval); voiceTimerInterval = null; }
+  try { voiceRecorder.stop(); } catch (e) {}
+  try { voiceStream && voiceStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+  voiceStream = null;
+  voiceRecorder = null;
+  voiceChunks = [];
+  const bar = document.getElementById("voice-recording-bar");
+  const composer = document.getElementById("composer");
+  if (bar) bar.classList.add("hidden");
+  if (composer) composer.classList.remove("hidden");
+}
+
+async function sendVoiceBlob(blob, durationMs) {
+  const mime = blob.type || "audio/webm";
+  let ext = "webm";
+  if (mime.includes("mp4")) ext = "m4a";
+  else if (mime.includes("ogg")) ext = "ogg";
+  else if (mime.includes("webm")) ext = "webm";
+  const sec = Math.max(1, Math.round(durationMs / 1000));
+  const file = new File([blob], `voice-${sec}s.${ext}`, { type: mime });
+
+  // Если чата ещё нет — создаём
+  if (!currentChatId && currentOtherUser) {
+    const chatId = await createChatWith(currentOtherUser.id);
+    if (!chatId) return;
+    currentChatId = chatId;
+    pendingOtherUser = null;
+    document.getElementById("messages").innerHTML = "";
+    subscribeToChat(chatId);
+    subscribeToReactions();
+  }
+  if (!currentChatId) return;
+
+  await uploadAndSendAttachment(file, currentChatId, "", false, "voice");
 }
 
 function setupAboutDialog() {
@@ -9469,6 +9656,8 @@ async function lazyLoadEncryptedAttachment(placeholderId, msg) {
     html = `<img src="${escapeHtml(displayUrl)}" class="msg-attachment-image" alt="" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="image" data-att-msg-id="${msg.id}">`;
   } else if (kind === "video") {
     html = `<video src="${escapeHtml(displayUrl)}" class="msg-attachment-video" controls preload="metadata" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="video" data-att-msg-id="${msg.id}"></video>`;
+  } else if (kind === "voice") {
+    html = `<audio class="msg-attachment-voice" controls preload="metadata" src="${escapeHtml(displayUrl)}" data-media-url="${escapeHtml(displayUrl)}" data-att-msg-id="${msg.id}"></audio>`;
   } else {
     html = `<a class="msg-attachment-file" href="${escapeHtml(displayUrl)}" target="_blank" rel="noopener" download="${escapeHtml(name)}">
       <span class="maf-icon"><span class="cell-icon" data-icon="attach"></span></span>
@@ -9514,6 +9703,9 @@ async function buildAttachmentHtml(msg) {
   }
   if (kind === "video") {
     return `<video src="${escapeHtml(displayUrl)}" class="msg-attachment-video" controls preload="metadata" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="video" data-att-msg-id="${msg.id}"></video>`;
+  }
+  if (kind === "voice") {
+    return `<audio class="msg-attachment-voice" controls preload="metadata" src="${escapeHtml(displayUrl)}" data-media-url="${escapeHtml(displayUrl)}" data-att-msg-id="${msg.id}"></audio>`;
   }
   return `<a class="msg-attachment-file" href="${escapeHtml(displayUrl)}" target="_blank" rel="noopener" download="${escapeHtml(name)}">
     <span class="maf-icon"><span class="cell-icon" data-icon="attach"></span></span>
@@ -9604,9 +9796,9 @@ async function handleAttachments(files, caption, asFile) {
   }
 }
 
-async function uploadAndSendAttachment(file, chatId, caption, asFile) {
+async function uploadAndSendAttachment(file, chatId, caption, asFile, forceKind) {
   const detected = detectFileKind(file);
-  const kind = asFile ? "file" : detected;
+  const kind = forceKind || (asFile ? "file" : detected);
   caption = caption || "";
   const rawExt = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
   const ext = rawExt.slice(0, 8) || "bin";
@@ -14384,25 +14576,32 @@ function openGiftFilterDialog(userId) {
   const overlay = document.getElementById("gift-filter-overlay");
   if (!overlay) return;
 
-  // Предзаполняем чекбоксы актуальным состоянием
+  // 🔴 Копируем applied в draft. Всё, что пользователь меняет в окне,
+  // пишется только в draft. Применение — по кнопке «Применить».
+  giftFiltersDraft = {
+    rarities: new Set(giftFilters.rarities),
+    pinnedStatus: new Set(giftFilters.pinnedStatus),
+    profileStatus: new Set(giftFilters.profileStatus),
+    sort: giftFilters.sort,
+  };
+
   overlay.querySelectorAll("[data-gift-filter-check]").forEach((cb) => {
     const key = cb.dataset.giftFilterCheck;
     let isOn = false;
     if (key === "common" || key === "rare" || key === "epic") {
-      isOn = giftFilters.rarities.has(key);
+      isOn = giftFiltersDraft.rarities.has(key);
     } else if (key === "pinned" || key === "unpinned") {
-      isOn = giftFilters.pinnedStatus.has(key);
+      isOn = giftFiltersDraft.pinnedStatus.has(key);
     } else if (key === "inProfile" || key === "notInProfile") {
-      isOn = giftFilters.profileStatus.has(key);
+      isOn = giftFiltersDraft.profileStatus.has(key);
     }
     cb.checked = isOn;
   });
 
-  // 🔴 Подсветка активной кнопки сортировки.
   const sortToggle = document.getElementById("gift-filter-sort");
   if (sortToggle) {
     sortToggle.querySelectorAll("button[data-sort]").forEach((b) => {
-      b.classList.toggle("active", b.dataset.sort === giftFilters.sort);
+      b.classList.toggle("active", b.dataset.sort === giftFiltersDraft.sort);
     });
   }
 
@@ -14421,71 +14620,75 @@ function setupGiftFilterUI() {
   if (!overlay || overlay.__bound) return;
   overlay.__bound = true;
 
-  // Меняем состояние сразу при переключении чекбокса и перерисовываем
-  // список подарков в фоне. Окно фильтра остаётся открытым, чтобы можно
-  // было щёлкать сразу несколько чекбоксов.
+  // 🔴 Изменения пишутся ТОЛЬКО в draft. Список подарков НЕ перерисовывается,
+  // пока пользователь не нажмёт «Применить».
   overlay.addEventListener("change", (e) => {
+    if (!giftFiltersDraft) return;
     const cb = e.target.closest("[data-gift-filter-check]");
     if (!cb) return;
     const key = cb.dataset.giftFilterCheck;
     const on = cb.checked;
     if (key === "common" || key === "rare" || key === "epic") {
-      if (on) giftFilters.rarities.add(key);
-      else giftFilters.rarities.delete(key);
+      if (on) giftFiltersDraft.rarities.add(key);
+      else giftFiltersDraft.rarities.delete(key);
     } else if (key === "pinned" || key === "unpinned") {
-      if (on) giftFilters.pinnedStatus.add(key);
-      else giftFilters.pinnedStatus.delete(key);
+      if (on) giftFiltersDraft.pinnedStatus.add(key);
+      else giftFiltersDraft.pinnedStatus.delete(key);
     } else if (key === "inProfile" || key === "notInProfile") {
-      if (on) giftFilters.profileStatus.add(key);
-      else giftFilters.profileStatus.delete(key);
-    }
-    const giftsOverlay = document.getElementById("gifts-overlay");
-    if (giftsOverlay && !giftsOverlay.classList.contains("hidden")) {
-      if (typeof currentGiftsUserId !== "undefined" && currentGiftsUserId) {
-        renderGiftsMain(currentGiftsUserId, { preserveScroll: true });
-      }
+      if (on) giftFiltersDraft.profileStatus.add(key);
+      else giftFiltersDraft.profileStatus.delete(key);
     }
   });
 
-  // 🔴 Клик по кнопке сортировки: обновляем giftFilters.sort и
-  // перерисовываем список сразу.
+  // Сортировка — тоже в draft.
   const sortToggle = document.getElementById("gift-filter-sort");
   if (sortToggle) {
     sortToggle.addEventListener("click", (e) => {
+      if (!giftFiltersDraft) return;
       const b = e.target.closest("button[data-sort]");
       if (!b) return;
-      giftFilters.sort = b.dataset.sort;
+      giftFiltersDraft.sort = b.dataset.sort;
       sortToggle.querySelectorAll("button[data-sort]").forEach((x) => {
-        x.classList.toggle("active", x.dataset.sort === giftFilters.sort);
+        x.classList.toggle("active", x.dataset.sort === giftFiltersDraft.sort);
       });
-      const giftsOverlay = document.getElementById("gifts-overlay");
-      if (giftsOverlay && !giftsOverlay.classList.contains("hidden")) {
-        if (typeof currentGiftsUserId !== "undefined" && currentGiftsUserId) {
-          renderGiftsMain(currentGiftsUserId, { preserveScroll: true });
-        }
-      }
     });
   }
 
+  // 🔴 «Применить» — единственное место, где draft становится applied.
   document.getElementById("gift-filter-apply").addEventListener("click", () => {
+    if (giftFiltersDraft) {
+      giftFilters.rarities = new Set(giftFiltersDraft.rarities);
+      giftFilters.pinnedStatus = new Set(giftFiltersDraft.pinnedStatus);
+      giftFilters.profileStatus = new Set(giftFiltersDraft.profileStatus);
+      giftFilters.sort = giftFiltersDraft.sort;
+    }
+    giftFiltersDraft = null;
     closeGiftFilterDialog();
+    if (typeof currentGiftsUserId !== "undefined" && currentGiftsUserId) {
+      renderGiftsMain(currentGiftsUserId, { preserveScroll: true });
+    }
   });
 
+  // «Отмена» — просто выбрасываем draft, applied не трогаем.
   document.getElementById("gift-filter-cancel").addEventListener("click", () => {
+    giftFiltersDraft = null;
     closeGiftFilterDialog();
   });
 
+  // «Сбросить» — сбрасывает ЧЕРНОВИК (не applied). Пользователь ещё
+  // должен нажать «Применить», чтобы это вступило в силу.
   document.getElementById("gift-filter-reset").addEventListener("click", () => {
-    resetGiftFilters();
+    if (!giftFiltersDraft) return;
+    giftFiltersDraft.rarities = new Set(["common", "rare", "epic"]);
+    giftFiltersDraft.pinnedStatus = new Set(["pinned", "unpinned"]);
+    giftFiltersDraft.profileStatus = new Set(["inProfile", "notInProfile"]);
+    giftFiltersDraft.sort = "new-first";
     overlay.querySelectorAll("[data-gift-filter-check]").forEach((cb) => { cb.checked = true; });
     const sortToggle2 = document.getElementById("gift-filter-sort");
     if (sortToggle2) {
       sortToggle2.querySelectorAll("button[data-sort]").forEach((x) => {
-        x.classList.toggle("active", x.dataset.sort === giftFilters.sort);
+        x.classList.toggle("active", x.dataset.sort === "new-first");
       });
-    }
-    if (typeof currentGiftsUserId !== "undefined" && currentGiftsUserId) {
-      renderGiftsMain(currentGiftsUserId, { preserveScroll: true });
     }
   });
 }
@@ -17597,6 +17800,15 @@ function applyScrollMode() {
 
 let attachPendingFiles = [];
 
+// ── Голосовые: состояние записи ──
+let voiceRecorder = null;
+let voiceChunks = [];
+let voiceStartTime = 0;
+let voiceTimerInterval = null;
+let voiceStream = null;
+const VOICE_MAX_MS = 3 * 60 * 1000;
+const VOICE_MIN_MS = 700;
+
 function openAttachmentDialog(files) {
   attachPendingFiles = [...files];
   document.getElementById("attach-caption").value = "";
@@ -18405,33 +18617,33 @@ async function findAnyStoredSession() {
 }
 
 (async () => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session) {
-    // Возврат по ссылке восстановления — сразу показываем форму нового пароля,
-    // минуя showApp() (иначе на фоне мелькнут чаты).
-    if (inRecoveryFlow) {
-      const appEl = document.getElementById("app-screen");
-      const authEl = document.getElementById("auth-screen");
-      if (appEl) appEl.classList.add("hidden");
-      if (authEl) authEl.classList.remove("hidden");
-      const overlay = document.getElementById("reset-new-overlay");
-      if (overlay) overlay.classList.remove("hidden");
+  // 🔴 Пока идёт проверка сессии — НИЧЕГО не мигает: auth-screen скрыт
+  // в HTML. Показываем его ТОЛЬКО если не найдём ни одну сессию.
+  let appShown = false;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      if (inRecoveryFlow) {
+        const appEl = document.getElementById("app-screen");
+        const authEl = document.getElementById("auth-screen");
+        if (appEl) appEl.classList.add("hidden");
+        if (authEl) authEl.classList.remove("hidden");
+        const overlay = document.getElementById("reset-new-overlay");
+        if (overlay) overlay.classList.remove("hidden");
+        return;
+      }
+      showApp(session.user);
+      appShown = true;
+      handleOpenChatHash();
+      handleGiftHash();
       return;
     }
-    showApp(session.user);
-    // Если в URL есть #open-chat=<id> (клик по push-уведомлению на закрытом
-    // приложении) — открываем нужный чат после загрузки.
-    handleOpenChatHash();
-    // Если в URL есть #gift=<Slug>-<Serial> — открываем карточку подарка.
-    handleGiftHash();
-    return;
-  }
 
-  // 🔴 Фолбэк: основной сессии в AUTH_STORAGE_KEY нет — проверяем
-  // ВСЕ возможные места, где могла сохраниться сессия.
-  try {
     // Если пользователь ЯВНО вышел — не восстанавливаем автоматически.
-    if (localStorage.getItem("cell_logged_out") === "1") return;
+    if (localStorage.getItem("cell_logged_out") === "1") {
+      showAuth();
+      return;
+    }
 
     // 1) Может, сессия в другом auth-ключе (PWA vs браузер)?
     const altSession = await findAnyStoredSession();
@@ -18442,37 +18654,67 @@ async function findAnyStoredSession() {
       });
       if (!error && data && data.session) {
         showApp(data.session.user);
+        appShown = true;
         handleOpenChatHash();
         handleGiftHash();
         return;
       }
     }
 
-    // 2) Иначе — backup локальной сессии.
-    const raw = localStorage.getItem("cell_local_session");
-    if (!raw) return;
-    const saved = JSON.parse(raw);
-    if (!saved || !saved.access_token || !saved.refresh_token) return;
-    const { data, error } = await supabase.auth.setSession({
-      access_token: saved.access_token,
-      refresh_token: saved.refresh_token,
-    });
-    if (!error && data && data.session) {
-      // Обновляем backup свежими токенами (setSession мог их ротировать)
-      try {
-        localStorage.setItem("cell_local_session", JSON.stringify({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-        }));
-      } catch (e) { /* silent */ }
-      showApp(data.session.user);
-      handleOpenChatHash();
-      handleGiftHash();
-      return;
-    }
-    // Токены отозваны/протухли — чистим backup, чтобы не пытаться снова
-    localStorage.removeItem("cell_local_session");
+    // 2) Backup универсальной сессии (см. пункт 5).
+    try {
+      const raw = localStorage.getItem("cell_session_backup");
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved && saved.access_token && saved.refresh_token) {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: saved.access_token,
+            refresh_token: saved.refresh_token,
+          });
+          if (!error && data && data.session) {
+            showApp(data.session.user);
+            appShown = true;
+            handleOpenChatHash();
+            handleGiftHash();
+            return;
+          } else if (error) {
+            localStorage.removeItem("cell_session_backup");
+          }
+        }
+      }
+    } catch (e) { /* silent */ }
+
+    // 3) Backup локальной сессии.
+    try {
+      const raw = localStorage.getItem("cell_local_session");
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved && saved.access_token && saved.refresh_token) {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: saved.access_token,
+            refresh_token: saved.refresh_token,
+          });
+          if (!error && data && data.session) {
+            try {
+              localStorage.setItem("cell_local_session", JSON.stringify({
+                access_token: data.session.access_token,
+                refresh_token: data.session.refresh_token,
+              }));
+            } catch (e) { /* silent */ }
+            showApp(data.session.user);
+            appShown = true;
+            handleOpenChatHash();
+            handleGiftHash();
+            return;
+          }
+          localStorage.removeItem("cell_local_session");
+        }
+      }
+    } catch (e) { /* silent */ }
   } catch (e) { /* silent */ }
+
+  // 🔴 Ничего не восстановили — показываем экран входа.
+  if (!appShown) showAuth();
 })();
 
 // 🔴 Периодическая попытка восстановить локальную сессию.

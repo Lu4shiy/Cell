@@ -47,7 +47,7 @@
 </head>
 <body>
 
-  <div id="auth-screen" class="screen">
+  <div id="auth-screen" class="screen hidden">
     <div class="auth-card">
       <div class="logo-wrap">
         <svg class="logo-cell" viewBox="0 0 100 100" width="72" height="72" aria-hidden="true">
@@ -302,8 +302,21 @@
           <input type="file" id="attach-input" multiple hidden>
           <div id="message-input" class="message-input" contenteditable="true" data-placeholder="Написать сообщение..." data-i18n-data-placeholder="composer.placeholder" role="textbox" spellcheck="false"></div>
           <button type="button" id="emoji-btn" class="emoji-btn" title="Эмодзи" data-i18n-title="composer.emoji"><span class="cell-icon" data-icon="happy"></span></button>
+          <button type="button" id="voice-btn" class="voice-btn" title="Голосовое сообщение" data-i18n-title="composer.voice"><span class="cell-icon" data-icon="microphone"></span></button>
           <button type="submit" class="send-btn" id="send-btn" title="Отправить" data-i18n-title="composer.send"><span class="cell-icon" data-icon="sent"></span></button>
         </form>
+
+        <div id="voice-recording-bar" class="voice-recording-bar hidden">
+          <button type="button" id="voice-cancel-btn" class="voice-cancel-btn" title="Отмена" data-i18n-title="dialog.cancel">
+            <span class="cell-icon" data-icon="cancel"></span>
+          </button>
+          <span class="voice-rec-dot"></span>
+          <span id="voice-timer" class="voice-timer">0:00</span>
+          <span class="voice-rec-hint" data-i18n="voice.recording">Запись…</span>
+          <button type="button" id="voice-send-btn" class="voice-send-btn" title="Отправить" data-i18n-title="composer.send">
+            <span class="cell-icon" data-icon="sent"></span>
+          </button>
+        </div>
 
         <div id="emoji-picker" class="emoji-picker hidden">
           <div class="emoji-picker-tabs" id="emoji-picker-tabs"></div>
@@ -1272,6 +1285,28 @@
           updateBanner.classList.add('hidden');
         }
 
+        // 🔴 В режиме «Бабушка» вместо плашки делаем автоматическую
+        // перезагрузку: пользователь не должен ничего нажимать.
+        function maybeAutoReloadInGrandmaMode() {
+          let grandma = false;
+          try { grandma = localStorage.getItem("cell_grandma_mode") === "1"; } catch (e) {}
+          if (!grandma) return false;
+
+          reloadTriggered = true;
+          hideUpdateBanner();
+          navigator.serviceWorker.getRegistration()
+            .then((reg) => {
+              if (reg && reg.waiting) {
+                reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                setTimeout(() => { if (reloadTriggered) hardReload(); }, 2500);
+              } else {
+                hardReload();
+              }
+            })
+            .catch(() => hardReload());
+          return true;
+        }
+
         if (closeBtn) closeBtn.addEventListener('click', hideUpdateBanner);
 
         // 🔴 Cache-busting перезагрузка: добавляем ?_r=<timestamp> —
@@ -1327,18 +1362,20 @@
         // не появится, пока не почистишь кэш руками.
         .register('./sw.js', { scope: './', updateViaCache: 'none' })
         .then((reg) => {
-          // 🔴 Баннер показываем только если SW уже был активен раньше —
-          // иначе это первая установка, обновлять нечего.
-          if (reg.waiting && swEverActive()) showUpdateBanner();
+          // 🔴 Баннер (или авто-reload в «Бабушке») — только если SW уже
+          // был активен раньше. Иначе это первая установка.
+          if (reg.waiting && swEverActive()) {
+            if (!maybeAutoReloadInGrandmaMode()) showUpdateBanner();
+          }
 
           reg.addEventListener('updatefound', () => {
             const newWorker = reg.installing;
             if (!newWorker) return;
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed') {
-                // Новый SW скачан и ждёт активации. Показываем баннер
-                // только если это реально обновление, а не первая установка.
-                if (swEverActive()) showUpdateBanner();
+                if (swEverActive()) {
+                  if (!maybeAutoReloadInGrandmaMode()) showUpdateBanner();
+                }
               }
             });
           });
@@ -1355,7 +1392,9 @@
           // — при pageshow (iOS PWA «раскрывается» из фона именно так).
           const checkUpdate = () => {
             reg.update().catch(() => {});
-            if (reg.waiting && swEverActive()) showUpdateBanner();
+            if (reg.waiting && swEverActive()) {
+              if (!maybeAutoReloadInGrandmaMode()) showUpdateBanner();
+            }
           };
           checkUpdate();
           setInterval(checkUpdate, 60 * 1000);
