@@ -131,6 +131,14 @@ const ICONS = {
   happy:           "https://i.ibb.co/MyFyBjCp/icons8-happy-100.png",
   sent:            "https://i.ibb.co/2YLJqjGy/icons8-sent-100.png",
   microphone:      "https://i.ibb.co/Y48CfW0F/icons8-microphone-100.png",
+  voicePlay:       "https://i.ibb.co/mPrq7J1/icons8-play-100.png",
+  voicePause:      "https://i.ibb.co/zhcWrv2w/icons8-pause-100.png",
+  voiceVol1:       "https://i.ibb.co/S7nPCmQQ/icons8-low-volume-100.png",
+  voiceVol2:       "https://i.ibb.co/KgyV84W/icons8-voice-100.png",
+  voiceVol3:       "https://i.ibb.co/gFjFStTZ/icons8-audio-100.png",
+  voiceVolMute:    "https://i.ibb.co/RkjDc0sc/icons8-no-audio-100.png",
+  voiceDownload:   "https://i.ibb.co/cSrXqtSp/icons8-download-24.png",
+  voiceSpeed:      "https://i.ibb.co/mVhxXbgV/icons8-speed-100.png",
   addFile:         "https://i.ibb.co/4yWy9LL/icons8-add-file-100.png",
   checkboxOff:     "https://i.ibb.co/GfgpKzW2/icons8-unchecked-checkbox-100.png",
   checkboxOn:      "https://i.ibb.co/VdVLWCy/icons8-checked-checkbox-100.png",
@@ -7400,6 +7408,8 @@ async function loadMessages(chatId, mySeq) {
   box.appendChild(frag);
   // Реакции рисуем после вставки в DOM — это быстро (уже готово из кэша).
   visible.forEach((m) => renderReactionsUI(m.id));
+  // Подключаем кастомные плееры голосовых (если есть).
+  box.querySelectorAll(".voice-player").forEach(wireVoicePlayer);
   scrollToBottom();
   rerenderPinMarks();
   refreshMessageGroups();
@@ -8891,6 +8901,7 @@ function setupVoiceMessages() {
   if (micBtn) micBtn.addEventListener("click", () => startVoiceRecording());
   if (cancelBtn) cancelBtn.addEventListener("click", () => cancelVoiceRecording());
   if (sendBtn) sendBtn.addEventListener("click", () => stopAndSendVoice());
+  setupVoicePlayersWiring();
 }
 
 async function startVoiceRecording() {
@@ -8902,10 +8913,35 @@ async function startVoiceRecording() {
     return;
   }
 
+  // Проверяем текущий статус разрешения (если браузер умеет).
+  // Если пользователь его ещё не выдавал — getUserMedia сам покажет
+  // системное окно «Разрешить этому сайту доступ к микрофону?».
+  let permState = "prompt";
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const status = await navigator.permissions.query({ name: "microphone" });
+      permState = status.state; // "granted" | "denied" | "prompt"
+    }
+  } catch (e) { /* Permissions API не умеет microphone — пропускаем */ }
+
+  if (permState === "denied") {
+    await showAlertDialog(t("voice.micDeniedTitle"), t("voice.micDeniedText"));
+    return;
+  }
+
   try {
     voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (e) {
-    await showAlertDialog(t("voice.micDeniedTitle"), t("voice.micDeniedText"));
+    const errName = (e && e.name) || "";
+    if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {
+      await showAlertDialog(t("voice.micDeniedTitle"), t("voice.micDeniedText"));
+    } else if (errName === "NotFoundError" || errName === "DevicesNotFoundError") {
+      await showAlertDialog(t("voice.micDeniedTitle"), "Микрофон не найден на этом устройстве.");
+    } else if (errName === "NotReadableError" || errName === "TrackStartError") {
+      await showAlertDialog(t("voice.micDeniedTitle"), "Микрофон занят другим приложением.");
+    } else {
+      await showAlertDialog(t("voice.micDeniedTitle"), (e && e.message) || t("voice.micDeniedText"));
+    }
     return;
   }
 
@@ -8945,6 +8981,7 @@ async function startVoiceRecording() {
   if (composer) composer.classList.add("hidden");
   if (bar) bar.classList.remove("hidden");
 
+  startVoiceLevelMeter();
   voiceTimerInterval = setInterval(updateVoiceTimer, 200);
   updateVoiceTimer();
 }
@@ -8964,6 +9001,7 @@ async function stopAndSendVoice() {
   if (!voiceRecorder) return;
   const duration = Date.now() - voiceStartTime;
   if (voiceTimerInterval) { clearInterval(voiceTimerInterval); voiceTimerInterval = null; }
+  stopVoiceLevelMeter();
 
   const done = new Promise((resolve) => {
     try { voiceRecorder.addEventListener("stop", () => resolve(), { once: true }); }
@@ -8997,6 +9035,7 @@ async function stopAndSendVoice() {
 function cancelVoiceRecording() {
   if (!voiceRecorder) return;
   if (voiceTimerInterval) { clearInterval(voiceTimerInterval); voiceTimerInterval = null; }
+  stopVoiceLevelMeter();
   try { voiceRecorder.stop(); } catch (e) {}
   try { voiceStream && voiceStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
   voiceStream = null;
@@ -9657,7 +9696,7 @@ async function lazyLoadEncryptedAttachment(placeholderId, msg) {
   } else if (kind === "video") {
     html = `<video src="${escapeHtml(displayUrl)}" class="msg-attachment-video" controls preload="metadata" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="video" data-att-msg-id="${msg.id}"></video>`;
   } else if (kind === "voice") {
-    html = `<audio class="msg-attachment-voice" controls preload="metadata" src="${escapeHtml(displayUrl)}" data-media-url="${escapeHtml(displayUrl)}" data-att-msg-id="${msg.id}"></audio>`;
+    html = buildVoicePlayerHtml(msg, displayUrl);
   } else {
     html = `<a class="msg-attachment-file" href="${escapeHtml(displayUrl)}" target="_blank" rel="noopener" download="${escapeHtml(name)}">
       <span class="maf-icon"><span class="cell-icon" data-icon="attach"></span></span>
@@ -9670,6 +9709,168 @@ async function lazyLoadEncryptedAttachment(placeholderId, msg) {
   el.outerHTML = html;
 }
 window.lazyLoadEncryptedAttachment = lazyLoadEncryptedAttachment;
+
+// ─────────────────────────────────────────────────────────
+// КАСТОМНЫЙ ПЛЕЕР ДЛЯ ГОЛОСОВЫХ СООБЩЕНИЙ
+// ─────────────────────────────────────────────────────────
+let voicePlayerAudio = null; // тот, что сейчас играет (общий)
+
+function formatVoiceTime(sec) {
+  if (!sec || !isFinite(sec) || sec < 0) return "0:00";
+  const s = Math.floor(sec);
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+// Детерминированный «псевдо-вейвформ» — высоты столбиков
+// из msg.id, чтобы картинка не менялась при перерисовке.
+function generateVoiceBars(id) {
+  let h = 0;
+  const s = String(id || "");
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  const bars = [];
+  for (let i = 0; i < 32; i++) {
+    h = (h * 1103515245 + 12345) | 0;
+    const v = ((h >>> 16) & 0xff) / 255;
+    bars.push(20 + Math.round(v * 70));
+  }
+  return bars;
+}
+
+function buildVoicePlayerHtml(msg, url) {
+  const bars = generateVoiceBars(msg.id);
+  const barsHtml = bars.map((hh) => `<span class="voice-bar" style="height:${hh}%"></span>`).join("");
+  const fileName = msg.file_name || ("voice-" + Date.now() + ".webm");
+  return `<div class="voice-player" data-att-msg-id="${msg.id}" data-file-name="${escapeHtml(fileName)}">
+    <audio preload="metadata" src="${escapeHtml(url)}"></audio>
+    <button type="button" class="voice-play-btn" aria-label="Play">
+      <span class="cell-icon" data-icon="voicePlay"></span>
+    </button>
+    <div class="voice-wave">${barsHtml}</div>
+    <span class="voice-time">0:00</span>
+    <button type="button" class="voice-speed-btn" title="Скорость">1×</button>
+    <button type="button" class="voice-download-btn" aria-label="Download">
+      <span class="cell-icon" data-icon="voiceDownload"></span>
+    </button>
+  </div>`;
+}
+
+function wireVoicePlayer(player) {
+  if (!player || player.dataset.wired === "1") return;
+  player.dataset.wired = "1";
+
+  const audio = player.querySelector("audio");
+  if (!audio) return;
+  const playBtn = player.querySelector(".voice-play-btn");
+  const speedBtn = player.querySelector(".voice-speed-btn");
+  const downloadBtn = player.querySelector(".voice-download-btn");
+  const waveEl = player.querySelector(".voice-wave");
+  const timeEl = player.querySelector(".voice-time");
+  const bars = [...player.querySelectorAll(".voice-bar")];
+  const fileName = player.dataset.fileName || "voice.webm";
+
+  const speeds = [1, 1.5, 2];
+  let speedIdx = 0;
+
+  function setPlayIcon(name) {
+    const icon = playBtn && playBtn.querySelector(".cell-icon");
+    if (icon) icon.setAttribute("data-icon", name);
+  }
+
+  function updateProgress() {
+    const dur = audio.duration || 0;
+    const cur = audio.currentTime || 0;
+    const ratio = dur ? cur / dur : 0;
+    const activeCount = Math.round(ratio * bars.length);
+    bars.forEach((b, i) => b.classList.toggle("played", i < activeCount));
+    if (timeEl) {
+      timeEl.textContent = dur
+        ? formatVoiceTime(cur) + " / " + formatVoiceTime(dur)
+        : formatVoiceTime(cur);
+    }
+  }
+
+  if (playBtn) playBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (audio.paused) {
+      // Пауза для других плееров
+      if (voicePlayerAudio && voicePlayerAudio !== audio) {
+        try { voicePlayerAudio.pause(); } catch (err) {}
+      }
+      voicePlayerAudio = audio;
+      audio.play().catch(() => { if (timeEl) timeEl.textContent = "Ошибка"; });
+    } else {
+      audio.pause();
+    }
+  });
+
+  if (speedBtn) speedBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    speedIdx = (speedIdx + 1) % speeds.length;
+    audio.playbackRate = speeds[speedIdx];
+    speedBtn.textContent = String(speeds[speedIdx]).replace(".", ",") + "×";
+  });
+
+  if (downloadBtn) downloadBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    try {
+      const res = await fetch(audio.src);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch (err) {} }, 3000);
+    } catch (err) { console.warn("voice download:", err); }
+  });
+
+  if (waveEl) waveEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!audio.duration) return;
+    const rect = waveEl.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    audio.currentTime = audio.duration * ratio;
+  });
+
+  audio.addEventListener("play",    () => setPlayIcon("voicePause"));
+  audio.addEventListener("playing", () => setPlayIcon("voicePause"));
+  audio.addEventListener("pause",   () => setPlayIcon("voicePlay"));
+  audio.addEventListener("ended",   () => {
+    setPlayIcon("voicePlay");
+    audio.currentTime = 0;
+    updateProgress();
+  });
+  audio.addEventListener("timeupdate",      updateProgress);
+  audio.addEventListener("loadedmetadata",  updateProgress);
+  audio.addEventListener("error", () => { if (timeEl) timeEl.textContent = "Ошибка"; });
+
+  updateProgress();
+}
+
+// Автоматическое подключение плееров, попадающих в DOM.
+function setupVoicePlayersWiring() {
+  const box = document.getElementById("messages");
+  if (!box || box.__voiceWiringObserver) return;
+  box.__voiceWiringObserver = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType !== 1) continue;
+        if (node.classList && node.classList.contains("voice-player")) {
+          wireVoicePlayer(node);
+        } else if (node.querySelectorAll) {
+          node.querySelectorAll(".voice-player").forEach(wireVoicePlayer);
+        }
+      }
+    }
+  });
+  box.__voiceWiringObserver.observe(box, { childList: true, subtree: true });
+}
 
 async function buildAttachmentHtml(msg) {
   const url = msg.image_url || "";
@@ -9705,7 +9906,7 @@ async function buildAttachmentHtml(msg) {
     return `<video src="${escapeHtml(displayUrl)}" class="msg-attachment-video" controls preload="metadata" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="video" data-att-msg-id="${msg.id}"></video>`;
   }
   if (kind === "voice") {
-    return `<audio class="msg-attachment-voice" controls preload="metadata" src="${escapeHtml(displayUrl)}" data-media-url="${escapeHtml(displayUrl)}" data-att-msg-id="${msg.id}"></audio>`;
+    return buildVoicePlayerHtml(msg, displayUrl);
   }
   return `<a class="msg-attachment-file" href="${escapeHtml(displayUrl)}" target="_blank" rel="noopener" download="${escapeHtml(name)}">
     <span class="maf-icon"><span class="cell-icon" data-icon="attach"></span></span>
@@ -14465,36 +14666,34 @@ function giftCatalogImage(cat) {
 // при правке менять в ОБОИХ местах, иначе подписи «%» в UI разойдутся
 // с реальным роллом.
 const BACKGROUND_CHANCES = {
-  // Tier 1 — 0.5% (1 фон)
-  "Vantablack": 0.5,
+  // Tier 1 — 1.2% (6 фонов)
+  "Vantablack": 1.2,
+  "Pure Gold": 1.2,
+  "Honey": 1.2,
+  "Absolute Pure": 1.2,
+  "Haki": 1.2,
+  "Blue Moon": 1.2,
 
-  // Tier 2 — 1.1% (5 фонов)
-  "Pure Gold": 1.1,
-  "Honey": 1.1,
-  "Absolute Pure": 1.1,
-  "Haki": 1.1,
-  "Blue Moon": 1.1,
-
-  // Tier 3 — 1.4% (5 фонов)
+  // Tier 2 — 1.4% (5 фонов)
   "Onyx": 1.4,
   "Ice and Fire": 1.4,
   "Abyss": 1.4,
   "Electric Indigo": 1.4,
   "Navy": 1.4,
 
-  // Tier 4 — 1.5% (10 фонов)
-  "Boner": 1.5,
-  "Frosty Day": 1.5,
-  "Aurora": 1.5,
-  "Lavender": 1.5,
-  "Sapphire": 1.5,
-  "Burgundy": 1.5,
-  "Electric Purple": 1.5,
-  "Cyan": 1.5,
-  "Celtic Blue": 1.5,
-  "Lotus": 1.5,
+  // Tier 3 — 1.7% (10 фонов)
+  "Boner": 1.7,
+  "Frosty Day": 1.7,
+  "Aurora": 1.7,
+  "Lavender": 1.7,
+  "Sapphire": 1.7,
+  "Burgundy": 1.7,
+  "Electric Purple": 1.7,
+  "Cyan": 1.7,
+  "Celtic Blue": 1.7,
+  "Lotus": 1.7,
 
-  // Tier 5 — 2.0% (16 фонов)
+  // Tier 4 — 2.0% (16 фонов)
   "Ruby": 2.0,
   "Emerald": 2.0,
   "Amethyst": 2.0,
@@ -14512,23 +14711,23 @@ const BACKGROUND_CHANCES = {
   "Coral": 2.0,
   "Sunset Mauve": 2.0,
 
-  // Tier 6 — 2.5% (16 фонов)
-  "Steel": 2.5,
-  "Obsidian": 2.5,
-  "Moss": 2.5,
-  "Autumn": 2.5,
-  "Bark": 2.5,
-  "Mint": 2.5,
-  "Swamp": 2.5,
-  "Acid": 2.5,
-  "Ice": 2.5,
-  "Steel Rain": 2.5,
-  "Pistachio": 2.5,
-  "Forest Green": 2.5,
-  "Silver": 2.5,
-  "Cream": 2.5,
-  "Rose Gold": 2.5,
-  "Matte Matcha": 2.5
+  // Tier 5 — 2.3% (16 фонов)
+  "Steel": 2.3,
+  "Obsidian": 2.3,
+  "Moss": 2.3,
+  "Autumn": 2.3,
+  "Bark": 2.3,
+  "Mint": 2.3,
+  "Swamp": 2.3,
+  "Acid": 2.3,
+  "Ice": 2.3,
+  "Steel Rain": 2.3,
+  "Pistachio": 2.3,
+  "Forest Green": 2.3,
+  "Silver": 2.3,
+  "Cream": 2.3,
+  "Rose Gold": 2.3,
+  "Matte Matcha": 2.3
 };
 
 function getBackgroundChance(name) {
@@ -17808,6 +18007,61 @@ let voiceTimerInterval = null;
 let voiceStream = null;
 const VOICE_MAX_MS = 3 * 60 * 1000;
 const VOICE_MIN_MS = 700;
+
+// Индикатор громкости при записи
+let voiceAudioCtx = null;
+let voiceAnalyser = null;
+let voiceAnalyserRAF = null;
+
+function startVoiceLevelMeter() {
+  if (!voiceStream) return;
+  try {
+    voiceAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = voiceAudioCtx.createMediaStreamSource(voiceStream);
+    voiceAnalyser = voiceAudioCtx.createAnalyser();
+    voiceAnalyser.fftSize = 256;
+    source.connect(voiceAnalyser);
+  } catch (e) {
+    console.warn("level meter setup failed:", e);
+    return;
+  }
+  const data = new Uint8Array(voiceAnalyser.frequencyBinCount);
+  const iconEl = document.getElementById("voice-level-icon");
+
+  function tick() {
+    if (!voiceAnalyser) return;
+    voiceAnalyser.getByteFrequencyData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) sum += data[i];
+    const avg = sum / data.length;
+    if (iconEl) {
+      let name;
+      if (avg < 3) name = "voiceVolMute";
+      else if (avg < 20) name = "voiceVol1";
+      else if (avg < 60) name = "voiceVol2";
+      else name = "voiceVol3";
+      if (iconEl.getAttribute("data-icon") !== name) {
+        iconEl.setAttribute("data-icon", name);
+      }
+    }
+    voiceAnalyserRAF = requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+function stopVoiceLevelMeter() {
+  if (voiceAnalyserRAF) {
+    cancelAnimationFrame(voiceAnalyserRAF);
+    voiceAnalyserRAF = null;
+  }
+  if (voiceAudioCtx) {
+    try { voiceAudioCtx.close(); } catch (e) { /* silent */ }
+    voiceAudioCtx = null;
+  }
+  voiceAnalyser = null;
+  const iconEl = document.getElementById("voice-level-icon");
+  if (iconEl) iconEl.setAttribute("data-icon", "voiceVolMute");
+}
 
 function openAttachmentDialog(files) {
   attachPendingFiles = [...files];

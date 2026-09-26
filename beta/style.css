@@ -3606,6 +3606,14 @@ button:not(:disabled):active { transform: scale(0.97); }
 .cell-icon[data-icon="happy"]        { --icon: url("https://i.ibb.co/MyFyBjCp/icons8-happy-100.png"); }
 .cell-icon[data-icon="sent"]         { --icon: url("https://i.ibb.co/2YLJqjGy/icons8-sent-100.png"); }
 .cell-icon[data-icon="microphone"]   { --icon: url("https://i.ibb.co/Y48CfW0F/icons8-microphone-100.png"); }
+.cell-icon[data-icon="voicePlay"]     { --icon: url("https://i.ibb.co/mPrq7J1/icons8-play-100.png"); }
+.cell-icon[data-icon="voicePause"]    { --icon: url("https://i.ibb.co/zhcWrv2w/icons8-pause-100.png"); }
+.cell-icon[data-icon="voiceVol1"]     { --icon: url("https://i.ibb.co/S7nPCmQQ/icons8-low-volume-100.png"); }
+.cell-icon[data-icon="voiceVol2"]     { --icon: url("https://i.ibb.co/KgyV84W/icons8-voice-100.png"); }
+.cell-icon[data-icon="voiceVol3"]     { --icon: url("https://i.ibb.co/gFjFStTZ/icons8-audio-100.png"); }
+.cell-icon[data-icon="voiceVolMute"]  { --icon: url("https://i.ibb.co/RkjDc0sc/icons8-no-audio-100.png"); }
+.cell-icon[data-icon="voiceDownload"] { --icon: url("https://i.ibb.co/cSrXqtSp/icons8-download-24.png"); }
+.cell-icon[data-icon="voiceSpeed"]    { --icon: url("https://i.ibb.co/mVhxXbgV/icons8-speed-100.png"); }
 .cell-icon[data-icon="addFile"]      { --icon: url("https://i.ibb.co/4yWy9LL/icons8-add-file-100.png"); }
 .cell-icon[data-icon="checkboxOff"]  { --icon: url("https://i.ibb.co/GfgpKzW2/icons8-unchecked-checkbox-100.png"); }
 .cell-icon[data-icon="checkboxOn"]   { --icon: url("https://i.ibb.co/VdVLWCy/icons8-checked-checkbox-100.png"); }
@@ -5656,6 +5664,14 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   50%      { opacity: 0.4; transform: scale(0.85); }
 }
 
+.voice-level-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+  flex-shrink: 0;
+  transition: background-color 0.1s;
+}
+
 .voice-timer {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 16px;
@@ -5705,6 +5721,121 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   display: block;
   outline: none;
 }
+
+/* ─────── КАСТОМНЫЙ ПЛЕЕР ГОЛОСОВЫХ ─────── */
+.voice-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 6px;
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.18);
+  min-width: 240px;
+  max-width: 340px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.msg.other .voice-player { background: rgba(0, 0, 0, 0.08); }
+
+.voice-player .voice-play-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  transition: filter 0.15s, transform 0.1s;
+  box-shadow: 0 2px 8px rgba(var(--accent-rgb), 0.25);
+}
+.voice-player .voice-play-btn:hover { filter: brightness(1.08); }
+.voice-player .voice-play-btn:active { transform: scale(0.92); }
+.voice-player .voice-play-btn .cell-icon {
+  width: 16px;
+  height: 16px;
+  background-color: #15110d;
+}
+
+.voice-player .voice-wave {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.voice-player .voice-bar {
+  flex: 1;
+  min-width: 2px;
+  max-width: 4px;
+  background: rgba(255, 255, 255, 0.32);
+  border-radius: 2px;
+  transition: background 0.1s;
+}
+.msg.other .voice-player .voice-bar { background: rgba(0, 0, 0, 0.22); }
+.voice-player .voice-bar.played { background: var(--accent); }
+.msg.mine .voice-player .voice-bar.played { background: #fff8ec; }
+
+.voice-player .voice-time {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 62px;
+  text-align: right;
+}
+.msg.mine .voice-player .voice-time { color: rgba(255, 255, 255, 0.65); }
+
+.voice-player .voice-speed-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  min-width: 30px;
+  transition: background 0.15s, color 0.15s;
+}
+.voice-player .voice-speed-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--accent);
+}
+.msg.mine .voice-player .voice-speed-btn { color: rgba(255, 255, 255, 0.65); }
+.msg.mine .voice-player .voice-speed-btn:hover { color: #fff; }
+
+.voice-player .voice-download-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.voice-player .voice-download-btn:hover {
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.08);
+}
+.voice-player .voice-download-btn .cell-icon { width: 14px; height: 14px; }
+.msg.mine .voice-player .voice-download-btn { color: rgba(255, 255, 255, 0.65); }
+.msg.mine .voice-player .voice-download-btn:hover { color: #fff; }
 
 @media (max-width: 768px) and (pointer: coarse) {
   .voice-btn { width: 40px; height: 40px; }
