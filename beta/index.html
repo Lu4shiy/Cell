@@ -1,4 +1,11 @@
-  <!-- PWA: манифест создаётся инлайн-скриптом, чтобы Chrome сразу получил правильный манифест.
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Cell</title>
+
+<!-- PWA: манифест создаётся инлайн-скриптом, чтобы Chrome сразу получил правильный манифест.
        Если поставить статический <link rel="manifest" href="manifest.json">, Chrome
        прочитает его раньше, чем выполнится app.js — и иконка не сменится при переустановке. -->
   <script>

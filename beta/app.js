@@ -13427,6 +13427,12 @@ async function openMarketListingDetail(listingId, fallbackTx, onClose) {
         <span class="gir-value">${escapeHtml(ug.pattern_id)}</span>
       </div>`
     : "";
+  const bgRow = ug.background_name
+    ? `<div class="gift-info-row">
+        <span class="gir-label">${escapeHtml(t("gifts.detail.background"))}</span>
+        <span class="gir-value">${escapeHtml(ug.background_name)}</span>
+      </div>`
+    : "";
   const modelRow = ug.model_id
     ? `<div class="gift-info-row">
         <span class="gir-label">${escapeHtml(t("gifts.detail.model"))}</span>
