@@ -1,6 +1,7 @@
+// ======================================================
+// Imaginer
+// ======================================================
 
-<<<<<<< HEAD
-=======
 // Трафик идёт через Cloudflare Worker (cell-proxy.zelenski-ivan10.workers.dev),
 // чтобы обходить блокировки провайдеров. Воркер прозрачно проксирует
 // REST + Auth + Storage + Realtime (WebSocket) в оригинальный Supabase.
@@ -695,6 +696,8 @@ const I18N = {
     "gifts.detail.limit": "лимит {n}",
     "gifts.detail.recipient": "Подарок для {name}",
     "gifts.detail.sender": "От {name}",
+    "gifts.detail.recipientLabel": "Подарок для",
+    "gifts.detail.senderLabel": "От",
     "gifts.purchase.saveSenderFail": "Не удалось сохранить имя отправителя",
     "gifts.detail.notOwner": "Подарок принадлежит другому пользователю",
     "gifts.action.addToProfile": "Добавить в профиль",
@@ -740,6 +743,7 @@ const I18N = {
     "preview.file": "📎 Файл",
     "preview.you": "Вы: ",
     "preview.noMessages": "Нет сообщений",
+    "connection.reconnecting": "Подключение…",
     "preview.encrypted": "🔒 Зашифровано",
 
     // ---- Создание канала ----
@@ -1543,6 +1547,8 @@ const I18N = {
     "gifts.detail.limit": "limit {n}",
     "gifts.detail.recipient": "Gift for {name}",
     "gifts.detail.sender": "From {name}",
+    "gifts.detail.recipientLabel": "Gift for",
+    "gifts.detail.senderLabel": "From",
     "gifts.purchase.saveSenderFail": "Failed to save sender name",
     "gifts.detail.notOwner": "This gift belongs to another user",
     "gifts.action.addToProfile": "Add to profile",
@@ -1588,6 +1594,7 @@ const I18N = {
     "preview.file": "📎 File",
     "preview.you": "You: ",
     "preview.noMessages": "No messages",
+    "connection.reconnecting": "Connecting…",
     "preview.encrypted": "🔒 Encrypted",
 
     // ---- Create channel ----
@@ -4144,19 +4151,11 @@ async function initApp() {
   document.addEventListener("keydown", throttledLastSeen);
   document.addEventListener("click", throttledLastSeen);
 
-  // Каждые 30 секунд обновляем индикатор «в сети» во всех DM-чатах.
-  // Проходимся по DOM и профилям в кэше — дёшево, без запросов к серверу.
-  setInterval(() => {
+  // Каждые 10 секунд тянем свежие last_seen и переключаем кружки.
+  setInterval(async () => {
     if (!currentUser) return;
-    document.querySelectorAll(`.user-item[data-chat-type="dm"]`).forEach((el) => {
-      const uid = el.dataset.userId;
-      if (!uid) return;
-      const p = profileCache.get(uid);
-      const avEl = el.querySelector(".avatar");
-      if (!avEl) return;
-      avEl.classList.toggle("online", !!(p && isUserOnline(p)));
-    });
-  }, 30000);
+    try { await refreshOnlineStatuses(); } catch (e) { /* silent */ }
+  }, 10000);
 
   // Обновлять статус собеседника
   otherUserInterval = setInterval(async () => {
@@ -5499,7 +5498,9 @@ async function handleOpenChatHash() {
 function updateUserEverywhere(profile) {
   const itemEl = document.querySelector(`.user-item[data-user-id="${profile.id}"]`);
   if (itemEl) {
-    paintAvatar(itemEl.querySelector(".avatar"), profile);
+    const avEl = itemEl.querySelector(".avatar");
+    paintAvatar(avEl, profile);
+    if (avEl) avEl.classList.toggle("online", isUserOnline(profile));
     const nameEl = itemEl.querySelector(".user-item-name");
     if (nameEl) {
       const custom = itemEl.dataset.customName;
@@ -7407,7 +7408,6 @@ async function loadMessages(chatId, mySeq) {
   box.appendChild(frag);
   // Реакции рисуем после вставки в DOM — это быстро (уже готово из кэша).
   visible.forEach((m) => renderReactionsUI(m.id));
-  // Подключаем кастомные плееры голосовых (если есть).
   box.querySelectorAll(".voice-player").forEach(wireVoicePlayer);
   scrollToBottom();
   rerenderPinMarks();
@@ -8912,16 +8912,15 @@ async function startVoiceRecording() {
     return;
   }
 
-  // Проверяем текущий статус разрешения (если браузер умеет).
-  // Если пользователь его ещё не выдавал — getUserMedia сам покажет
-  // системное окно «Разрешить этому сайту доступ к микрофону?».
+  // Если разрешение уже запрещено — сразу текст «включи в настройках».
+  // Иначе getUserMedia сам покажет системное окно браузера.
   let permState = "prompt";
   try {
     if (navigator.permissions && navigator.permissions.query) {
       const status = await navigator.permissions.query({ name: "microphone" });
-      permState = status.state; // "granted" | "denied" | "prompt"
+      permState = status.state;
     }
-  } catch (e) { /* Permissions API не умеет microphone — пропускаем */ }
+  } catch (e) { /* Permissions API не умеет microphone */ }
 
   if (permState === "denied") {
     await showAlertDialog(t("voice.micDeniedTitle"), t("voice.micDeniedText"));
@@ -9662,57 +9661,10 @@ async function getSignedUrl(url) {
   }
 }
 
-// 🔴 Ленивая загрузка зашифрованного вложения: сначала placeholder,
-// потом асинхронно скачиваем + расшифровываем + подменяем в DOM.
-// Критично для скорости открытия чата с E2EE-вложениями.
-async function lazyLoadEncryptedAttachment(placeholderId, msg) {
-  const placeholder = document.getElementById(placeholderId);
-  if (!placeholder) return;
-
-  let displayUrl = null;
-  try {
-    displayUrl = await getDecryptedFileUrl(msg);
-  } catch (e) {
-    displayUrl = null;
-  }
-
-  const el = document.getElementById(placeholderId);
-  if (!el) return;
-
-  if (!displayUrl) {
-    el.outerHTML = `<div class="msg-attachment-uploading" style="max-width:260px;display:block;text-align:center;line-height:1.4;">
-      ${t("attach.encryptedBlocked")}
-    </div>`;
-    return;
-  }
-
-  const kind = msg.file_kind || "file";
-  const name = msg.file_name || "файл";
-  const size = msg.file_size || 0;
-  let html;
-  if (kind === "image") {
-    html = `<img src="${escapeHtml(displayUrl)}" class="msg-attachment-image" alt="" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="image" data-att-msg-id="${msg.id}">`;
-  } else if (kind === "video") {
-    html = `<video src="${escapeHtml(displayUrl)}" class="msg-attachment-video" controls preload="metadata" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="video" data-att-msg-id="${msg.id}"></video>`;
-  } else if (kind === "voice") {
-    html = buildVoicePlayerHtml(msg, displayUrl);
-  } else {
-    html = `<a class="msg-attachment-file" href="${escapeHtml(displayUrl)}" target="_blank" rel="noopener" download="${escapeHtml(name)}">
-      <span class="maf-icon"><span class="cell-icon" data-icon="attach"></span></span>
-      <span style="flex:1;min-width:0;">
-        <span class="maf-name">${escapeHtml(name)}</span>
-        <span class="maf-size">${escapeHtml(formatFileSize(size))}</span>
-      </span>
-    </a>`;
-  }
-  el.outerHTML = html;
-}
-window.lazyLoadEncryptedAttachment = lazyLoadEncryptedAttachment;
-
 // ─────────────────────────────────────────────────────────
 // КАСТОМНЫЙ ПЛЕЕР ДЛЯ ГОЛОСОВЫХ СООБЩЕНИЙ
 // ─────────────────────────────────────────────────────────
-let voicePlayerAudio = null; // тот, что сейчас играет (общий)
+let voicePlayerAudio = null;
 
 function formatVoiceTime(sec) {
   if (!sec || !isFinite(sec) || sec < 0) return "0:00";
@@ -9720,8 +9672,6 @@ function formatVoiceTime(sec) {
   return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
 }
 
-// Детерминированный «псевдо-вейвформ» — высоты столбиков
-// из msg.id, чтобы картинка не менялась при перерисовке.
 function generateVoiceBars(id) {
   let h = 0;
   const s = String(id || "");
@@ -9792,7 +9742,6 @@ function wireVoicePlayer(player) {
     e.stopPropagation();
     e.preventDefault();
     if (audio.paused) {
-      // Пауза для других плееров
       if (voicePlayerAudio && voicePlayerAudio !== audio) {
         try { voicePlayerAudio.pause(); } catch (err) {}
       }
@@ -9845,14 +9794,13 @@ function wireVoicePlayer(player) {
     audio.currentTime = 0;
     updateProgress();
   });
-  audio.addEventListener("timeupdate",      updateProgress);
-  audio.addEventListener("loadedmetadata",  updateProgress);
+  audio.addEventListener("timeupdate",     updateProgress);
+  audio.addEventListener("loadedmetadata", updateProgress);
   audio.addEventListener("error", () => { if (timeEl) timeEl.textContent = "Ошибка"; });
 
   updateProgress();
 }
 
-// Автоматическое подключение плееров, попадающих в DOM.
 function setupVoicePlayersWiring() {
   const box = document.getElementById("messages");
   if (!box || box.__voiceWiringObserver) return;
@@ -9870,6 +9818,53 @@ function setupVoicePlayersWiring() {
   });
   box.__voiceWiringObserver.observe(box, { childList: true, subtree: true });
 }
+
+// 🔴 Ленивая загрузка зашифрованного вложения: сначала placeholder,
+// потом асинхронно скачиваем + расшифровываем + подменяем в DOM.
+// Критично для скорости открытия чата с E2EE-вложениями.
+async function lazyLoadEncryptedAttachment(placeholderId, msg) {
+  const placeholder = document.getElementById(placeholderId);
+  if (!placeholder) return;
+
+  let displayUrl = null;
+  try {
+    displayUrl = await getDecryptedFileUrl(msg);
+  } catch (e) {
+    displayUrl = null;
+  }
+
+  const el = document.getElementById(placeholderId);
+  if (!el) return;
+
+  if (!displayUrl) {
+    el.outerHTML = `<div class="msg-attachment-uploading" style="max-width:260px;display:block;text-align:center;line-height:1.4;">
+      ${t("attach.encryptedBlocked")}
+    </div>`;
+    return;
+  }
+
+  const kind = msg.file_kind || "file";
+  const name = msg.file_name || "файл";
+  const size = msg.file_size || 0;
+  let html;
+  if (kind === "image") {
+    html = `<img src="${escapeHtml(displayUrl)}" class="msg-attachment-image" alt="" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="image" data-att-msg-id="${msg.id}">`;
+  } else if (kind === "video") {
+    html = `<video src="${escapeHtml(displayUrl)}" class="msg-attachment-video" controls preload="metadata" data-media-url="${escapeHtml(displayUrl)}" data-media-kind="video" data-att-msg-id="${msg.id}"></video>`;
+  } else if (kind === "voice") {
+    html = buildVoicePlayerHtml(msg, displayUrl);
+  } else {
+    html = `<a class="msg-attachment-file" href="${escapeHtml(displayUrl)}" target="_blank" rel="noopener" download="${escapeHtml(name)}">
+      <span class="maf-icon"><span class="cell-icon" data-icon="attach"></span></span>
+      <span style="flex:1;min-width:0;">
+        <span class="maf-name">${escapeHtml(name)}</span>
+        <span class="maf-size">${escapeHtml(formatFileSize(size))}</span>
+      </span>
+    </a>`;
+  }
+  el.outerHTML = html;
+}
+window.lazyLoadEncryptedAttachment = lazyLoadEncryptedAttachment;
 
 async function buildAttachmentHtml(msg) {
   const url = msg.image_url || "";
@@ -12367,6 +12362,47 @@ function isUserOnline(profile) {
   return (Date.now() - new Date(profile.last_seen).getTime()) < 45000;
 }
 
+async function refreshOnlineStatuses() {
+  if (!currentUser) return;
+  const dmItems = document.querySelectorAll(`.user-item[data-chat-type="dm"]`);
+  if (!dmItems.length && !currentOtherUser) return;
+
+  const uids = new Set();
+  dmItems.forEach((el) => { const uid = el.dataset.userId; if (uid) uids.add(uid); });
+  if (currentOtherUser && currentOtherUser.id) uids.add(currentOtherUser.id);
+  if (!uids.size) return;
+
+  const arr = [...uids];
+  try {
+    const { data, error } = await supabase.from("profiles")
+      .select("id, last_seen").in("id", arr);
+    if (error) return;
+    (data || []).forEach((p) => {
+      const old = profileCache.get(p.id) || {};
+      profileCache.set(p.id, { ...old, ...p });
+    });
+  } catch (e) {
+    return;
+  }
+
+  dmItems.forEach((el) => {
+    const uid = el.dataset.userId;
+    if (!uid) return;
+    const p = profileCache.get(uid);
+    const avEl = el.querySelector(".avatar");
+    if (!avEl) return;
+    avEl.classList.toggle("online", !!(p && isUserOnline(p)));
+  });
+
+  if (currentOtherUser && currentOtherUser.id && uids.has(currentOtherUser.id)) {
+    const p = profileCache.get(currentOtherUser.id);
+    if (p) {
+      Object.assign(currentOtherUser, p);
+      renderChatSubtitle();
+    }
+  }
+}
+
 async function updateMyLastSeen() {
   if (!currentUser) return;
   try {
@@ -12837,7 +12873,7 @@ async function loadMarketMyListings() {
 
   try {
     const { data, error } = await supabase.from("market_listings")
-      .select("id, price, created_at, user_gift_id, user_gifts!inner(id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name)")
+      .select("id, price, created_at, user_gift_id, user_gifts!inner(id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name, sender_id, sender_name, recipient_id, recipient_name, caption)")
       .eq("seller_id", currentUser.id)
       .eq("status", "active")
       .order("created_at", { ascending: false });
@@ -12880,6 +12916,7 @@ function renderMyListingCard(listing) {
       </div>
       <div class="market-card-info">
         <div class="market-card-name">${escapeHtml(title)}</div>
+        ${ug.sender_name ? `<div class="market-card-sender">${escapeHtml(tFmt("gifts.detail.sender", { name: ug.sender_name }))}</div>` : ""}
         <div class="market-card-price">${NECTAR_HTML} ${listing.price}</div>
       </div>
       <div class="market-card-actions">
@@ -13120,7 +13157,7 @@ async function loadMarketListings(reset) {
 
   try {
     let q = supabase.from("market_listings")
-      .select("id, price, created_at, seller_id, user_gift_id, user_gifts!inner(id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name)")
+      .select("id, price, created_at, seller_id, user_gift_id, user_gifts!inner(id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name, sender_id, sender_name, recipient_id, recipient_name, caption)")
       .eq("status", "active")
       // 🔴 Свои лоты в общем списке не показываем — они в «Профиль → Мои предложения».
       .neq("seller_id", currentUser.id);
@@ -13205,6 +13242,11 @@ function renderMarketListingCard(listing) {
   const title = `#${ug.serial_number}${modelName ? " " + modelName : ""}`;
   const inCart = marketCartIds.has(listing.id);
 
+  // 🔴 Историческое «От X» — если у подарка сохранён sender_name.
+  const senderRow = ug.sender_name
+    ? `<div class="market-card-sender">${escapeHtml(tFmt("gifts.detail.sender", { name: ug.sender_name }))}</div>`
+    : "";
+
   return `
     <div class="market-card" data-listing-id="${listing.id}">
       <div class="market-card-media" style="${bg}">
@@ -13214,6 +13256,7 @@ function renderMarketListingCard(listing) {
       </div>
       <div class="market-card-info">
         <div class="market-card-name">${escapeHtml(title)}</div>
+        ${senderRow}
         <div class="market-card-price">${NECTAR_HTML} ${listing.price}</div>
       </div>
       <div class="market-card-actions">
@@ -13306,7 +13349,7 @@ async function openMarketListingDetail(listingId, fallbackTx, onClose) {
   if (!listing && listingId) {
     try {
       const { data, error } = await supabase.from("market_listings")
-        .select("id, price, created_at, seller_id, status, user_gift_id, user_gifts!inner(id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name)")
+        .select("id, price, created_at, seller_id, status, user_gift_id, user_gifts!inner(id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name, sender_id, sender_name, recipient_id, recipient_name, caption)")
         .eq("id", listingId).maybeSingle();
       if (!error && data) listing = data;
     } catch (e) { /* silent */ }
@@ -13325,7 +13368,7 @@ async function openMarketListingDetail(listingId, fallbackTx, onClose) {
     if (ugId) {
       try {
         const { data: ug } = await supabase.from("user_gifts")
-          .select("id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name")
+          .select("id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name, sender_id, sender_name, recipient_id, recipient_name, caption")
           .eq("id", ugId).maybeSingle();
         ugForUi = ug || null;
       } catch (e) { /* silent */ }
@@ -13390,10 +13433,27 @@ async function openMarketListingDetail(listingId, fallbackTx, onClose) {
         <span class="gir-value">${escapeHtml(ug.model_name || ug.model_id)}</span>
       </div>`
     : "";
-  const bgRow = ug.background_name
+  // 🔴 Исторические поля «От X» / «Для Y» / подпись.
+  const senderRow = ug.sender_name
     ? `<div class="gift-info-row">
-        <span class="gir-label">${escapeHtml(t("gifts.detail.background"))}</span>
-        <span class="gir-value">${escapeHtml(ug.background_name)}</span>
+        <span class="gir-label">${escapeHtml(t("gifts.detail.senderLabel"))}</span>
+        <span class="gir-value">${ug.sender_id
+          ? `<a href="#" class="gift-recipient-link" data-uid="${ug.sender_id}">${escapeHtml(ug.sender_name)}</a>`
+          : escapeHtml(ug.sender_name)}</span>
+      </div>`
+    : "";
+  const recipientRow = ug.recipient_name
+    ? `<div class="gift-info-row">
+        <span class="gir-label">${escapeHtml(t("gifts.detail.recipientLabel"))}</span>
+        <span class="gir-value">${ug.recipient_id
+          ? `<a href="#" class="gift-recipient-link" data-uid="${ug.recipient_id}">${escapeHtml(ug.recipient_name)}</a>`
+          : escapeHtml(ug.recipient_name)}</span>
+      </div>`
+    : "";
+  const captionRow = ug.caption
+    ? `<div class="gift-info-row">
+        <span class="gir-label">${escapeHtml(t("gifts.detail.caption"))}</span>
+        <span class="gir-value">${escapeHtml(ug.caption)}</span>
       </div>`
     : "";
 
@@ -13415,6 +13475,9 @@ async function openMarketListingDetail(listingId, fallbackTx, onClose) {
     </div>
 
     <div class="gift-info-table">
+      ${captionRow}
+      ${senderRow}
+      ${recipientRow}
       <div class="gift-info-row">
         <span class="gir-label">${escapeHtml(t("market.listing.listedAt"))}</span>
         <span class="gir-value">${escapeHtml(listedAt)}</span>
@@ -13550,7 +13613,7 @@ async function renderMarketCart() {
 
   try {
     const { data, error } = await supabase.from("market_cart")
-      .select("listing_id, market_listings!inner(id, price, created_at, seller_id, status, user_gift_id, user_gifts!inner(id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name))")
+      .select("listing_id, market_listings!inner(id, price, created_at, seller_id, status, user_gift_id, user_gifts!inner(id, gift_id, serial_number, background, background_name, background_rarity, pattern_id, model_id, model_name, sender_id, sender_name, recipient_id, recipient_name, caption))")
       .eq("user_id", currentUser.id);
 
     if (error) { content.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; return; }
@@ -13702,6 +13765,7 @@ function renderMarketCartCard(listing) {
       </div>
       <div class="market-card-info">
         <div class="market-card-name">${escapeHtml(title)}</div>
+        ${ug.sender_name ? `<div class="market-card-sender">${escapeHtml(tFmt("gifts.detail.sender", { name: ug.sender_name }))}</div>` : ""}
         <div class="market-card-price">${NECTAR_HTML} ${listing.price}</div>
       </div>
       <div class="market-card-actions">
@@ -14665,34 +14729,36 @@ function giftCatalogImage(cat) {
 // при правке менять в ОБОИХ местах, иначе подписи «%» в UI разойдутся
 // с реальным роллом.
 const BACKGROUND_CHANCES = {
-  // Tier 1 — 1.2% (6 фонов)
-  "Vantablack": 1.2,
-  "Pure Gold": 1.2,
-  "Honey": 1.2,
-  "Absolute Pure": 1.2,
-  "Haki": 1.2,
-  "Blue Moon": 1.2,
+  // Tier 1 — 0.5% (1 фон)
+  "Vantablack": 0.5,
 
-  // Tier 2 — 1.4% (5 фонов)
+  // Tier 2 — 1.1% (5 фонов)
+  "Pure Gold": 1.1,
+  "Honey": 1.1,
+  "Absolute Pure": 1.1,
+  "Haki": 1.1,
+  "Blue Moon": 1.1,
+
+  // Tier 3 — 1.4% (5 фонов)
   "Onyx": 1.4,
   "Ice and Fire": 1.4,
   "Abyss": 1.4,
   "Electric Indigo": 1.4,
   "Navy": 1.4,
 
-  // Tier 3 — 1.7% (10 фонов)
-  "Boner": 1.7,
-  "Frosty Day": 1.7,
-  "Aurora": 1.7,
-  "Lavender": 1.7,
-  "Sapphire": 1.7,
-  "Burgundy": 1.7,
-  "Electric Purple": 1.7,
-  "Cyan": 1.7,
-  "Celtic Blue": 1.7,
-  "Lotus": 1.7,
+  // Tier 4 — 1.5% (10 фонов)
+  "Boner": 1.5,
+  "Frosty Day": 1.5,
+  "Aurora": 1.5,
+  "Lavender": 1.5,
+  "Sapphire": 1.5,
+  "Burgundy": 1.5,
+  "Electric Purple": 1.5,
+  "Cyan": 1.5,
+  "Celtic Blue": 1.5,
+  "Lotus": 1.5,
 
-  // Tier 4 — 2.0% (16 фонов)
+  // Tier 5 — 2.0% (16 фонов)
   "Ruby": 2.0,
   "Emerald": 2.0,
   "Amethyst": 2.0,
@@ -14710,23 +14776,23 @@ const BACKGROUND_CHANCES = {
   "Coral": 2.0,
   "Sunset Mauve": 2.0,
 
-  // Tier 5 — 2.3% (16 фонов)
-  "Steel": 2.3,
-  "Obsidian": 2.3,
-  "Moss": 2.3,
-  "Autumn": 2.3,
-  "Bark": 2.3,
-  "Mint": 2.3,
-  "Swamp": 2.3,
-  "Acid": 2.3,
-  "Ice": 2.3,
-  "Steel Rain": 2.3,
-  "Pistachio": 2.3,
-  "Forest Green": 2.3,
-  "Silver": 2.3,
-  "Cream": 2.3,
-  "Rose Gold": 2.3,
-  "Matte Matcha": 2.3
+  // Tier 6 — 2.5% (16 фонов)
+  "Steel": 2.5,
+  "Obsidian": 2.5,
+  "Moss": 2.5,
+  "Autumn": 2.5,
+  "Bark": 2.5,
+  "Mint": 2.5,
+  "Swamp": 2.5,
+  "Acid": 2.5,
+  "Ice": 2.5,
+  "Steel Rain": 2.5,
+  "Pistachio": 2.5,
+  "Forest Green": 2.5,
+  "Silver": 2.5,
+  "Cream": 2.5,
+  "Rose Gold": 2.5,
+  "Matte Matcha": 2.5
 };
 
 function getBackgroundChance(name) {
@@ -19010,4 +19076,113 @@ setInterval(async () => {
   } catch (e) { /* silent */ }
 }, 10000);
 
->>>>>>> 499a31e85f85967eb21d90d27e87cd2d85293e98
+
+// ======================================================
+// ИНДИКАТОР СОЕДИНЕНИЯ + АВТО-ВОССТАНОВЛЕНИЕ
+// ======================================================
+const ConnectionMonitor = {
+  banner: null,
+  isOffline: false,
+  pingTimer: null,
+  failCount: 0,
+  PING_INTERVAL_MS: 8000,
+  FAIL_THRESHOLD: 2,
+
+  init() {
+    this.banner = document.getElementById("connection-banner");
+    if (!this.banner) return;
+    window.addEventListener("online", () => this.handleOnline());
+    window.addEventListener("offline", () => this.handleOffline());
+    if (navigator.onLine === false) this.handleOffline();
+    this.startPinging();
+  },
+
+  startPinging() {
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    this.pingTimer = setInterval(() => this.ping(), this.PING_INTERVAL_MS);
+  },
+
+  async ping() {
+    if (!currentUser) return;
+    const ok = await this.pingSupabase();
+    if (ok) {
+      this.failCount = 0;
+      if (this.isOffline) this.handleOnline();
+    } else {
+      this.failCount++;
+      if (this.failCount >= this.FAIL_THRESHOLD && !this.isOffline) {
+        this.handleOffline();
+      }
+    }
+  },
+
+  async pingSupabase() {
+    try {
+      const timeout = new Promise((_, rej) =>
+        setTimeout(() => rej(new Error("timeout")), 5000));
+      const request = supabase.from("profiles").select("id").limit(1);
+      const result = await Promise.race([request, timeout]);
+      return !(result && result.error);
+    } catch (e) {
+      return false;
+    }
+  },
+
+  handleOffline() {
+    this.isOffline = true;
+    if (this.banner) this.banner.classList.remove("hidden");
+  },
+
+  handleOnline() {
+    this.isOffline = false;
+    this.failCount = 0;
+    if (this.banner) this.banner.classList.add("hidden");
+    this.refreshAll().catch(() => {});
+    this.reconnectRealtime();
+  },
+
+  async refreshAll() {
+    if (!currentUser) return;
+    try { await loadRecentChats(); } catch (e) {}
+    try { await pollMemberships(); } catch (e) {}
+    try { await loadBlocks(); } catch (e) {}
+    try { await refreshBalance(); } catch (e) {}
+    try { await refreshMyGiftsCount(); } catch (e) {}
+    if (currentChatId) {
+      try { await loadMessages(currentChatId, openSeq); } catch (e) {}
+      try { await loadReactionsForVisibleMessages(); } catch (e) {}
+    }
+    try { await refreshOnlineStatuses(); } catch (e) {}
+  },
+
+  reconnectRealtime() {
+    try { if (globalMsgsChannel) supabase.removeChannel(globalMsgsChannel); } catch (e) {}
+    try { if (profilesChannel) supabase.removeChannel(profilesChannel); } catch (e) {}
+    try { if (membershipChannel) supabase.removeChannel(membershipChannel); } catch (e) {}
+    try { if (readsChannel) supabase.removeChannel(readsChannel); } catch (e) {}
+    try { if (blocksChannel) supabase.removeChannel(blocksChannel); } catch (e) {}
+    try { if (globalChannel) supabase.removeChannel(globalChannel); } catch (e) {}
+    try { globalMsgsChannel = null; } catch (e) {}
+    try { profilesChannel = null; } catch (e) {}
+    try { membershipChannel = null; } catch (e) {}
+    try { readsChannel = null; } catch (e) {}
+    try { blocksChannel = null; } catch (e) {}
+    try { globalChannel = null; } catch (e) {}
+    try { subscribeToBlocks(); } catch (e) {}
+    try { subscribeToGlobalChanges(); } catch (e) {}
+    try { subscribeToProfiles(); } catch (e) {}
+    try { subscribeToMemberships(); } catch (e) {}
+    try { subscribeToReads(); } catch (e) {}
+    try { subscribeToGlobalMessages(); } catch (e) {}
+    if (currentChatId) {
+      try { if (currentChannel) supabase.removeChannel(currentChannel); } catch (e) {}
+      try { if (reactionsChannel) supabase.removeChannel(reactionsChannel); } catch (e) {}
+      try { currentChannel = null; } catch (e) {}
+      try { reactionsChannel = null; } catch (e) {}
+      try { subscribeToChat(currentChatId); } catch (e) {}
+      try { subscribeToReactions(); } catch (e) {}
+    }
+  },
+};
+
+ConnectionMonitor.init();

@@ -1,7 +1,3 @@
-/* ======================================================
-   Cell — стили
-   ====================================================== */
-
 :root {
   /* Уголь и воск */
   --bg:        #15110d;
@@ -5843,5 +5839,53 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
     padding: 10px 12px;
     padding-bottom: calc(10px + env(safe-area-inset-bottom, 0));
     min-height: 60px;
+  }
+}
+
+/* ====================================================== */
+/* ПЛАШКА «ПОДКЛЮЧЕНИЕ»                                    */
+/* ====================================================== */
+
+.connection-banner {
+  position: fixed;
+  left: 20px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0));
+  z-index: 8700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+  animation: connBannerIn 0.2s ease-out;
+}
+
+.connection-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: connSpin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes connSpin { to { transform: rotate(360deg); } }
+@keyframes connBannerIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 768px) and (pointer: coarse) {
+  .connection-banner {
+    left: 12px;
+    right: 12px;
+    justify-content: center;
   }
 }
