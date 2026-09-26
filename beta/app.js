@@ -4301,7 +4301,8 @@ function showConfirmDialog(title, text, confirmLabel, opts) {
   });
 }
 
-function showInputDialog(title, text, defaultValue) {
+function showInputDialog(title, text, defaultValue, opts) {
+  opts = opts || {};
   return new Promise((resolve) => {
     const overlay = document.getElementById("input-overlay");
     const field = document.getElementById("input-field");
@@ -4310,10 +4311,49 @@ function showInputDialog(title, text, defaultValue) {
     document.getElementById("input-title").textContent = title;
     document.getElementById("input-text").textContent = text || "";
     field.value = defaultValue || "";
+
+    // 🔴 Числовой режим: только целые, [min..max]. Если пользователь
+    // ввёл число больше max — оно мгновенно обрезается до max; дробные
+    // и буквы отсекаются. Никаких подсказок в placeholder — просто тихо
+    // санитизируем.
+    const num = opts.numeric || null;
+    function sanitize() {
+      if (!num) return;
+      let v = field.value.replace(/[^\d]/g, "");
+      if (v === "") { field.value = ""; return; }
+      // Убираем ведущие нули («007» → «7»), но одиночный «0» оставляем —
+      // пользователь может стереть и набрать заново.
+      if (v.length > 1) v = v.replace(/^0+/, "") || "0";
+      let n = parseInt(v, 10);
+      if (isNaN(n)) { field.value = ""; return; }
+      if (n > num.max) n = num.max;
+      field.value = String(n);
+    }
+    if (num) field.addEventListener("input", sanitize);
+
     overlay.classList.remove("hidden");
     setTimeout(() => { field.focus(); field.select(); }, 60);
-    function cleanup() { overlay.classList.add("hidden"); confirmBtn.onclick = null; cancelBtn.onclick = null; field.onkeydown = null; }
-    confirmBtn.onclick = () => { const v = field.value; cleanup(); resolve(v); };
+
+    function cleanup() {
+      overlay.classList.add("hidden");
+      confirmBtn.onclick = null;
+      cancelBtn.onclick = null;
+      field.onkeydown = null;
+      if (num) field.removeEventListener("input", sanitize);
+    }
+
+    confirmBtn.onclick = () => {
+      let v = field.value;
+      if (num) {
+        let n = parseInt(v, 10);
+        if (isNaN(n)) n = num.min;
+        if (n < num.min) n = num.min;
+        if (n > num.max) n = num.max;
+        v = String(n);
+      }
+      cleanup();
+      resolve(v);
+    };
     cancelBtn.onclick = () => { cleanup(); resolve(null); };
     field.onkeydown = (e) => {
       if (e.key === "Enter") { e.preventDefault(); confirmBtn.click(); }
@@ -12490,7 +12530,8 @@ async function marketChangePrice(listingId, currentPrice) {
   const priceStr = await showInputDialog(
     t("market.changePrice.title"),
     t("market.changePrice.text"),
-    String(currentPrice)
+    String(currentPrice),
+    { numeric: { min: 1, max: 1000000 } }
   );
   if (priceStr === null) return;
   const price = parseInt(priceStr, 10);
@@ -13298,7 +13339,8 @@ async function marketListGiftDialog(userGiftId) {
   const priceStr = await showInputDialog(
     t("market.list.title"),
     t("market.list.text"),
-    "100"
+    "100",
+    { numeric: { min: 1, max: 1000000 } }
   );
   if (priceStr === null) return;
   const price = parseInt(priceStr, 10);
@@ -14506,11 +14548,28 @@ async function renderGiftsMain(userId, opts) {
         .then((r) => (r && r.data) || [], () => [])
     : null;
 
-  const [giftsRes, catalog, ownListings] = await Promise.all([
+  // 🔴 Даты покупки на маркете: покупатель = этот userId.
+  // Нужны для сортировки «от новых на ЭТОМ аккаунте».
+  const marketTxPromise = supabase.from("market_transactions")
+    .select("user_gift_id, created_at")
+    .eq("buyer_id", userId)
+    .then((r) => (r && r.data) || [], () => []);
+
+  const [giftsRes, catalog, ownListings, marketTx] = await Promise.all([
     giftsQuery.order("created_at", { ascending: false }),
     loadGiftCatalog(),
     marketListingsPromise,
+    marketTxPromise,
   ]);
+
+  // Карта «ug.id → дата появления на этом аккаунте».
+  const acquisitionMap = new Map();
+  (marketTx || []).forEach((t) => {
+    if (t && t.user_gift_id && t.created_at) {
+      acquisitionMap.set(t.user_gift_id, new Date(t.created_at).getTime());
+    }
+  });
+  const acquiredTs = (g) => acquisitionMap.get(g.id) || new Date(g.created_at).getTime();
 
   const giftsRaw = (giftsRes && giftsRes.data) || [];
 
@@ -14543,12 +14602,14 @@ async function renderGiftsMain(userId, opts) {
   }
 
   // 🔴 Сортировка: pinned всегда сверху по pinned_at desc.
-  // Unpinned — по выбранному sort-режиму ("new-first" / "old-first").
+  // Unpinned — по дате ПОЯВЛЕНИЯ НА АККАУНТЕ (acquiredTs), а не по
+  // дате создания в каталоге. Купленный вчера на маркете старый
+  // подарок будет сверху, как и положено.
   const sortDir = giftFilters.sort === "old-first" ? 1 : -1;
   const pinned = allGifts.filter((g) => g.pinned_at)
     .sort((a, b) => new Date(b.pinned_at) - new Date(a.pinned_at));
   const unpinned = allGifts.filter((g) => !g.pinned_at)
-    .sort((a, b) => sortDir * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+    .sort((a, b) => sortDir * (acquiredTs(a) - acquiredTs(b)));
   const gifts = [...pinned, ...unpinned];
 
   const catalogMap = new Map(catalog.map((g) => [g.id, g]));
@@ -14647,37 +14708,90 @@ async function renderGiftsMain(userId, opts) {
     content.scrollTop = 0;
   }
 
-  // 🔴 Делегирование: один обработчик на весь контейнер вместо 800×2
-  // навешиваний. Список подарков, отсортированный по pinned/created.
+  // 🔴 Делегирование: один обработчик на контейнер вместо 800×2
+  // навешиваний. Актуальные данные кладём в content.__giftCtx — обработчики
+  // всегда читают свежую карту, а сами навешиваются один раз.
   const giftsById = new Map(gifts.map((g) => [g.id, g]));
+  content.__giftCtx = { giftsById, userId, isMe };
 
-  // Снимаем возможные прошлые делегированные обработчики.
-  if (content.__giftClickBound) {
-    content.removeEventListener("click", content.__giftClickBound);
-    content.removeEventListener("contextmenu", content.__giftContextBound);
-  }
+  if (!content.__giftDelegatesBound) {
+    content.__giftDelegatesBound = true;
 
-  // Left-click по плитке → детальный просмотр.
-  content.__giftClickBound = (e) => {
-    const tile = e.target.closest(".gift-tile");
-    if (!tile || !content.contains(tile)) return;
-    const ugId = tile.dataset.giftUgId;
-    const ug = giftsById.get(ugId);
-    if (ug) renderGiftDetail(userId, ug);
-  };
-  content.addEventListener("click", content.__giftClickBound);
-
-  // ПКМ по плитке → контекстное меню (только для своих).
-  if (isMe) {
-    content.__giftContextBound = (e) => {
+    // Left-click по плитке → детальный просмотр.
+    content.addEventListener("click", (e) => {
       const tile = e.target.closest(".gift-tile");
       if (!tile || !content.contains(tile)) return;
+      const ctx = content.__giftCtx;
+      if (!ctx) return;
+      const ug = ctx.giftsById.get(tile.dataset.giftUgId);
+      if (ug) renderGiftDetail(ctx.userId, ug);
+    });
+
+    // ПКМ / Android long-press contextmenu → меню.
+    content.addEventListener("contextmenu", (e) => {
+      const tile = e.target.closest(".gift-tile");
+      if (!tile || !content.contains(tile)) return;
+      const ctx = content.__giftCtx;
+      if (!ctx || !ctx.isMe) return;
       if (e.preventDefault) e.preventDefault();
       if (e.stopPropagation) e.stopPropagation();
-      const ug = giftsById.get(tile.dataset.giftUgId);
+      const ug = ctx.giftsById.get(tile.dataset.giftUgId);
       if (ug) openGiftTileContextMenu(e, ug.id, !!ug.pinned_at, !!ug.in_profile);
-    };
-    content.addEventListener("contextmenu", content.__giftContextBound);
+    });
+
+    // 🔴 iOS и часть Android: contextmenu на long-press не срабатывает —
+    // ловим touch отдельно.
+    let lpTimer = null, lpX = 0, lpY = 0, lpTile = null, lpFired = false;
+
+    content.addEventListener("touchstart", (e) => {
+      const tile = e.target.closest(".gift-tile");
+      if (!tile || !content.contains(tile)) return;
+      if (e.touches.length !== 1) return;
+      const ctx = content.__giftCtx;
+      if (!ctx || !ctx.isMe) return;
+      const t = e.touches[0];
+      lpX = t.clientX; lpY = t.clientY;
+      lpTile = tile;
+      lpFired = false;
+      tile.classList.add("pressing");
+      lpTimer = setTimeout(() => {
+        lpFired = true;
+        lastLongPressAt = Date.now();
+        try { if (navigator.vibrate) navigator.vibrate(15); } catch (ex) {}
+        tile.classList.remove("pressing");
+        const ctx2 = content.__giftCtx;
+        if (!ctx2) return;
+        const ug = ctx2.giftsById.get(tile.dataset.giftUgId);
+        if (ug) {
+          const fake = {
+            clientX: lpX, clientY: lpY, target: tile,
+            preventDefault: () => {}, stopPropagation: () => {},
+          };
+          openGiftTileContextMenu(fake, ug.id, !!ug.pinned_at, !!ug.in_profile);
+        }
+      }, 500);
+    }, { passive: true });
+
+    content.addEventListener("touchmove", (e) => {
+      if (!lpTimer) return;
+      const t = e.touches[0];
+      if (!t) return;
+      if (Math.abs(t.clientX - lpX) > 10 || Math.abs(t.clientY - lpY) > 10) {
+        clearTimeout(lpTimer); lpTimer = null;
+        if (lpTile) { lpTile.classList.remove("pressing"); lpTile = null; }
+      }
+    }, { passive: true });
+
+    content.addEventListener("touchend", (e) => {
+      if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+      if (lpTile) { lpTile.classList.remove("pressing"); lpTile = null; }
+      if (lpFired) { e.preventDefault(); e.stopPropagation(); lpFired = false; }
+    });
+
+    content.addEventListener("touchcancel", () => {
+      if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+      if (lpTile) { lpTile.classList.remove("pressing"); lpTile = null; }
+    });
   }
 }
 
