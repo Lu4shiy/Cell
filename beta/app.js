@@ -8972,21 +8972,14 @@ async function startVoiceRecording() {
     return;
   }
 
-  // Если разрешение уже запрещено — сразу текст «включи в настройках».
-  // Иначе getUserMedia сам покажет системное окно браузера.
-  let permState = "prompt";
-  try {
-    if (navigator.permissions && navigator.permissions.query) {
-      const status = await navigator.permissions.query({ name: "microphone" });
-      permState = status.state;
-    }
-  } catch (e) { /* Permissions API не умеет microphone */ }
-
-  if (permState === "denied") {
-    await showAlertDialog(t("voice.micDeniedTitle"), t("voice.micDeniedText"));
-    return;
-  }
-
+  // 🔴 НЕ проверяем navigator.permissions.query заранее: на Android Chrome
+  // он часто возвращает "denied" или кидает исключение, даже когда реального
+  // запрета нет (Permissions API не поддерживает "microphone" на этой ОС).
+  // Из-за этого запись блокировалась и показывалось «включите разрешение
+  // в настройках» ещё ДО того, как браузер успевал спросить пользователя.
+  // getUserMedia — единственный надёжный путь: он сам покажет системное
+  // окно «Разрешить доступ к микрофону?». А если реальный запрет — упадёт
+  // с NotAllowedError, и тогда покажем понятный текст.
   try {
     voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (e) {
