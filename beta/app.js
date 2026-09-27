@@ -6417,7 +6417,7 @@ function setupMessagesDelegates() {
       lpTriggered = false;
       return;
     }
-    const el = e.target.closest(".msg");
+    const el = e.target.closest(".msg, .msg-system");
     if (!el) return;
     if (e.changedTouches.length !== 1) return;
     const t = e.changedTouches[0];
@@ -6441,7 +6441,7 @@ function setupMessagesDelegates() {
   });
 
   box.addEventListener("dblclick", (e) => {
-    const el = e.target.closest(".msg");
+    const el = e.target.closest(".msg, .msg-system");
     if (!el) return;
     if (e.target.closest("a, .reaction-chip, .spoiler, .msg-reply, .msg-fwd-link, .msg-attachment-file")) return;
     e.preventDefault();
@@ -8392,6 +8392,11 @@ function hideMiniProfile() {
   document.getElementById("mini-profile").classList.add("hidden");
 }
 
+// 🔴 Таймер одиночного тапа по подарку. Если в течение 320 мс
+// прилетит второй тап — отменяем открытие карточки, чтобы
+// сработала быстрая реакция.
+let giftClickTimer = null;
+
 function onMsgClick(e) {
   // Клик по фото вложения → открыть media-viewer
   const img = e.target.closest(".msg-attachment-image");
@@ -8407,10 +8412,19 @@ function onMsgClick(e) {
   const giftEl = e.target.closest(".msg-system.gift-msg");
   if (giftEl) {
     const msgId = giftEl.dataset.id;
-    const m = msgCache.get(msgId);
-    if (m && m.gift_ref_id) {
-      openGiftDetailById(m.gift_ref_id);
+    // Второй тап в течение окна — отменяем отложенное открытие.
+    if (giftClickTimer) {
+      clearTimeout(giftClickTimer);
+      giftClickTimer = null;
+      return;
     }
+    giftClickTimer = setTimeout(() => {
+      giftClickTimer = null;
+      const m = msgCache.get(msgId);
+      if (m && m.gift_ref_id) {
+        openGiftDetailById(m.gift_ref_id);
+      }
+    }, 320);
     return;
   }
   const replyEl = e.target.closest(".msg-reply");
@@ -19099,6 +19113,12 @@ const ConnectionMonitor = {
     if (!this.banner) return;
     window.addEventListener("online", () => this.handleOnline());
     window.addEventListener("offline", () => this.handleOffline());
+    // 🔴 Дёргаем ping при возврате на вкладку/окно — браузер на мобильном
+    // не всегда присылает событие online, а setInterval в фоне замирает.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") this.ping();
+    });
+    window.addEventListener("focus", () => this.ping());
     if (navigator.onLine === false) this.handleOffline();
     this.startPinging();
   },
@@ -19123,13 +19143,17 @@ const ConnectionMonitor = {
   },
 
   async pingSupabase() {
+    let timeoutId = null;
     try {
-      const timeout = new Promise((_, rej) =>
-        setTimeout(() => rej(new Error("timeout")), 5000));
+      const timeout = new Promise((_, rej) => {
+        timeoutId = setTimeout(() => rej(new Error("timeout")), 3500);
+      });
       const request = supabase.from("profiles").select("id").limit(1);
       const result = await Promise.race([request, timeout]);
+      if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
       return !(result && result.error);
     } catch (e) {
+      if (timeoutId) clearTimeout(timeoutId);
       return false;
     }
   },
