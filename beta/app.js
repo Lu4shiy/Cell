@@ -34,9 +34,15 @@ import * as Crypto from "./crypto.js";
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    // localStorage — переживает закрытие PWA/вкладки.
-    // sessionStorage стирался при выходе из приложения, из-за чего требовался повторный вход.
-    storage: window.localStorage,
+    // 🔴 sessionStorage — КАЖДАЯ ВКЛАДКА имеет свою сессию.
+    // Раньше был localStorage: две вкладки делили один auth-ключ,
+    // из-за чего вход во вторую затирал сессию первой, а одновременный
+    // refresh-токен-rotation Supabase принимал за «reuse» и инвалидировал
+    // сессию — «иногда выкидывает при перезагрузке».
+    //
+    // Перезапуск устройства переживаем через резервную копию в localStorage
+    // (cell_session_backup), восстановление — в IIFE ниже.
+    storage: window.sessionStorage,
     storageKey: AUTH_STORAGE_KEY,
     persistSession: true,
     autoRefreshToken: true,
@@ -75,6 +81,10 @@ supabase.auth.onAuthStateChange((event, session) => {
         user_id: u.id,
         saved_at: Date.now(),
       }));
+      // 🔴 Раз есть активная сессия — снимаем флаг «явный выход».
+      // Иначе после logout в одной вкладке вторая вкладка при перезапуске
+      // не сможет восстановиться из своего свежего бэкапа.
+      localStorage.removeItem("cell_logged_out");
     } catch (e) { /* silent */ }
   }
 
@@ -490,7 +500,7 @@ const I18N = {
     "voice.unsupportedTitle": "Не поддерживается",
     "voice.unsupportedText": "Ваш браузер не поддерживает запись голосовых сообщений.",
     "voice.micDeniedTitle": "Нет доступа к микрофону",
-    "voice.micDeniedText": "Разрешите доступ к микрофону в настройках браузера и попробуйте снова.",
+    "voice.micDeniedText": "Раньше вы запретили доступ к микрофону — браузер больше не спрашивает. Включите его в настройках сайта:\n\n• Android Chrome: тап по иконке замка рядом с адресом → Разрешения → Микрофон → Разрешить. Затем обновите страницу.\n\n• Компьютер: значок замка рядом с адресом → Настройки сайта → Микрофон → Разрешить.",
 
     // ---- Канал ----
     "channel.action.subscribe": "Подписаться",
@@ -1341,7 +1351,7 @@ const I18N = {
     "voice.unsupportedTitle": "Not supported",
     "voice.unsupportedText": "Your browser doesn't support voice message recording.",
     "voice.micDeniedTitle": "Microphone access denied",
-    "voice.micDeniedText": "Allow microphone access in your browser settings and try again.",
+    "voice.micDeniedText": "You previously denied microphone access — the browser won't ask again. Enable it in site settings:\n\n• Android Chrome: tap the lock icon next to the address → Permissions → Microphone → Allow. Then reload the page.\n\n• Desktop: lock icon next to the address → Site settings → Microphone → Allow.",
 
     // ---- Channel ----
     "channel.action.subscribe": "Subscribe",
@@ -8985,15 +8995,33 @@ async function startVoiceRecording() {
   } catch (e) {
     const errName = (e && e.name) || "";
     if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {
-      await showAlertDialog(t("voice.micDeniedTitle"), t("voice.micDeniedText"));
+      // 🔴 На Android Chrome первый вызов может упасть с NotAllowedError,
+      // хотя пользователь ещё не отвечал — Chrome вешает сверху мини-инфобар
+      // «Разрешить / Заблокировать» и до ответа возвращает отказ.
+      // Ждём 1.2 сек и пробуем ещё раз — этого обычно хватает, чтобы
+      // системное окно появилось и пользователь успел тапнуть «Разрешить».
+      await new Promise((r) => setTimeout(r, 1200));
+      try {
+        voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (e2) {
+        const err2 = (e2 && e2.name) || "";
+        if (err2 === "NotAllowedError" || err2 === "PermissionDeniedError") {
+          await showAlertDialog(t("voice.micDeniedTitle"), t("voice.micDeniedText"));
+        } else {
+          await showAlertDialog(t("voice.micDeniedTitle"), (e2 && e2.message) || t("voice.micDeniedText"));
+        }
+        return;
+      }
     } else if (errName === "NotFoundError" || errName === "DevicesNotFoundError") {
       await showAlertDialog(t("voice.micDeniedTitle"), "Микрофон не найден на этом устройстве.");
+      return;
     } else if (errName === "NotReadableError" || errName === "TrackStartError") {
       await showAlertDialog(t("voice.micDeniedTitle"), "Микрофон занят другим приложением.");
+      return;
     } else {
       await showAlertDialog(t("voice.micDeniedTitle"), (e && e.message) || t("voice.micDeniedText"));
+      return;
     }
-    return;
   }
 
   voiceChunks = [];
@@ -18977,6 +19005,10 @@ setupLocalLogin();
 // и браузер (imaginer-auth). На некоторых устройствах детект PWA
 // на первом кадре может сработать не так, как ожидалось.
 async function findAnyStoredSession() {
+  // 🔴 Ищем сессию в СТАРЫХ localStorage-ключах (миграция с предыдущей
+  // версии, когда supabase писал прямо в localStorage).
+  // Поддерживаем два формата: {access_token, refresh_token, ...} —
+  // supabase-js v2, и {currentSession: {...}} — старый.
   try {
     const keys = ["imaginer-auth-pwa", "imaginer-auth"];
     for (const k of keys) {
@@ -18984,9 +19016,11 @@ async function findAnyStoredSession() {
       if (!raw) continue;
       try {
         const parsed = JSON.parse(raw);
-        // Supabase хранит { currentSession: {...}, ... }
         if (parsed && parsed.currentSession && parsed.currentSession.access_token) {
           return parsed.currentSession;
+        }
+        if (parsed && parsed.access_token && parsed.refresh_token) {
+          return parsed;
         }
       } catch (e) { /* silent */ }
     }
