@@ -5775,8 +5775,8 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   transition: background 0.1s;
 }
 .msg.other .voice-player .voice-bar { background: rgba(255, 255, 255, 0.22); }
-.voice-player .voice-bar.played { background: var(--accent); }
-.msg.mine .voice-player .voice-bar.played { background: var(--accent); }
+.voice-player .voice-bar.played { background: #ffffff; }
+.msg.mine .voice-player .voice-bar.played { background: #ffffff; }
 
 .voice-player .voice-time {
   font-size: 11px;

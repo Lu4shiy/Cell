@@ -7445,6 +7445,52 @@ async function loadMessages(chatId, mySeq) {
   }
 }
 
+// 🔴 Догоняем сообщения, пришедшие пока мы были оффлайн. В отличие от
+// loadMessages(), НЕ пересоздаёт DOM чата и не сбрасывает скролл —
+// просто добавляет в конец то, чего не хватает в кэше.
+async function catchUpMessagesAfterReconnect(chatId) {
+  if (!chatId) return;
+  // Самое свежее реальное (не temp) сообщение в кэше этого чата.
+  let newestTs = 0;
+  for (const m of msgCache.values()) {
+    if (m.chat_id !== chatId) continue;
+    if (String(m.id).startsWith("tmp_")) continue;
+    const ts = new Date(m.created_at).getTime();
+    if (ts > newestTs) newestTs = ts;
+  }
+  // Кэш пуст — фолбэк на полную загрузку.
+  if (!newestTs) {
+    try { await loadMessages(chatId, openSeq); } catch (e) {}
+    return;
+  }
+  const sinceIso = new Date(newestTs + 1).toISOString();
+  let rows = [];
+  try {
+    const { data, error } = await supabase.from("messages").select("*")
+      .eq("chat_id", chatId)
+      .gt("created_at", sinceIso)
+      .order("created_at", { ascending: true });
+    if (error) return;
+    rows = data || [];
+  } catch (e) { return; }
+  if (!rows.length) return;
+
+  // Запоминаем, был ли пользователь у низа — если читал историю
+  // наверху, не дёргаем ему скролл.
+  const box = document.getElementById("messages");
+  const wasNearBottom = box
+    ? (box.scrollHeight - box.scrollTop - box.clientHeight < 200)
+    : true;
+
+  for (const m of rows) {
+    if (document.querySelector(`[data-id="${m.id}"]`)) continue;
+    if (hiddenMsgIds.has(m.id)) continue;
+    if (pendingMsgRenders.has(m.id)) continue;
+    await appendMessage(m);
+  }
+  if (wasNearBottom) scrollToBottom();
+}
+
 // Подгрузка 50 более старых сообщений, когда пользователь доскроллил вверх
 async function loadOlderMessages() {
   if (!messagesHasMore || messagesLoadingMore || !currentChatId || !messagesOldestTs) return;
@@ -19179,7 +19225,9 @@ const ConnectionMonitor = {
     try { await refreshBalance(); } catch (e) {}
     try { await refreshMyGiftsCount(); } catch (e) {}
     if (currentChatId) {
-      try { await loadMessages(currentChatId, openSeq); } catch (e) {}
+      // 🔴 Не перезагружаем весь чат — только догоняем то, что пришло
+      // за время оффлайна. Иначе чат «моргает» и сбрасывает скролл.
+      try { await catchUpMessagesAfterReconnect(currentChatId); } catch (e) {}
       try { await loadReactionsForVisibleMessages(); } catch (e) {}
     }
     try { await refreshOnlineStatuses(); } catch (e) {}
