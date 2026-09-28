@@ -14816,36 +14816,34 @@ function giftCatalogImage(cat) {
 // при правке менять в ОБОИХ местах, иначе подписи «%» в UI разойдутся
 // с реальным роллом.
 const BACKGROUND_CHANCES = {
-  // Tier 1 — 0.5% (1 фон)
-  "Vantablack": 0.5,
+  // Tier 1 — 1.2% (6 фонов)
+  "Vantablack": 1.2,
+  "Pure Gold": 1.2,
+  "Honey": 1.2,
+  "Absolute Pure": 1.2,
+  "Haki": 1.2,
+  "Blue Moon": 1.2,
 
-  // Tier 2 — 1.1% (5 фонов)
-  "Pure Gold": 1.1,
-  "Honey": 1.1,
-  "Absolute Pure": 1.1,
-  "Haki": 1.1,
-  "Blue Moon": 1.1,
-
-  // Tier 3 — 1.4% (5 фонов)
+  // Tier 2 — 1.4% (5 фонов)
   "Onyx": 1.4,
   "Ice and Fire": 1.4,
   "Abyss": 1.4,
   "Electric Indigo": 1.4,
   "Navy": 1.4,
 
-  // Tier 4 — 1.5% (10 фонов)
-  "Boner": 1.5,
-  "Frosty Day": 1.5,
-  "Aurora": 1.5,
-  "Lavender": 1.5,
-  "Sapphire": 1.5,
-  "Burgundy": 1.5,
-  "Electric Purple": 1.5,
-  "Cyan": 1.5,
-  "Celtic Blue": 1.5,
-  "Lotus": 1.5,
+  // Tier 3 — 1.7% (10 фонов)
+  "Boner": 1.7,
+  "Frosty Day": 1.7,
+  "Aurora": 1.7,
+  "Lavender": 1.7,
+  "Sapphire": 1.7,
+  "Burgundy": 1.7,
+  "Electric Purple": 1.7,
+  "Cyan": 1.7,
+  "Celtic Blue": 1.7,
+  "Lotus": 1.7,
 
-  // Tier 5 — 2.0% (16 фонов)
+  // Tier 4 — 2.0% (16 фонов)
   "Ruby": 2.0,
   "Emerald": 2.0,
   "Amethyst": 2.0,
@@ -14863,23 +14861,23 @@ const BACKGROUND_CHANCES = {
   "Coral": 2.0,
   "Sunset Mauve": 2.0,
 
-  // Tier 6 — 2.5% (16 фонов)
-  "Steel": 2.5,
-  "Obsidian": 2.5,
-  "Moss": 2.5,
-  "Autumn": 2.5,
-  "Bark": 2.5,
-  "Mint": 2.5,
-  "Swamp": 2.5,
-  "Acid": 2.5,
-  "Ice": 2.5,
-  "Steel Rain": 2.5,
-  "Pistachio": 2.5,
-  "Forest Green": 2.5,
-  "Silver": 2.5,
-  "Cream": 2.5,
-  "Rose Gold": 2.5,
-  "Matte Matcha": 2.5
+  // Tier 5 — 2.3% (16 фонов)
+  "Steel": 2.3,
+  "Obsidian": 2.3,
+  "Moss": 2.3,
+  "Autumn": 2.3,
+  "Bark": 2.3,
+  "Mint": 2.3,
+  "Swamp": 2.3,
+  "Acid": 2.3,
+  "Ice": 2.3,
+  "Steel Rain": 2.3,
+  "Pistachio": 2.3,
+  "Forest Green": 2.3,
+  "Silver": 2.3,
+  "Cream": 2.3,
+  "Rose Gold": 2.3,
+  "Matte Matcha": 2.3
 };
 
 function getBackgroundChance(name) {
