@@ -20613,7 +20613,18 @@ function openGamePlayer(game) {
       achievement_id: ach.id
     });
 
-    if (!error) {
+    if (error) {
+      // Игнорируем ошибку дубликата (если достижение уже получено ранее)
+      if (error.code !== "23505") {
+        console.error("Ошибка выдачи достижения:", error);
+        showInAppToast({
+          profile: { display_name: "Ошибка", id: "err" },
+          title: "Не удалось выдать достижение",
+          body: error.message,
+          tag: "achievement-err"
+        });
+      }
+    } else {
       // Показываем красивый тост о получении ачивки
       showInAppToast({
         profile: { display_name: "Достижение!", avatar_url: game.icon, id: "ach" },
