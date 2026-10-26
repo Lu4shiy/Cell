@@ -7156,7 +7156,6 @@ async function openChatWith(otherUser) {
   const customName = itemEl ? itemEl.dataset.customName : null;
   paintAvatar(document.getElementById("chat-avatar"), otherUser);
   const botBadge = otherUser.is_bot ? '<span class="bot-tag">BOT</span>' : '';
-  let botBadge = otherUser.is_bot ? '<span class="bot-tag">BOT</span>' : '';
   document.getElementById("chat-title").innerHTML = escapeHtml(customName || otherUser.display_name) + verifiedBadge(otherUser) + botBadge;
   renderChatSubtitle();
   document.getElementById("chat-placeholder").classList.add("hidden");
