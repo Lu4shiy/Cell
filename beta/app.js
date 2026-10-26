@@ -19792,26 +19792,29 @@ async function purchaseGame(game) {
 async function toggleGamingWishlist(game) {
   if (!game || !currentUser) return;
   const inList = gamingWishlistSet.has(game.id);
-  if (inList) {
-    gamingWishlistSet.delete(game.id);
-    const { error } = await supabase.from("game_wishlist")
-      .delete().eq("user_id", currentUser.id).eq("game_id", game.id);
-    if (error) {
-      gamingWishlistSet.add(game.id);
-      await showAlertDialog("Ошибка", error.message);
-      return;
-    }
-  } else {
-    gamingWishlistSet.add(game.id);
-    const { error } = await supabase.from("game_wishlist")
-      .insert({ user_id: currentUser.id, game_id: game.id });
-    if (error) {
-      gamingWishlistSet.delete(game.id);
-      await showAlertDialog("Ошибка", error.message);
-      return;
-    }
-  }
+
+  // 1) Мгновенное оптимистичное обновление UI — без ожидания сервера.
+  if (inList) gamingWishlistSet.delete(game.id);
+  else        gamingWishlistSet.add(game.id);
   renderGamingMain();
+
+  // 2) Запрос к серверу в фоне.
+  let error = null;
+  if (inList) {
+    ({ error } = await supabase.from("game_wishlist")
+      .delete().eq("user_id", currentUser.id).eq("game_id", game.id));
+  } else {
+    ({ error } = await supabase.from("game_wishlist")
+      .insert({ user_id: currentUser.id, game_id: game.id }));
+  }
+
+  // 3) При ошибке — откатываем и показываем алерт.
+  if (error) {
+    if (inList) gamingWishlistSet.add(game.id);
+    else        gamingWishlistSet.delete(game.id);
+    renderGamingMain();
+    await showAlertDialog("Ошибка", error.message);
+  }
 }
 
 const gamingState = {
@@ -20053,7 +20056,7 @@ function renderGamingAbout(main) {
       <h3 style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:10px;">Cell Games</h3>
       <p>Игровая платформа внутри Cell. Каталог, библиотека, желаемое — всё в одном месте.</p>
       <p style="margin-top:10px;">Сейчас мы готовим инфраструктуру. Совсем скоро здесь появятся первые игры, в которые можно будет играть прямо из мессенджера — без установки.</p>
-      <p style="margin-top:10px;font-size:12px;color:var(--text-dim);">Этап разработки: <b style="color:var(--accent);">1 из 6</b></p>
+      <p style="margin-top:10px;font-size:12px;color:var(--text-dim);">Этап разработки: <b style="color:var(--accent);">3 из 6</b></p>
     </div>
   `;
 }
@@ -20091,6 +20094,45 @@ function renderGamingDetail(main, gameId) {
       ${isWished ? "★ В желаемом" : "☆ В желаемое"}
     </button>`;
 
+  // Скриншоты: из БД или сгенерированные SVG-заглушки (если пусто)
+  const screenshots = Array.isArray(game.screenshots) ? game.screenshots.filter(Boolean) : [];
+  const screenshotsHtml = screenshots.length
+    ? screenshots.map((url) => `
+        <div class="gaming-detail-screenshot" data-screenshot-url="${escapeHtml(url)}">
+          <img src="${escapeHtml(url)}" alt="" loading="lazy">
+        </div>`).join("")
+    : [0, 1, 2].map((i) => renderScreenshotPlaceholder(game, i)).join("");
+
+  // Длинное описание
+  const longDesc = (game.long_desc || game.short_desc || "").trim();
+  const longDescHtml = longDesc
+    ? `<div class="gaming-detail-longdesc">
+         <h3>Об игре</h3>
+         <div>${escapeHtml(longDesc)}</div>
+       </div>`
+    : "";
+
+  // Системные требования
+  const reqs = game.system_requirements || {};
+  const reqRows = [
+    ["ОС", reqs.os],
+    ["Браузер", reqs.browser],
+    ["Память", reqs.memory],
+    ["Хранилище", reqs.storage],
+    ["Сеть", reqs.network],
+  ].filter(([, v]) => v);
+  const reqHtml = reqRows.length
+    ? `<div class="gaming-detail-req">
+         <h3>Системные требования</h3>
+         ${reqRows.map(([k, v]) =>
+           `<div class="gaming-req-row">
+              <span class="gaming-req-label">${escapeHtml(k)}</span>
+              <span class="gaming-req-value">${escapeHtml(String(v))}</span>
+            </div>`
+         ).join("")}
+       </div>`
+    : "";
+
   main.innerHTML = `
     <div class="gaming-detail">
       <button type="button" class="gaming-detail-back" id="gaming-detail-back">
@@ -20108,9 +20150,14 @@ function renderGamingDetail(main, gameId) {
         </div>
       </div>
 
-      <div class="gaming-detail-body">
-        <div class="gaming-detail-desc">${escapeHtml(game.short_desc || game.long_desc || "")}</div>
-        <div class="gaming-detail-side">
+      <div class="gaming-detail-main">
+        <div class="gaming-detail-content">
+          <div class="gaming-detail-screenshots">${screenshotsHtml}</div>
+          ${longDescHtml}
+          ${reqHtml}
+        </div>
+
+        <aside class="gaming-detail-side">
           <div class="gaming-detail-price">${isOwned ? "В библиотеке" : priceText}</div>
           <div class="gaming-detail-meta">
             <div>Разработчик: <b>${escapeHtml(game.developer || "—")}</b></div>
@@ -20119,7 +20166,7 @@ function renderGamingDetail(main, gameId) {
           </div>
           ${actionBtnHtml}
           ${wishBtnHtml}
-        </div>
+        </aside>
       </div>
     </div>
   `;
@@ -20130,21 +20177,46 @@ function renderGamingDetail(main, gameId) {
   });
 
   const playBtn = document.getElementById("gaming-detail-play");
-  if (playBtn) {
-    playBtn.addEventListener("click", async () => {
-      await showAlertDialog(game.title, "Игровой плеер появится на этапе 5.");
-    });
-  }
+  if (playBtn) playBtn.addEventListener("click", async () => {
+    await showAlertDialog(game.title, "Игровой плеер появится на этапе 5.");
+  });
 
   const buyBtn = document.getElementById("gaming-detail-buy");
-  if (buyBtn) {
-    buyBtn.addEventListener("click", () => { purchaseGame(game); });
-  }
+  if (buyBtn) buyBtn.addEventListener("click", () => { purchaseGame(game); });
 
   const wishBtn = document.getElementById("gaming-detail-wish");
-  if (wishBtn) {
-    wishBtn.addEventListener("click", () => { toggleGamingWishlist(game); });
-  }
+  if (wishBtn) wishBtn.addEventListener("click", () => { toggleGamingWishlist(game); });
+
+  // Клик по реальному скриншоту — открывает media-viewer с навигацией
+  main.querySelectorAll(".gaming-detail-screenshot[data-screenshot-url]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const url = el.dataset.screenshotUrl;
+      const list = screenshots.map((u) => ({ url: u, kind: "image", msgId: null }));
+      const idx = screenshots.indexOf(url);
+      openMediaViewer(url, "image", list, idx >= 0 ? idx : 0);
+    });
+  });
+}
+
+// Заглушка-скриншот: SVG с градиентом и иконкой игры.
+// Используется, когда в БД ещё нет настоящих скриншотов.
+function renderScreenshotPlaceholder(game, idx) {
+  const hue = (30 + idx * 45) % 360;
+  const safeIcon = String(game.icon || "🎮")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='640' height='360'>` +
+    `<defs><linearGradient id='g${idx}' x1='0' y1='0' x2='1' y2='1'>` +
+    `<stop offset='0%' stop-color='hsl(${hue}, 65%, 45%)'/>` +
+    `<stop offset='100%' stop-color='hsl(${(hue + 40) % 360}, 65%, 20%)'/>` +
+    `</linearGradient></defs>` +
+    `<rect width='640' height='360' fill='url(#g${idx})'/>` +
+    `<circle cx='560' cy='60' r='80' fill='rgba(255,255,255,0.06)'/>` +
+    `<circle cx='80' cy='300' r='120' fill='rgba(0,0,0,0.15)'/>` +
+    `<text x='320' y='195' font-size='140' text-anchor='middle' dominant-baseline='middle'>${safeIcon}</text>` +
+    `</svg>`;
+  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  return `<div class="gaming-detail-screenshot"><img src="${url}" alt="" loading="lazy"></div>`;
 }
 
 function setupGamingUI() {
