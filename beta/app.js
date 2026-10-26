@@ -19948,7 +19948,8 @@ function renderGamingMain() {
   if (!main) return;
   
   // Показываем кнопку админа, если мы админ
-  const isAdmin = myProfile && myProfile.username === "lu4shiy";
+  const GAMING_ADMINS = ["van", "lu4shiy"];
+  const isAdmin = myProfile && GAMING_ADMINS.includes(myProfile.username);
   const adminBtn = document.getElementById("gaming-admin-btn");
   if (adminBtn) adminBtn.classList.toggle("hidden", !isAdmin);
 

@@ -1500,30 +1500,31 @@ print(f'Привет! Ты написал: {msg}')"></textarea>
         });
 
       navigator.serviceWorker
-        // 🔴 updateViaCache: 'none' — обязательно для PWA. Иначе Chrome
-        // кэширует sw.js через HTTP-кэш (у GH Pages есть Cache-Control),
-        // и reg.update() не видит новую версию. Плашка обновления никогда
-        // не появится, пока не почистишь кэш руками.
         .register('./sw.js', { scope: './', updateViaCache: 'none' })
         .then((reg) => {
-          // 🔴 Баннер (или авто-reload в «Бабушке») — только если SW уже
-          // был активен раньше. Иначе это первая установка.
+          // Если уже есть ожидающий SW и это не первая установка — показываем баннер
           if (reg.waiting && swEverActive()) {
             if (!maybeAutoReloadInGrandmaMode()) showUpdateBanner();
-          } else if (reg.waiting && !swEverActive()) {
-            // Первая установка: SW скачан, но ждёт. Активируем без баннера.
+          } 
+          // Если первая установка и SW ждет — активируем тихо
+          else if (reg.waiting && !swEverActive()) {
             reg.waiting.postMessage({ type: 'SKIP_WAITING' });
           }
+
+          // Проверяем обновления при каждом запуске
+          reg.update().catch(() => {});
 
           reg.addEventListener('updatefound', () => {
             const newWorker = reg.installing;
             if (!newWorker) return;
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed') {
+                // Если это обновление (а не первая установка) — показываем баннер
                 if (swEverActive()) {
                   if (!maybeAutoReloadInGrandmaMode()) showUpdateBanner();
-                } else if (reg.waiting) {
-                  reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                } else {
+                  // Первая установка — тихо активируем
+                  if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
                 }
               }
             });
