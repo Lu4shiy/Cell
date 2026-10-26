@@ -4317,7 +4317,7 @@ function renderChatSubtitle() {
 async function getProfile(id) {
   if (profileCache.has(id)) return profileCache.get(id);
   const { data } = await supabase.from("profiles")
-    .select("id, username, display_name, avatar_url, accent_color, last_seen, gender, created_at, birthday, verified, bio")
+    .select("id, username, display_name, avatar_url, accent_color, last_seen, gender, created_at, birthday, verified, bio, is_bot, bot_owner_id, bot_code")
     .eq("id", id).single();
   if (data) profileCache.set(id, data);
   return data;
@@ -5676,7 +5676,7 @@ async function loadRecentChats() {
   let profilesData = [];
   if (uniqueUserIds.length) {
     const { data } = await supabase.from("profiles")
-      .select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified").in("id", uniqueUserIds);
+      .select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified, is_bot, bot_owner_id").in("id", uniqueUserIds);
     profilesData = data || [];
     profilesData.forEach((p) => profileCache.set(p.id, p));
   }
@@ -6047,6 +6047,13 @@ async function openChannel(chatId) {
   paintAvatar(document.getElementById("chat-avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
   document.getElementById("chat-title").innerHTML = escapeHtml(ch.name) + verifiedBadge(ch);
   document.getElementById("chat-placeholder").classList.add("hidden");
+  
+  // Скрываем кнопку редактирования бота в каналах
+  const editBotBtn = document.getElementById("chat-edit-bot-btn");
+  if (editBotBtn) {
+    editBotBtn.classList.add("hidden");
+    editBotBtn.onclick = null;
+  }
   document.getElementById("chat-content").classList.remove("hidden");
   document.getElementById("chat-menu").classList.add("hidden");
 
@@ -6189,7 +6196,7 @@ async function addOrUpdateChatInList(chatId, otherUserId) {
 
   try {
     const { data: profile } = await supabase.from("profiles")
-      .select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified")
+      .select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified, is_bot, bot_owner_id")
       .eq("id", otherUserId).single();
     if (!profile) return;
 
@@ -7169,6 +7176,18 @@ async function openChatWith(otherUser) {
   paintAvatar(document.getElementById("chat-avatar"), otherUser);
   const botBadge = otherUser.is_bot ? '<span class="bot-tag">BOT</span>' : '';
   document.getElementById("chat-title").innerHTML = escapeHtml(customName || otherUser.display_name) + verifiedBadge(otherUser) + botBadge;
+
+  // Показываем кнопку редактирования кода, если это наш бот
+  const editBotBtn = document.getElementById("chat-edit-bot-btn");
+  if (editBotBtn) {
+    if (otherUser.is_bot && otherUser.bot_owner_id === currentUser.id) {
+      editBotBtn.classList.remove("hidden");
+      editBotBtn.onclick = () => openBotEditor(otherUser);
+    } else {
+      editBotBtn.classList.add("hidden");
+      editBotBtn.onclick = null;
+    }
+  }
   renderChatSubtitle();
   document.getElementById("chat-placeholder").classList.add("hidden");
   document.getElementById("chat-content").classList.remove("hidden");
@@ -19483,7 +19502,7 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         language: "python",
-        version: "3.10.0",
+        version: "*", // "*" подтянет актуальную версию, это надежнее
         files: [{ content: botUser.bot_code }],
         stdin: userMessage || ""
       })
@@ -19492,10 +19511,12 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
     const data = await res.json();
     
     let responseText = "";
-    if (data.run && data.run.stdout) {
+    if (data.compile && data.compile.stderr) {
+      responseText = "❌ Ошибка компиляции:\n" + data.compile.stderr.trim();
+    } else if (data.run && data.run.stdout) {
       responseText = data.run.stdout.trim();
     } else if (data.run && data.run.stderr) {
-      responseText = "Ошибка в коде бота:\n" + data.run.stderr.trim();
+      responseText = "❌ Ошибка выполнения:\n" + data.run.stderr.trim();
     } else {
       responseText = "Бот промолчал.";
     }
