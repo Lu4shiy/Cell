@@ -471,7 +471,25 @@ input:focus {
   cursor: pointer;
   padding: 6px 10px;
   border-radius: 10px;
-  transition: all 0.15s;
+  /* Анимируем только transform и цвет */
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), 
+              background-color 0.2s ease, 
+              color 0.2s ease;
+  will-change: transform;
+}
+
+/* При наведении на иконку (только если есть мышь, чтобы на телефоне не залипало) */
+@media (hover: hover) {
+  .icon-btn:hover {
+    transform: scale(1.12); /* Увеличиваем на 12% */
+    background-color: var(--bg-hover);
+    color: var(--accent);
+  }
+}
+
+.icon-btn:active {
+  transform: scale(0.88); /* Сильно сжимаем при клике */
+  transition-duration: 0.08s;
 }
 
 .icon-btn:hover { background: var(--bg-hover); color: var(--accent); }
@@ -579,10 +597,17 @@ input:focus {
   padding: 10px 12px;
   border-radius: 12px;
   cursor: pointer;
-  transition: background 0.12s;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), 
+              background-color 0.2s ease;
+  will-change: transform;
 }
 
-.user-item:hover { background: var(--bg-hover); }
+@media (hover: hover) {
+  .user-item:hover { 
+    background: var(--bg-hover); 
+    transform: translateX(4px); /* Сдвигаем вправо на 4 пикселя */
+  }
+}
 .user-item.active { background: var(--bg-active); }
 .user-item .avatar { width: 46px; height: 46px; font-size: 17px; position: relative; }
 
@@ -686,28 +711,49 @@ input:focus {
 .chat-area {
   flex: 1;
   background-color: var(--bg);
-  background-image: radial-gradient(ellipse at 85% -5%, rgba(var(--accent-rgb), 0.09), transparent 45%);
+  /* Убираем статичный градиент, его заменит анимированный слой */
   display: flex;
   flex-direction: column;
   height: 100vh;
   transition: background 0.2s;
   position: relative;
+  overflow: hidden; /* Важно! Обрезаем всё, что вылезает за края */
 }
 
 .chat-area::before {
   content: "";
   position: absolute;
   inset: 0;
-  background-color: var(--accent);
-  -webkit-mask-image: var(--honeycomb-mask);
-  mask-image: var(--honeycomb-mask);
-  -webkit-mask-size: 196px 344px;
-  mask-size: 196px 344px;
-  -webkit-mask-repeat: repeat;
-  mask-repeat: repeat;
-  opacity: 0.055;
-  pointer-events: none;
+  /* ... твой сотовый паттерн (оставь как было) ... */
+}
+
+/* 🔴 НОВЫЙ СЛОЙ: Анимированное свечение */
+.chat-area::after {
+  content: "";
+  position: absolute;
+  /* Делаем слой больше самого экрана в 2 раза, 
+     чтобы при движении не было видно краёв */
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  /* Радиальный градиент из цвета акцента */
+  background: radial-gradient(circle at 50% 50%, 
+              rgba(var(--accent-rgb), 0.08) 0%, 
+              transparent 60%);
+  /* Запускаем анимацию: 20 секунд, бесконечно, туда-сюда */
+  animation: ambientGlow 20s infinite alternate ease-in-out;
+  pointer-events: none; /* Чтобы не мешал кликам */
   z-index: 0;
+  /* Говорим браузеру: "этот слой будет двигаться" */
+  will-change: transform;
+}
+
+/* Сама анимация движения */
+@keyframes ambientGlow {
+  0%   { transform: translate(0%, 0%) scale(1); }
+  50%  { transform: translate(10%, 5%) scale(1.1); }
+  100% { transform: translate(-5%, -10%) scale(1.05); }
 }
 
 .chat-area > * { position: relative; z-index: 1; }
@@ -779,7 +825,7 @@ input:focus {
   line-height: 1.35;
   word-wrap: break-word;
   position: relative;
-  animation: msgIn 0.15s ease-out;
+  animation: msgIn 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .msg-text { display: block; white-space: pre-wrap; word-wrap: break-word; }
@@ -812,8 +858,15 @@ input:focus {
 .msg-time { display: block; font-size: 11px; text-align: right; margin-top: 3px; }
 
 @keyframes msgIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { 
+    opacity: 0; 
+    /* Начинаем чуть ниже и чуть меньше */
+    transform: translateY(12px) scale(0.96); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0) scale(1); 
+  }
 }
 
 .msg.other {
@@ -1674,12 +1727,19 @@ input:focus {
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 24px 70px rgba(0,0,0,0.6);
-  animation: popIn 0.15s ease-out;
+  animation: popIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes popIn {
-  from { opacity: 0; transform: scale(0.96); }
-  to   { opacity: 1; transform: scale(1); }
+  from { 
+    opacity: 0; 
+    /* Начинаем с 90% размера и сдвига вниз на 10px */
+    transform: scale(0.9) translateY(10px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: scale(1) translateY(0); 
+  }
 }
 
 .dialog-title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 8px; letter-spacing: 0.2px; }
@@ -3383,14 +3443,36 @@ mark.search-hl {
 /* Плавные анимации                                        */
 /* ====================================================== */
 
+/* 🔴 ПРАВИЛО: Анимируем только transform и opacity (GPU). 
+   background и color анимируются процессором, но это допустимо 
+   для небольших элементов. */
+
 button, .user-item, .gift-card, .forward-item, .dialog-option,
-.accent-option, .avatar-option, .icon-btn {
-  transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.15s ease,
-              color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+.accent-option, .avatar-option, .icon-btn, .user-item, .gift-tile, .market-card {
+  /* 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) — это кривая "пружины". 
+     Она делает так, что элемент чуть-чуть перелетает конечную точку 
+     и возвращается назад. Это и даёт ощущение "живости". */
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), 
+              background-color 0.2s ease, 
+              color 0.2s ease, 
+              border-color 0.2s ease,
+              box-shadow 0.2s ease;
+  /* Подсказываем браузеру: "этот элемент будет двигаться, 
+     подготовь для него отдельный слой на видеокарте" */
+  will-change: transform;
 }
-button:not(:disabled):active { transform: scale(0.97); }
-.user-item:hover { transform: translateX(2px); }
-.gift-card:hover, .forward-item:hover { transform: translateX(2px); }
+
+/* Нажатие (клик/тап) — элемент мгновенно сжимается */
+button:not(:disabled):active,
+.user-item:active,
+.gift-tile:active,
+.market-card:active,
+.dialog-btn:active {
+  transform: scale(0.95); /* Сжимаем на 5% */
+  /* На нажатие ставим очень быстрый переход (0.08s), чтобы 
+     палец/мышь чувствовал мгновенный отклик */
+  transition-duration: 0.08s; 
+}
 
 /* ====================================================== */
 /* Мобильная                                                */
@@ -4147,12 +4229,29 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   justify-content: center;
   cursor: pointer;
   overflow: hidden;
-  transition: transform 0.12s, border-color 0.12s, background 0.12s;
+  /* Пружинистый переход */
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), 
+              border-color 0.2s ease, 
+              background-color 0.2s ease,
+              box-shadow 0.25s ease;
+  will-change: transform;
 }
-.gift-tile:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-  background: var(--bg-hover);
+
+@media (hover: hover) {
+  .gift-tile:hover {
+    /* Поднимаем на 6 пикселей вверх и чуть увеличиваем */
+    transform: translateY(-6px) scale(1.02);
+    border-color: var(--accent);
+    background: var(--bg-hover);
+    /* Добавляем глубокую тень. Тень статична, она просто 
+       проявляется вместе с transform — это не грузит процессор. */
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4), 
+                0 0 0 1px rgba(245, 166, 35, 0.2);
+  }
+}
+.gift-tile:active {
+  transform: translateY(-2px) scale(0.98); /* Проваливается при клике */
+  transition-duration: 0.1s;
 }
 
 .gift-tile.in-profile {
