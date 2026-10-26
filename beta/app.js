@@ -19598,7 +19598,6 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
   }
   if (!botUser.bot_code) {
     console.warn("triggerBotResponse: у бота нет кода (bot_code пуст)");
-    // Подгружаем на всякий случай
     const { data } = await supabase.from("profiles").select("bot_code").eq("id", botUser.id).single();
     if (data && data.bot_code) {
       botUser.bot_code = data.bot_code;
@@ -19621,36 +19620,75 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
   let timeoutId = null;
   try {
     const controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), 15000);
-    
-    const res = await fetch("https://emkc.org/api/v2/piston/execute", {
+    timeoutId = setTimeout(() => controller.abort(), 20000); // Judge0 может работать чуть дольше
+
+    // 1. Кодируем код бота и сообщение пользователя в base64
+    const sourceCodeB64 = btoa(unescape(encodeURIComponent(botUser.bot_code)));
+    const stdinB64 = btoa(unescape(encodeURIComponent(userMessage || "")));
+
+    // 2. Отправляем задачу на выполнение в Judge0 CE
+    const submitRes = await fetch("https://ce.judge0.com/submissions?base64_encoded=true&wait=false", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        language: "python",
-        version: "*",
-        files: [{ content: botUser.bot_code }],
-        stdin: userMessage || ""
+        source_code: sourceCodeB64,
+        language_id: 71, // Python 3.8.1
+        stdin: stdinB64,
+        cpu_time_limit: 5, // максимум 5 секунд CPU
       }),
       signal: controller.signal
     });
+
+    if (!submitRes.ok) {
+      throw new Error(`Judge0 submit error: ${submitRes.status}`);
+    }
+
+    const submitData = await submitRes.json();
+    const token = submitData.token;
+    if (!token) {
+      throw new Error("Judge0 не вернул token");
+    }
+
+    // 3. Опрашиваем результат (polling), пока не выполнится
+    let resultData = null;
+    const startTime = Date.now();
+    const MAX_WAIT_MS = 15000; // максимум 15 секунд на выполнение
+
+    while (Date.now() - startTime < MAX_WAIT_MS) {
+      await new Promise(r => setTimeout(r, 500)); // ждём полсекунды
+
+      const pollRes = await fetch(`https://ce.judge0.com/submissions/${token}?base64_encoded=true`, {
+        signal: controller.signal
+      });
+      if (!pollRes.ok) continue;
+
+      resultData = await pollRes.json();
+      // Статусы Judge0: 1 = In Queue, 2 = Processing. Если больше — выполнение завершено.
+      if (resultData.status && resultData.status.id > 2) {
+        break;
+      }
+    }
+
     clearTimeout(timeoutId);
-    
-    const data = await res.json();
-    console.log("Piston API response:", data);
-    
+
+    if (!resultData) {
+      throw new Error("Не удалось получить результат от Judge0");
+    }
+
+    // 4. Декодируем ответ
     let responseText = "";
-    if (data.compile && data.compile.stderr) {
-      responseText = "❌ Ошибка компиляции:\n" + data.compile.stderr.trim();
-    } else if (data.run && data.run.stderr) {
-      responseText = "❌ Ошибка выполнения:\n" + data.run.stderr.trim();
-    } else if (data.run && data.run.stdout) {
-      responseText = data.run.stdout.trim();
-    } else if (data.run && data.run.output) {
-      responseText = data.run.output.trim();
+    const stdout = resultData.stdout ? decodeURIComponent(escape(atob(resultData.stdout))).trim() : "";
+    const stderr = resultData.stderr ? decodeURIComponent(escape(atob(resultData.stderr))).trim() : "";
+    const compileOutput = resultData.compile_output ? decodeURIComponent(escape(atob(resultData.compile_output))).trim() : "";
+
+    if (compileOutput) {
+      responseText = "❌ Ошибка компиляции:\n" + compileOutput;
+    } else if (stderr) {
+      responseText = "❌ Ошибка выполнения:\n" + stderr;
+    } else if (stdout) {
+      responseText = stdout;
     } else {
-      // Если ничего не пришло — показываем, что реально вернул API (для отладки)
-      responseText = "Бот промолчал. Ответ API:\n" + JSON.stringify(data, null, 2);
+      responseText = "Бот промолчал.";
     }
 
     // Удаляем "Бот печатает..."
@@ -19658,19 +19696,18 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
     if (tempEl) tempEl.remove();
     msgCache.delete(tempId);
 
-    // Используем RPC-функцию, которая обходит RLS и позволяет отправить сообщение от имени бота
+    // 5. Отправляем ответ от имени бота (используем нашу RPC-функцию)
     const { data: newMsg, error } = await supabase.rpc("send_bot_message", {
       p_chat_id: chatId,
       p_bot_id: botUser.id,
       p_content: responseText
     });
-    
+
     if (!error && newMsg) {
-      // RPC возвращает объект (иногда обёрнутый в массив)
       const insertedMsg = Array.isArray(newMsg) ? newMsg[0] : newMsg;
       await appendMessage(insertedMsg);
       scrollToBottom();
-      
+
       chatLastMsg.set(chatId, {
         text: responseText,
         time: new Date(insertedMsg.created_at).getTime(),
@@ -19679,7 +19716,7 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
       });
       updateChatItemPreview(chatId);
       resortChatsList();
-      
+
       const parsed = parseBotMessage(responseText);
       if (parsed.keyboard) {
         renderBotKeyboard(parsed.keyboard);
@@ -19689,26 +19726,28 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
     }
   } catch (e) {
     clearTimeout(timeoutId);
-    console.error("Bot error:", e);
+    console.error("Bot error (Judge0):", e);
     const tempEl = document.querySelector(`[data-id="${tempId}"]`);
     if (tempEl) tempEl.remove();
     msgCache.delete(tempId);
-    
-    let errorMsg = "❌ Ошибка: не удалось связаться с сервером ботов.";
+
+    let errorMsg = "❌ Ошибка: не удалось выполнить код бота.";
     if (e.name === "AbortError") {
-      errorMsg = "❌ Ошибка: превышено время ожидания (15 секунд).";
+      errorMsg = "❌ Ошибка: превышено время ожидания (20 секунд).";
+    } else if (e.message) {
+      errorMsg = "❌ Ошибка: " + e.message;
     }
-    
+
     const { data: errMsg } = await supabase.rpc("send_bot_message", {
-        p_chat_id: chatId,
-        p_bot_id: botUser.id,
-        p_content: errorMsg
+      p_chat_id: chatId,
+      p_bot_id: botUser.id,
+      p_content: errorMsg
     });
-    
+
     if (errMsg) {
-        const insertedMsg = Array.isArray(errMsg) ? errMsg[0] : errMsg;
-        await appendMessage(insertedMsg);
-        scrollToBottom();
+      const insertedMsg = Array.isArray(errMsg) ? errMsg[0] : errMsg;
+      await appendMessage(insertedMsg);
+      scrollToBottom();
     }
   }
 }
