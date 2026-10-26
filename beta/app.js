@@ -19283,11 +19283,12 @@ function setupBotUI() {
   document.getElementById("bot-username-input").addEventListener("input", (e) => {
     clearTimeout(botUsernameTimeout);
     botUsernameValidated = null;
-    document.getElementById("bot-create-confirm").disabled = true;
-    
-    const val = e.target.value.trim();
     const hint = document.getElementById("bot-username-hint");
-    
+    hint.dataset.validated = "";
+    document.getElementById("bot-create-confirm").disabled = true;
+
+    const val = e.target.value.trim();
+
     if (!val) { hint.className = "username-hint"; hint.textContent = ""; return; }
     if (!/^[a-zA-Z0-9_-]+$/.test(val)) {
       hint.className = "username-hint err"; hint.textContent = "Только латиница, цифры, _ и -"; return;
@@ -19302,15 +19303,17 @@ function setupBotUI() {
     }
 
     hint.className = "username-hint"; hint.textContent = "Проверяю...";
-    
+
     botUsernameTimeout = setTimeout(async () => {
       const { data } = await supabase.from("profiles").select("id").ilike("username", val).limit(1);
       if (data && data.length > 0) {
         hint.className = "username-hint err"; hint.textContent = "Занято";
         botUsernameValidated = null;
+        hint.dataset.validated = "";
       } else {
         hint.className = "username-hint ok"; hint.textContent = "Свободно";
         botUsernameValidated = val;
+        hint.dataset.validated = val;
       }
       updateBotCreateButton();
     }, 400);
@@ -19337,20 +19340,11 @@ function setupBotUI() {
 function updateBotCreateButton() {
   const name = document.getElementById("bot-name-input").value.trim();
   const uname = document.getElementById("bot-username-input").value.trim();
-  // Валидация имени и проверка, что юзернейм совпадает с проверенным
+  const hint = document.getElementById("bot-username-hint");
+  const validated = hint.dataset.validated || "";
   const btn = document.getElementById("bot-create-confirm");
-  btn.disabled = !name || !uname || uname !== document.getElementById("bot-username-hint").dataset.validated;
+  btn.disabled = !name || !uname || uname !== validated;
 }
-// Фикс для предыдущей функции
-document.getElementById("bot-username-input").addEventListener("input", (e) => {
-    // вставляем валидированный юзернейм в dataset
-    const hint = document.getElementById("bot-username-hint");
-    if (hint.classList.contains("ok")) {
-        hint.dataset.validated = e.target.value.trim();
-    } else {
-        hint.dataset.validated = "";
-    }
-});
 
 function renderBotAvatarGrid() {
   const grid = document.getElementById("bot-avatar-grid");
