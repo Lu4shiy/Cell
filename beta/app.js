@@ -19724,120 +19724,106 @@ ConnectionMonitor.init();
 // GAMING CENTER
 // ======================================================
 
-// Демо-каталог (этап 1). На этапе 2 заменится данными из Supabase.
-const GAMING_DEMO_CATALOG = [
-  {
-    id: "hive-defender",
-    title: "Hive Defender",
-    icon: "🐝",
-    coverGradient: "linear-gradient(135deg, #f5a623 0%, #c45400 100%)",
-    tags: ["Стратегия", "Tower Defense"],
-    price: 0,
-    status: "available",
-    developer: "Cell Studio",
-    releaseYear: "2026",
-    shortDesc: "Защищай улей от ос и жуков, расставляя пчелиные башни.",
-    featured: true,
-  },
-  {
-    id: "cell-match",
-    title: "Cell Match",
-    icon: "🍯",
-    coverGradient: "linear-gradient(135deg, #ffd84a 0%, #f5a623 100%)",
-    tags: ["Головоломка", "Match-3"],
-    price: 0,
-    status: "available",
-    developer: "Cell Studio",
-    releaseYear: "2026",
-    shortDesc: "Собирай линии из мёда и взрывай соты.",
-  },
-  {
-    id: "word-cell",
-    title: "Word Cell",
-    icon: "📝",
-    coverGradient: "linear-gradient(135deg, #2ab5a0 0%, #136e60 100%)",
-    tags: ["Слова", "Головоломка"],
-    price: 0,
-    status: "available",
-    developer: "Cell Studio",
-    releaseYear: "2026",
-    shortDesc: "Угадай слово за шесть попыток. Пчёлы-подсказчики помогают.",
-  },
-  {
-    id: "snake-2d",
-    title: "Snake 2D",
-    icon: "🐍",
-    coverGradient: "linear-gradient(135deg, #6fbf4a 0%, #3f7528 100%)",
-    tags: ["Аркада", "Классика"],
-    price: 0,
-    status: "available",
-    developer: "Cell Studio",
-    releaseYear: "2026",
-    shortDesc: "Классическая змейка с нектаровой механикой.",
-  },
-  {
-    id: "memory-hive",
-    title: "Memory Hive",
-    icon: "🧠",
-    coverGradient: "linear-gradient(135deg, #e8568f 0%, #a03060 100%)",
-    tags: ["Память", "Головоломка"],
-    price: 0,
-    status: "available",
-    developer: "Cell Studio",
-    releaseYear: "2026",
-    shortDesc: "Найди пары и не задень осу.",
-  },
-  {
-    id: "hex-chess",
-    title: "Hex Chess",
-    icon: "♟️",
-    coverGradient: "linear-gradient(135deg, #a45cc9 0%, #5e2f7a 100%)",
-    tags: ["Стратегия", "Шахматы"],
-    price: 200,
-    status: "coming_soon",
-    developer: "Cell Studio",
-    releaseYear: "2026",
-    shortDesc: "Шахматы на гексагональной доске.",
-  },
-  {
-    id: "miner-bee",
-    title: "Miner Bee",
-    icon: "⛏️",
-    coverGradient: "linear-gradient(135deg, #d4a574 0%, #6b4423 100%)",
-    tags: ["Аркада", "Кликер"],
-    price: 150,
-    status: "coming_soon",
-    developer: "Cell Studio",
-    releaseYear: "2026",
-    shortDesc: "Копай мёд, прокачивай пчёл, разоряй соты.",
-  },
-  {
-    id: "hex-sprint",
-    title: "Hex Sprint",
-    icon: "🏃",
-    coverGradient: "linear-gradient(135deg, #e85a4a 0%, #8a2a1f 100%)",
-    tags: ["Гонки", "Раннер"],
-    price: 250,
-    status: "coming_soon",
-    developer: "Cell Studio",
-    releaseYear: "2026",
-    shortDesc: "Пробеги по шоссе сот, уворачиваясь от ос.",
-  },
-];
+// Каталог и связи загружаются из Supabase (этап 2).
+let gamingCatalog = [];
+let gamingOwnedSet = new Set();
+let gamingWishlistSet = new Set();
+let gamingLoadPromise = null;
+
+async function loadGamingData(force) {
+  if (!currentUser) return;
+  if (gamingLoadPromise && !force) return gamingLoadPromise;
+  gamingLoadPromise = (async () => {
+    try {
+      const [gamesRes, ownRes, wishRes] = await Promise.all([
+        supabase.from("games").select("*").neq("status", "hidden").order("sort_order").order("title"),
+        supabase.from("game_ownerships").select("game_id").eq("user_id", currentUser.id),
+        supabase.from("game_wishlist").select("game_id").eq("user_id", currentUser.id),
+      ]);
+      if (!gamesRes.error) gamingCatalog = gamesRes.data || [];
+      if (!ownRes.error)  gamingOwnedSet    = new Set((ownRes.data || []).map((r) => r.game_id));
+      if (!wishRes.error) gamingWishlistSet = new Set((wishRes.data || []).map((r) => r.game_id));
+    } catch (e) {
+      console.warn("loadGamingData:", e);
+    } finally {
+      gamingLoadPromise = null;
+    }
+  })();
+  return gamingLoadPromise;
+}
+
+// Перевод ошибок RPC покупки в понятный русский
+function translateGamingError(msg) {
+  const m = String(msg || "").toLowerCase();
+  if (m.includes("not authenticated"))  return "Войдите в аккаунт.";
+  if (m.includes("game not found"))     return "Игра не найдена.";
+  if (m.includes("game not available")) return "Игра пока недоступна.";
+  if (m.includes("already owned"))      return "Эта игра уже в библиотеке.";
+  if (m.includes("not enough chip"))    return "Недостаточно Chip на балансе.";
+  return msg;
+}
+
+async function purchaseGame(game) {
+  if (!game || !currentUser) return;
+  const price = game.price || 0;
+  const body = price > 0
+    ? `«${escapeHtml(game.title)}» будет добавлена в библиотеку. Спишется ${NECTAR_HTML} <b>${price}</b>.`
+    : `«${escapeHtml(game.title)}» будет добавлена в библиотеку бесплатно.`;
+  const ok = await showConfirmDialog(
+    price > 0 ? "Купить игру" : "Получить игру",
+    body,
+    price > 0 ? "Купить" : "Получить",
+    price > 0 ? { html: true } : undefined
+  );
+  if (!ok) return;
+
+  const { error } = await supabase.rpc("gaming_buy_game", { p_game_id: game.id });
+  if (error) {
+    await showAlertDialog("Ошибка", translateGamingError(error.message));
+    return;
+  }
+  gamingOwnedSet.add(game.id);
+  // Обновляем баланс в шапке Gaming Center
+  await refreshGamingHeader();
+  // Перерисовываем текущий экран
+  renderGamingMain();
+}
+
+async function toggleGamingWishlist(game) {
+  if (!game || !currentUser) return;
+  const inList = gamingWishlistSet.has(game.id);
+  if (inList) {
+    gamingWishlistSet.delete(game.id);
+    const { error } = await supabase.from("game_wishlist")
+      .delete().eq("user_id", currentUser.id).eq("game_id", game.id);
+    if (error) {
+      gamingWishlistSet.add(game.id);
+      await showAlertDialog("Ошибка", error.message);
+      return;
+    }
+  } else {
+    gamingWishlistSet.add(game.id);
+    const { error } = await supabase.from("game_wishlist")
+      .insert({ user_id: currentUser.id, game_id: game.id });
+    if (error) {
+      gamingWishlistSet.delete(game.id);
+      await showAlertDialog("Ошибка", error.message);
+      return;
+    }
+  }
+  renderGamingMain();
+}
 
 const gamingState = {
   tab: "store",
   categoryFilter: "all",
   searchQuery: "",
   currentGameId: null,
-  library: new Set(),
-  wishlist: new Set(),
 };
 
-function openGamingCenter() {
+async function openGamingCenter() {
   const overlay = document.getElementById("gaming-overlay");
   if (!overlay) return;
-  // Сброс поиска при каждом открытии
   const searchEl = document.getElementById("gaming-search-input");
   if (searchEl) searchEl.value = "";
   gamingState.searchQuery = "";
@@ -19845,10 +19831,17 @@ function openGamingCenter() {
   gamingState.tab = "store";
   gamingState.currentGameId = null;
 
+  const main = document.getElementById("gaming-main");
+  if (main) {
+    main.innerHTML = `<div class="gaming-empty"><div class="gaming-empty-icon">⏳</div><div>Загрузка каталога...</div></div>`;
+  }
   refreshGamingHeader();
   updateGamingNav();
-  renderGamingMain();
   overlay.classList.remove("hidden");
+
+  await loadGamingData(true);
+  refreshGamingHeader();
+  renderGamingMain();
 }
 
 function closeGamingCenter() {
@@ -19905,33 +19898,33 @@ function renderGamingMain() {
 
 function renderGamingStore(main) {
   const q = gamingState.searchQuery.trim().toLowerCase();
-  const games = GAMING_DEMO_CATALOG.filter((g) => {
+  const games = gamingCatalog.filter((g) => {
     if (q) {
-      const hay = (g.title + " " + g.tags.join(" ") + " " + g.shortDesc).toLowerCase();
+      const hay = (g.title + " " + (g.tags || []).join(" ") + " " + (g.short_desc || "")).toLowerCase();
       if (!hay.includes(q)) return false;
     }
-    if (gamingState.categoryFilter !== "all" && !g.tags.includes(gamingState.categoryFilter)) return false;
+    if (gamingState.categoryFilter !== "all" && !(g.tags || []).includes(gamingState.categoryFilter)) return false;
     return true;
   });
 
   let heroHtml = "";
   if (!q && gamingState.categoryFilter === "all") {
-    const featured = GAMING_DEMO_CATALOG.find((g) => g.featured);
+    const featured = gamingCatalog.find((g) => g.featured);
     if (featured) {
       heroHtml = `
-        <div class="gaming-hero" data-game-id="${featured.id}" style="background: ${featured.coverGradient};">
+        <div class="gaming-hero" data-game-id="${featured.id}" style="background: ${featured.cover_gradient};">
           <div class="gaming-hero-icon">${featured.icon}</div>
           <div class="gaming-hero-content">
             <div class="gaming-hero-badge">Рекомендуем</div>
             <div class="gaming-hero-title">${escapeHtml(featured.title)}</div>
-            <div class="gaming-hero-desc">${escapeHtml(featured.shortDesc)}</div>
+            <div class="gaming-hero-desc">${escapeHtml(featured.short_desc || "")}</div>
           </div>
         </div>`;
     }
   }
 
   const allTags = new Set();
-  GAMING_DEMO_CATALOG.forEach((g) => g.tags.forEach((t) => allTags.add(t)));
+  gamingCatalog.forEach((g) => (g.tags || []).forEach((t) => allTags.add(t)));
   const chips = [
     `<button type="button" class="gaming-filter-chip ${gamingState.categoryFilter === "all" ? "active" : ""}" data-cat="all">Все</button>`
   ];
@@ -19981,7 +19974,7 @@ function renderGameCard(game) {
 }
 
 function renderGamingLibrary(main) {
-  const owned = GAMING_DEMO_CATALOG.filter((g) => gamingState.library.has(g.id));
+  const owned = gamingCatalog.filter((g) => gamingOwnedSet.has(g.id));
   if (!owned.length) {
     main.innerHTML = `
       <div class="gaming-empty">
@@ -20001,7 +19994,7 @@ function renderGamingLibrary(main) {
 }
 
 function renderGamingWishlist(main) {
-  const wish = GAMING_DEMO_CATALOG.filter((g) => gamingState.wishlist.has(g.id));
+  const wish = gamingCatalog.filter((g) => gamingWishlistSet.has(g.id));
   if (!wish.length) {
     main.innerHTML = `
       <div class="gaming-empty">
@@ -20021,8 +20014,8 @@ function renderGamingWishlist(main) {
 }
 
 function renderGamingProfile(main) {
-  const owned = gamingState.library.size;
-  const wish = gamingState.wishlist.size;
+  const owned = gamingOwnedSet.size;
+  const wish = gamingWishlistSet.size;
   main.innerHTML = `
     <div class="gaming-section-title">Профиль</div>
     <div style="padding:16px;border-radius:14px;background:var(--bg-input);border:1px solid var(--border);display:flex;align-items:center;gap:14px;margin-bottom:16px;">
@@ -20071,15 +20064,32 @@ function openGameDetail(gameId) {
 }
 
 function renderGamingDetail(main, gameId) {
-  const game = GAMING_DEMO_CATALOG.find((g) => g.id === gameId);
+  const game = gamingCatalog.find((g) => g.id === gameId || g.slug === gameId);
   if (!game) {
     gamingState.currentGameId = null;
     renderGamingMain();
     return;
   }
-  const isWished = gamingState.wishlist.has(game.id);
+  const isOwned = gamingOwnedSet.has(game.id);
+  const isWished = gamingWishlistSet.has(game.id);
   const isAvailable = game.status === "available";
   const priceText = game.price > 0 ? `${NECTAR_HTML} ${game.price}` : "Бесплатно";
+
+  let actionBtnHtml = "";
+  if (isOwned) {
+    actionBtnHtml = `<button type="button" class="gaming-detail-play" id="gaming-detail-play">▶ Играть</button>`;
+  } else if (isAvailable) {
+    actionBtnHtml = `<button type="button" class="gaming-detail-play" id="gaming-detail-buy">
+      ${game.price > 0 ? "Купить" : "Получить бесплатно"}
+    </button>`;
+  } else {
+    actionBtnHtml = `<button type="button" class="gaming-detail-play coming-soon" disabled>Скоро</button>`;
+  }
+
+  const wishBtnHtml = isOwned ? "" : `
+    <button type="button" class="gaming-detail-wish ${isWished ? "active" : ""}" id="gaming-detail-wish">
+      ${isWished ? "★ В желаемом" : "☆ В желаемое"}
+    </button>`;
 
   main.innerHTML = `
     <div class="gaming-detail">
@@ -20088,31 +20098,27 @@ function renderGamingDetail(main, gameId) {
         <span>Назад в каталог</span>
       </button>
 
-      <div class="gaming-detail-hero" style="background: ${game.coverGradient};">
+      <div class="gaming-detail-hero" style="background: ${game.cover_gradient};">
         <div class="gaming-detail-hero-icon">${game.icon}</div>
         <div class="gaming-detail-hero-content">
           <div class="gaming-detail-title">${escapeHtml(game.title)}</div>
           <div class="gaming-detail-tags">
-            ${game.tags.map((t) => `<span class="gaming-detail-tag">${escapeHtml(t)}</span>`).join("")}
+            ${(game.tags || []).map((t) => `<span class="gaming-detail-tag">${escapeHtml(t)}</span>`).join("")}
           </div>
         </div>
       </div>
 
       <div class="gaming-detail-body">
-        <div class="gaming-detail-desc">${escapeHtml(game.shortDesc)}</div>
+        <div class="gaming-detail-desc">${escapeHtml(game.short_desc || game.long_desc || "")}</div>
         <div class="gaming-detail-side">
-          <div class="gaming-detail-price">${priceText}</div>
+          <div class="gaming-detail-price">${isOwned ? "В библиотеке" : priceText}</div>
           <div class="gaming-detail-meta">
-            <div>Разработчик: <b>${escapeHtml(game.developer)}</b></div>
-            <div>Год: <b>${escapeHtml(game.releaseYear)}</b></div>
+            <div>Разработчик: <b>${escapeHtml(game.developer || "—")}</b></div>
+            <div>Год: <b>${escapeHtml(game.release_year || "—")}</b></div>
             <div>Статус: <b style="color:${isAvailable ? "var(--accent)" : "var(--text-sub)"};">${isAvailable ? "Доступно" : "Скоро"}</b></div>
           </div>
-          <button type="button" class="gaming-detail-play ${isAvailable ? "" : "coming-soon"}" id="gaming-detail-play">
-            ${isAvailable ? "▶ Играть" : "Скоро"}
-          </button>
-          <button type="button" class="gaming-detail-wish ${isWished ? "active" : ""}" id="gaming-detail-wish">
-            ${isWished ? "★ В желаемом" : "☆ В желаемое"}
-          </button>
+          ${actionBtnHtml}
+          ${wishBtnHtml}
         </div>
       </div>
     </div>
@@ -20122,18 +20128,23 @@ function renderGamingDetail(main, gameId) {
     gamingState.currentGameId = null;
     renderGamingMain();
   });
-  document.getElementById("gaming-detail-play").addEventListener("click", async () => {
-    if (!isAvailable) {
-      await showAlertDialog("Скоро", "Игра появится в ближайшем обновлении.");
-      return;
-    }
-    await showAlertDialog(game.title, "Игровой плеер появится в следующем этапе (этап 5).");
-  });
-  document.getElementById("gaming-detail-wish").addEventListener("click", () => {
-    if (gamingState.wishlist.has(game.id)) gamingState.wishlist.delete(game.id);
-    else gamingState.wishlist.add(game.id);
-    renderGamingDetail(main, game.id);
-  });
+
+  const playBtn = document.getElementById("gaming-detail-play");
+  if (playBtn) {
+    playBtn.addEventListener("click", async () => {
+      await showAlertDialog(game.title, "Игровой плеер появится на этапе 5.");
+    });
+  }
+
+  const buyBtn = document.getElementById("gaming-detail-buy");
+  if (buyBtn) {
+    buyBtn.addEventListener("click", () => { purchaseGame(game); });
+  }
+
+  const wishBtn = document.getElementById("gaming-detail-wish");
+  if (wishBtn) {
+    wishBtn.addEventListener("click", () => { toggleGamingWishlist(game); });
+  }
 }
 
 function setupGamingUI() {
