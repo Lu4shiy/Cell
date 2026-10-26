@@ -1235,6 +1235,58 @@
     <button type="button" id="update-banner-close" aria-label="Скрыть">✕</button>
   </div>
 
+  <!-- ═══════ ДОБАВЛЕНИЕ ИГРЫ (АДМИН) ═══════ -->
+  <div id="gaming-add-overlay" class="dialog-overlay hidden" style="z-index: 9800;">
+    <div class="dialog dialog-profile">
+      <div class="dialog-title">Добавить игру</div>
+      
+      <div class="profile-section">
+        <div class="profile-label">Название</div>
+        <input type="text" id="ga-title" placeholder="Название игры" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;">
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Ссылка на игру (URL)</div>
+        <input type="text" id="ga-url" placeholder="games/my-game/index.html" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;">
+        <div class="username-hint">Можно указать локальный путь или полный URL (https://...)</div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Иконка (эмодзи)</div>
+        <input type="text" id="ga-icon" placeholder="🎮" maxlength="2" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;">
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Градиент обложки (CSS)</div>
+        <input type="text" id="ga-gradient" value="linear-gradient(135deg, #f5a623 0%, #c45400 100%)" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;">
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Теги (через запятую)</div>
+        <input type="text" id="ga-tags" placeholder="Аркада, Экшен" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;">
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Цена (Chip)</div>
+        <input type="number" id="ga-price" value="0" min="0" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;">
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Статус</div>
+        <select id="ga-status" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;appearance:none;">
+          <option value="available">Доступно (Можно играть)</option>
+          <option value="coming_soon">Скоро</option>
+          <option value="hidden">Скрыто</option>
+        </select>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn dialog-primary" id="gaming-add-save">Сохранить</button>
+        <button class="dialog-btn dialog-cancel" id="gaming-add-cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══════ СОЗДАНИЕ БОТА ═══════ -->
   <div id="bot-create-overlay" class="dialog-overlay hidden">
     <div class="dialog dialog-profile">
@@ -1332,6 +1384,10 @@ print(f'Привет! Ты написал: {msg}')"></textarea>
             <span>Профиль</span>
           </button>
           <div class="gaming-nav-sep"></div>
+          <button class="gaming-nav-item hidden" id="gaming-admin-btn" data-gaming-tab="admin" type="button">
+            <span class="cell-icon" data-icon="plus"></span>
+            <span>Добавить игру</span>
+          </button>
           <button class="gaming-nav-item" data-gaming-tab="about" type="button">
             <span class="cell-icon" data-icon="info"></span>
             <span>О сервисе</span>

@@ -19728,6 +19728,7 @@ ConnectionMonitor.init();
 let gamingCatalog = [];
 let gamingOwnedSet = new Set();
 let gamingWishlistSet = new Set();
+let gamingPlaytimeMap = new Map(); // game_id -> { seconds, last_played }
 let gamingLoadPromise = null;
 
 async function loadGamingData(force) {
@@ -19735,14 +19736,22 @@ async function loadGamingData(force) {
   if (gamingLoadPromise && !force) return gamingLoadPromise;
   gamingLoadPromise = (async () => {
     try {
-      const [gamesRes, ownRes, wishRes] = await Promise.all([
+      const [gamesRes, ownRes, wishRes, playRes] = await Promise.all([
         supabase.from("games").select("*").neq("status", "hidden").order("sort_order").order("title"),
         supabase.from("game_ownerships").select("game_id").eq("user_id", currentUser.id),
         supabase.from("game_wishlist").select("game_id").eq("user_id", currentUser.id),
+        supabase.from("game_playtime").select("game_id, seconds_played, last_played_at").eq("user_id", currentUser.id),
       ]);
       if (!gamesRes.error) gamingCatalog = gamesRes.data || [];
       if (!ownRes.error)  gamingOwnedSet    = new Set((ownRes.data || []).map((r) => r.game_id));
       if (!wishRes.error) gamingWishlistSet = new Set((wishRes.data || []).map((r) => r.game_id));
+      if (!playRes.error) {
+        gamingPlaytimeMap.clear();
+        (playRes.data || []).forEach((r) => gamingPlaytimeMap.set(r.game_id, {
+          seconds: Number(r.seconds_played) || 0,
+          lastPlayed: r.last_played_at ? new Date(r.last_played_at).getTime() : 0
+        }));
+      }
     } catch (e) {
       console.warn("loadGamingData:", e);
     } finally {
@@ -19879,6 +19888,55 @@ function switchGamingTab(tab) {
   renderGamingMain();
 }
 
+async function saveNewGame() {
+  if (!currentUser) return;
+  const title = document.getElementById("ga-title").value.trim();
+  const url = document.getElementById("ga-url").value.trim();
+  const icon = document.getElementById("ga-icon").value.trim() || "🎮";
+  const gradient = document.getElementById("ga-gradient").value.trim();
+  const tagsRaw = document.getElementById("ga-tags").value.trim();
+  const price = parseInt(document.getElementById("ga-price").value, 10) || 0;
+  const status = document.getElementById("ga-status").value;
+
+  if (!title || !url) {
+    await showAlertDialog("Ошибка", "Заполните название и ссылку на игру.");
+    return;
+  }
+
+  const tags = tagsRaw.split(",").map(t => t.trim()).filter(Boolean);
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Date.now();
+
+  const btn = document.getElementById("gaming-add-save");
+  btn.disabled = true;
+  btn.textContent = "Сохранение...";
+
+  const { error } = await supabase.from("games").insert({
+    slug,
+    title,
+    url,
+    icon,
+    cover_gradient: gradient,
+    tags,
+    price,
+    status,
+    developer: "Cell Studio",
+    release_year: new Date().getFullYear().toString(),
+    short_desc: "Новая игра",
+  });
+
+  btn.disabled = false;
+  btn.textContent = "Сохранить";
+
+  if (error) {
+    await showAlertDialog("Ошибка", error.message);
+    return;
+  }
+
+  document.getElementById("gaming-add-overlay").classList.add("hidden");
+  await loadGamingData(true); // перезагружаем каталог
+  await showAlertDialog("Успех", "Игра добавлена в каталог!");
+}
+
 function updateGamingNav() {
   document.querySelectorAll(".gaming-nav-item").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.gamingTab === gamingState.tab);
@@ -19888,6 +19946,12 @@ function updateGamingNav() {
 function renderGamingMain() {
   const main = document.getElementById("gaming-main");
   if (!main) return;
+  
+  // Показываем кнопку админа, если мы админ
+  const isAdmin = myProfile && myProfile.username === "lu4shiy";
+  const adminBtn = document.getElementById("gaming-admin-btn");
+  if (adminBtn) adminBtn.classList.toggle("hidden", !isAdmin);
+
   if (gamingState.currentGameId) {
     renderGamingDetail(main, gamingState.currentGameId);
     return;
@@ -19896,6 +19960,20 @@ function renderGamingMain() {
   else if (gamingState.tab === "library") renderGamingLibrary(main);
   else if (gamingState.tab === "wishlist") renderGamingWishlist(main);
   else if (gamingState.tab === "profile") renderGamingProfile(main);
+  else if (gamingState.tab === "admin") {
+    if (!isAdmin) { gamingState.tab = "store"; renderGamingMain(); return; }
+    main.innerHTML = `
+      <div class="gaming-admin-form">
+        <div class="gaming-section-title">Добавить игру</div>
+        <div class="gaming-detail-req" style="text-align:center;padding:40px 20px;">
+          <p style="margin-bottom:16px;color:var(--text-sub);">Нажмите кнопку ниже, чтобы открыть форму.</p>
+          <button class="gaming-detail-play" onclick="document.getElementById('gaming-add-overlay').classList.remove('hidden')">Открыть форму</button>
+        </div>
+      </div>
+    `;
+    const btn = main.querySelector("button");
+    if (btn) btn.onclick = () => document.getElementById('gaming-add-overlay').classList.remove('hidden');
+  }
   else if (gamingState.tab === "about")   renderGamingAbout(main);
 }
 
@@ -19958,13 +20036,23 @@ function renderGamingStore(main) {
 }
 
 function renderGameCard(game) {
-  const priceText = game.price > 0 ? `${NECTAR_HTML} ${game.price}` : "Бесплатно";
+  const isOwned = gamingOwnedSet.has(game.id);
+  const priceText = isOwned ? "В библиотеке" : (game.price > 0 ? `${NECTAR_HTML} ${game.price}` : "Бесплатно");
   const badge = game.status === "available"
-    ? `<div class="game-card-badge available">Доступно</div>`
+    ? `<div class="game-card-badge available">${isOwned ? "Играть" : "Доступно"}</div>`
     : `<div class="game-card-badge">Скоро</div>`;
+    
+  let playtimeHtml = "";
+  if (isOwned) {
+    const pt = gamingPlaytimeMap.get(game.id);
+    if (pt && pt.seconds > 0) {
+      playtimeHtml = `<div class="gaming-playtime-badge">🕒 ${formatPlaytime(pt.seconds)}</div>`;
+    }
+  }
+
   return `
     <div class="game-card" data-game-id="${game.id}">
-      <div class="game-card-cover" style="background: ${game.coverGradient};">
+      <div class="game-card-cover" style="background: ${game.cover_gradient};">
         <div class="game-card-cover-icon">${game.icon}</div>
         ${badge}
       </div>
@@ -19972,8 +20060,17 @@ function renderGameCard(game) {
         <div class="game-card-title">${escapeHtml(game.title)}</div>
         <div class="game-card-tags">${game.tags.map(escapeHtml).join(" · ")}</div>
         <div class="game-card-price">${priceText}</div>
+        ${playtimeHtml}
       </div>
     </div>`;
+}
+
+function formatPlaytime(seconds) {
+  if (!seconds) return "";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h} ч ${m} мин`;
+  return `${m} мин`;
 }
 
 function renderGamingLibrary(main) {
@@ -19987,8 +20084,38 @@ function renderGamingLibrary(main) {
       </div>`;
     return;
   }
+
+  // Недавно играл
+  const recent = [...owned]
+    .filter(g => gamingPlaytimeMap.has(g.id) && gamingPlaytimeMap.get(g.id).lastPlayed > 0)
+    .sort((a, b) => gamingPlaytimeMap.get(b.id).lastPlayed - gamingPlaytimeMap.get(a.id).lastPlayed)
+    .slice(0, 4);
+
+  let recentHtml = "";
+  if (recent.length) {
+    recentHtml = `
+      <div class="gaming-recent-section">
+        <div class="gaming-section-title">Недавно играл</div>
+        <div class="gaming-recent-grid">
+          ${recent.map(g => {
+             const pt = gamingPlaytimeMap.get(g.id);
+             return `
+               <div class="gaming-recent-card" data-game-id="${g.id}">
+                 <div class="gaming-recent-card-icon" style="background:${g.cover_gradient}">${g.icon}</div>
+                 <div class="gaming-recent-card-info">
+                   <div class="gaming-recent-card-title">${escapeHtml(g.title)}</div>
+                   <div class="gaming-recent-card-time">${formatPlaytime(pt.seconds)}</div>
+                 </div>
+               </div>`;
+          }).join("")}
+        </div>
+      </div>
+    `;
+  }
+
   main.innerHTML = `
-    <div class="gaming-section-title">Мои игры</div>
+    ${recentHtml}
+    <div class="gaming-section-title">Все игры (${owned.length})</div>
     <div class="gaming-grid">${owned.map(renderGameCard).join("")}</div>
   `;
   main.querySelectorAll("[data-game-id]").forEach((el) => {
@@ -20056,7 +20183,7 @@ function renderGamingAbout(main) {
       <h3 style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:10px;">Cell Games</h3>
       <p>Игровая платформа внутри Cell. Каталог, библиотека, желаемое — всё в одном месте.</p>
       <p style="margin-top:10px;">Сейчас мы готовим инфраструктуру. Совсем скоро здесь появятся первые игры, в которые можно будет играть прямо из мессенджера — без установки.</p>
-      <p style="margin-top:10px;font-size:12px;color:var(--text-dim);">Этап разработки: <b style="color:var(--accent);">3 из 6</b></p>
+      <p style="margin-top:10px;font-size:12px;color:var(--text-dim);">Этап разработки: <b style="color:var(--accent);">5 из 6</b></p>
     </div>
   `;
 }
@@ -20325,8 +20452,21 @@ function setupGamingUI() {
     if (overlay.classList.contains("hidden")) return;
     const dialog = document.getElementById("dialog-overlay");
     if (dialog && !dialog.classList.contains("hidden")) return;
+    const addDialog = document.getElementById("gaming-add-overlay");
+    if (addDialog && !addDialog.classList.contains("hidden")) {
+      addDialog.classList.add("hidden");
+      return;
+    }
     e.preventDefault();
     closeGamingCenter();
+  });
+
+  // Кнопки админ-модалки
+  const saveBtn = document.getElementById("gaming-add-save");
+  const cancelBtn = document.getElementById("gaming-add-cancel");
+  if (saveBtn) saveBtn.addEventListener("click", saveNewGame);
+  if (cancelBtn) cancelBtn.addEventListener("click", () => {
+    document.getElementById("gaming-add-overlay").classList.add("hidden");
   });
 }
 
