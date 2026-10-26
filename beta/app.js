@@ -19654,6 +19654,7 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
     if (tempEl) tempEl.remove();
     msgCache.delete(tempId);
 
+    // Используем RPC-функцию, которая обходит RLS и позволяет отправить сообщение от имени бота
     const { data: newMsg, error } = await supabase.rpc("send_bot_message", {
       p_chat_id: chatId,
       p_bot_id: botUser.id,
@@ -19669,19 +19670,6 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
       chatLastMsg.set(chatId, {
         text: responseText,
         time: new Date(insertedMsg.created_at).getTime(),
-        senderId: botUser.id,
-        unread: 0,
-      });
-      updateChatItemPreview(chatId);
-      resortChatsList();
-    }
-  } catch (e) {
-    // ... (начало catch-блока)
-      scrollToBottom();
-      
-      chatLastMsg.set(chatId, {
-        text: responseText,
-        time: new Date(newMsg.created_at).getTime(),
         senderId: botUser.id,
         unread: 0,
       });
@@ -19712,6 +19700,7 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
         p_bot_id: botUser.id,
         p_content: errorMsg
     });
+    
     if (errMsg) {
         const insertedMsg = Array.isArray(errMsg) ? errMsg[0] : errMsg;
         await appendMessage(insertedMsg);
