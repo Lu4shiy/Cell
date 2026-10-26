@@ -20127,6 +20127,7 @@ function renderGamingMain() {
     const btn = main.querySelector("button");
     if (btn) btn.onclick = () => openGameEditor(null);
   }
+  else if (gamingState.tab === "leaderboard") renderGamingLeaderboard(main);
   else if (gamingState.tab === "about")   renderGamingAbout(main);
 }
 
@@ -20589,9 +20590,35 @@ function openGamePlayer(game) {
     }
   };
 
-  // 🔴 НОВОЕ: Обработка сообщений от игры (для достижений)
+  // 🔴 НОВОЕ: Обработка сообщений от игры (для достижений и рекордов)
   const handleGameMessage = async (e) => {
-    if (!e.data || e.data.type !== "UNLOCK_ACHIEVEMENT") return;
+    if (!e.data) return;
+
+    if (e.data.type === "SUBMIT_SCORE") {
+      const newScore = parseInt(e.data.score, 10);
+      if (isNaN(newScore) || newScore <= 0) return;
+
+      // Проверяем, побит ли прошлый рекорд пользователя в этой игре
+      const { data: prev } = await supabase.from("game_scores")
+        .select("score")
+        .eq("game_id", game.id)
+        .eq("user_id", currentUser.id)
+        .order("score", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!prev || newScore > prev.score) {
+        const { error } = await supabase.from("game_scores").insert({
+          game_id: game.id,
+          user_id: currentUser.id,
+          score: newScore
+        });
+        if (error) console.warn("Не удалось сохранить рекорд:", error);
+      }
+      return;
+    }
+
+    if (e.data.type !== "UNLOCK_ACHIEVEMENT") return;
     
     // В целях безопасности можно проверить e.origin, если игра на другом домене,
     // но для локальных игр это не критично.
@@ -20613,18 +20640,7 @@ function openGamePlayer(game) {
       achievement_id: ach.id
     });
 
-    if (error) {
-      // Игнорируем ошибку дубликата (если достижение уже получено ранее)
-      if (error.code !== "23505") {
-        console.error("Ошибка выдачи достижения:", error);
-        showInAppToast({
-          profile: { display_name: "Ошибка", id: "err" },
-          title: "Не удалось выдать достижение",
-          body: error.message,
-          tag: "achievement-err"
-        });
-      }
-    } else {
+    if (!error) {
       // Показываем красивый тост о получении ачивки
       showInAppToast({
         profile: { display_name: "Достижение!", avatar_url: game.icon, id: "ach" },
@@ -20762,6 +20778,88 @@ function setupGamingUI() {
       statusSelect.classList.remove("open");
       optionsBox.classList.add("hidden");
     });
+  }
+}
+
+async function renderGamingLeaderboard(main) {
+  main.innerHTML = `
+    <div class="gaming-section-title">Лидеры по очкам</div>
+    <div class="empty" style="padding:40px;">Загрузка...</div>
+  `;
+
+  try {
+    const { data: scores, error } = await supabase.from("game_scores")
+      .select("score, created_at, profiles(display_name, username, avatar_url, id), games(title, icon)")
+      .order("score", { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+
+    if (!scores || !scores.length) {
+      main.innerHTML = `
+        <div class="gaming-section-title">Лидеры по очкам</div>
+        <div class="gaming-empty">
+          <div class="gaming-empty-icon">🏆</div>
+          <div>Пока никто не установил рекорд.</div>
+        </div>
+      `;
+      return;
+    }
+
+    // Убираем дубликаты (оставляем только лучший результат каждого игрока в каждой игре)
+    const uniqueScores = [];
+    const seen = new Set();
+    for (const s of scores) {
+      const key = s.profiles.id + "-" + s.games.title;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueScores.push(s);
+      }
+    }
+
+    const rowsHtml = uniqueScores.map((s, idx) => {
+      const p = s.profiles || {};
+      const g = s.games || {};
+      const date = new Date(s.created_at).toLocaleDateString(localeId());
+      
+      let placeIcon = `${idx + 1}`;
+      let placeStyle = "";
+      if (idx === 0) { placeIcon = "🥇"; placeStyle = "font-size:20px;"; }
+      else if (idx === 1) { placeIcon = "🥈"; placeStyle = "font-size:20px;"; }
+      else if (idx === 2) { placeIcon = "🥉"; placeStyle = "font-size:20px;"; }
+
+      return `
+        <div class="market-history-item" style="cursor:pointer;" onclick="openChatById('${p.id}')">
+          <div style="width:32px; text-align:center; font-weight:800; color:var(--text-dim); ${placeStyle}">${placeIcon}</div>
+          <div class="avatar" id="lb-avatar-${idx}" style="width:36px;height:36px;font-size:14px;"></div>
+          <div class="market-history-main">
+            <div class="market-history-title">${escapeHtml(p.display_name || "—")} <span style="font-size:11px;color:var(--text-dim);">@${escapeHtml(p.username || "")}</span></div>
+            <div class="market-history-sub">${g.icon || "🎮"} ${escapeHtml(g.title || "Игра")} · ${date}</div>
+          </div>
+          <div class="market-history-price" style="font-size:16px;">${s.score}</div>
+        </div>
+      `;
+    }).join("");
+
+    main.innerHTML = `
+      <div class="gaming-section-title">Топ-50 рекордов</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        ${rowsHtml}
+      </div>
+    `;
+
+    // Рисуем аватарки
+    uniqueScores.forEach((s, idx) => {
+      const el = document.getElementById("lb-avatar-" + idx);
+      if (el && s.profiles) paintAvatar(el, s.profiles);
+    });
+
+  } catch (err) {
+    console.error("Leaderboard error:", err);
+    main.innerHTML = `
+      <div class="gaming-section-title">Лидеры по очкам</div>
+      <div class="empty" style="color:var(--danger);">Ошибка загрузки: ${escapeHtml(err.message)}</div>
+    `;
   }
 }
 

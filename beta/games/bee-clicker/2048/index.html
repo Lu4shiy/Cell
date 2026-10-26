@@ -39,6 +39,17 @@
       font-size: 32px;
       font-weight: 900;
       color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .profile-btn {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0;
     }
     .score-box {
       background: var(--grid-bg);
@@ -88,7 +99,6 @@
       color: var(--text-dark);
       transition: all 0.15s ease-in-out;
     }
-    /* Цвета плиток */
     .cell[data-val="2"] { background: #eee4da; color: #776e65; }
     .cell[data-val="4"] { background: #ede0c8; color: #776e65; }
     .cell[data-val="8"] { background: #f2b179; color: #f9f6f2; }
@@ -126,7 +136,7 @@
       pointer-events: auto;
     }
     .overlay-title {
-      font-size: 36px;
+      font-size: 32px;
       font-weight: 900;
       margin-bottom: 20px;
     }
@@ -141,20 +151,67 @@
       cursor: pointer;
       font-family: inherit;
       transition: transform 0.1s;
+      margin-bottom: 10px;
     }
     .btn:active { transform: scale(0.95); }
+    .btn.secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--cell-bg);
+    }
     .hint {
       margin-top: 20px;
       font-size: 13px;
       color: #8a7a6d;
       text-align: center;
     }
+    /* Профиль */
+    .profile-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .profile-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .profile-modal {
+      background: var(--grid-bg);
+      padding: 24px;
+      border-radius: 20px;
+      border: 1px solid var(--cell-bg);
+      text-align: center;
+      width: 80vw;
+      max-width: 300px;
+    }
+    .profile-modal h2 {
+      margin: 0 0 20px;
+      color: #f5a623;
+    }
+    .profile-stat {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      font-size: 16px;
+    }
+    .profile-stat span:first-child { color: #8a7a6d; }
+    .profile-stat span:last-child { font-weight: 800; }
   </style>
 </head>
 <body>
 
   <div class="header">
-    <div class="title">2048</div>
+    <div class="title">
+      2048
+      <button class="profile-btn" id="open-profile">👤</button>
+    </div>
     <div class="score-box">
       <div class="score-label">Счёт</div>
       <div class="score-value" id="score">0</div>
@@ -166,19 +223,36 @@
     <div class="overlay" id="overlay">
       <div class="overlay-title" id="overlay-title">Игра окончена!</div>
       <button class="btn" id="restart-btn">Начать заново</button>
+      <button class="btn secondary" id="continue-btn">Продолжить (отменить)</button>
     </div>
   </div>
 
   <div class="hint">Свайпай или используй стрелки</div>
 
+  <!-- Профиль -->
+  <div class="profile-overlay" id="profile-overlay">
+    <div class="profile-modal">
+      <h2>Профиль</h2>
+      <div class="profile-stat"><span>Рекорд:</span> <span id="best-score">0</span></div>
+      <div class="profile-stat"><span>Игр сыграно:</span> <span id="games-played">0</span></div>
+      <div class="profile-stat"><span>Ходов сделано:</span> <span id="total-moves">0</span></div>
+      <button class="btn" id="close-profile" style="margin-top: 15px;">Закрыть</button>
+    </div>
+  </div>
+
   <script>
+    // ================= СОСТОЯНИЕ =================
     let board = [[0,0,0,0], [0,0,0,0], [0,0,0,0], [0,0,0,0]];
     let score = 0;
     let moves = 0;
     let gameOver = false;
-    let hasWon = false;
+    
+    // Статистика
+    let bestScore = parseInt(localStorage.getItem("cell_2048_best") || "0", 10);
+    let gamesPlayed = parseInt(localStorage.getItem("cell_2048_games") || "0", 10);
+    let totalMoves = parseInt(localStorage.getItem("cell_2048_total_moves") || "0", 10);
 
-    // Флаги для достижений (чтобы не отправлять их много раз)
+    // Флаги достижений
     let achMoves10 = false;
     let achLoss = false;
     let ach2048 = false;
@@ -188,18 +262,55 @@
     const overlay = document.getElementById("overlay");
     const overlayTitle = document.getElementById("overlay-title");
 
-    // Инициализация сетки (16 пустых ячеек)
-    for (let i = 0; i < 16; i++) {
-      const cell = document.createElement("div");
-      cell.className = "cell";
-      cell.id = "cell-" + i;
-      gridEl.appendChild(cell);
+    // Инициализация сетки
+    if (gridEl.children.length === 0) {
+      for (let i = 0; i < 16; i++) {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.id = "cell-" + i;
+        gridEl.appendChild(cell);
+      }
+    }
+
+    // ================= СИСТЕМА СОХРАНЕНИЯ =================
+    function saveProgress() {
+      localStorage.setItem("cell_2048_save", JSON.stringify({
+        board, score, moves, gameOver, achMoves10, achLoss, ach2048
+      }));
+    }
+
+    function loadProgress() {
+      const saved = localStorage.getItem("cell_2048_save");
+      if (saved) {
+        try {
+          const data = JSON.parse(saved);
+          board = data.board;
+          score = data.score;
+          moves = data.moves;
+          gameOver = data.gameOver;
+          achMoves10 = data.achMoves10;
+          achLoss = data.achLoss;
+          ach2048 = data.ach2048;
+          return true;
+        } catch (e) { return false; }
+      }
+      return false;
+    }
+
+    function updateStats() {
+      if (score > bestScore) {
+        bestScore = score;
+        localStorage.setItem("cell_2048_best", bestScore);
+        window.parent.postMessage({ type: "SUBMIT_SCORE", score: score }, "*");
+      }
+      localStorage.setItem("cell_2048_total_moves", totalMoves);
     }
 
     function sendAchievement(code) {
       window.parent.postMessage({ type: "UNLOCK_ACHIEVEMENT", code: code }, "*");
     }
 
+    // ================= ЛОГИКА ИГРЫ =================
     function updateUI() {
       for (let r = 0; r < 4; r++) {
         for (let c = 0; c < 4; c++) {
@@ -216,6 +327,8 @@
         }
       }
       scoreEl.textContent = score;
+      updateStats();
+      saveProgress();
     }
 
     function spawnTile() {
@@ -229,11 +342,10 @@
       const spot = empty[Math.floor(Math.random() * empty.length)];
       board[spot.r][spot.c] = Math.random() < 0.9 ? 2 : 4;
       
-      // Анимация появления
       const idx = spot.r * 4 + spot.c;
       const cell = document.getElementById("cell-" + idx);
       cell.classList.remove("pop");
-      void cell.offsetWidth; // Триггер рефлоу
+      void cell.offsetWidth;
       cell.classList.add("pop");
     }
 
@@ -241,7 +353,7 @@
       let arr = row.filter(val => val);
       let missing = 4 - arr.length;
       let zeros = Array(missing).fill(0);
-      return arr.concat(zeros); // Плитки сдвигаются влево, а нули — вправо
+      return arr.concat(zeros);
     }
 
     function merge(row) {
@@ -313,13 +425,11 @@
     }
 
     function checkGameOver() {
-      // Если есть пустые места — игра не окончена
       for (let r = 0; r < 4; r++) {
         for (let c = 0; c < 4; c++) {
           if (board[r][c] === 0) return false;
         }
       }
-      // Проверяем, можно ли сделать ход
       for (let r = 0; r < 4; r++) {
         for (let c = 0; c < 4; c++) {
           if (c < 3 && board[r][c] === board[r][c + 1]) return false;
@@ -339,8 +449,9 @@
 
       if (moved) {
         spawnTile();
-        updateUI();
         moves++;
+        totalMoves++;
+        updateUI();
         
         if (moves >= 10 && !achMoves10) {
           achMoves10 = true;
@@ -349,6 +460,9 @@
 
         if (checkGameOver()) {
           gameOver = true;
+          gamesPlayed++;
+          localStorage.setItem("cell_2048_games", gamesPlayed);
+          
           overlay.classList.add("active");
           overlayTitle.textContent = "Игра окончена!";
           overlayTitle.style.color = "#ff6a6a";
@@ -357,6 +471,8 @@
             achLoss = true;
             sendAchievement("first_loss");
           }
+          updateStats();
+          saveProgress();
         }
       }
     }
@@ -366,13 +482,18 @@
       score = 0;
       moves = 0;
       gameOver = false;
+      achMoves10 = false;
+      achLoss = false;
+      ach2048 = false;
+      
       overlay.classList.remove("active");
       spawnTile();
       spawnTile();
       updateUI();
+      saveProgress();
     }
 
-    // Клавиатура
+    // ================= УПРАВЛЕНИЕ =================
     document.addEventListener("keydown", (e) => {
       if (e.key === "ArrowLeft" || e.key === "a" || e.key === "ф") { e.preventDefault(); handleMove("left"); }
       else if (e.key === "ArrowRight" || e.key === "d" || e.key === "в") { e.preventDefault(); handleMove("right"); }
@@ -380,7 +501,6 @@
       else if (e.key === "ArrowDown" || e.key === "s" || e.key === "ы") { e.preventDefault(); handleMove("down"); }
     });
 
-    // Свайпы
     let touchStartX = 0;
     let touchStartY = 0;
 
@@ -407,10 +527,35 @@
       touchStartY = 0;
     }, { passive: true });
 
-    document.getElementById("restart-btn").addEventListener("click", restartGame);
+    // Профиль
+    const profileOverlay = document.getElementById("profile-overlay");
+    document.getElementById("open-profile").addEventListener("click", () => {
+      document.getElementById("best-score").textContent = bestScore;
+      document.getElementById("games-played").textContent = gamesPlayed;
+      document.getElementById("total-moves").textContent = totalMoves;
+      profileOverlay.classList.add("active");
+    });
+    document.getElementById("close-profile").addEventListener("click", () => {
+      profileOverlay.classList.remove("active");
+    });
 
-    // Старт
-    restartGame();
+    document.getElementById("restart-btn").addEventListener("click", restartGame);
+    document.getElementById("continue-btn").addEventListener("click", () => {
+      // Отмена проигрыша (оставляем поле как есть, но убираем оверлей)
+      // На самом деле в 2048 нельзя продолжить, если ходов нет, 
+      // но если пользователь нажал "Продолжить", просто убираем оверлей,
+      // чтобы он мог посмотреть на поле (или перезапустить через кнопку).
+      // Для честности лучше оставить оверлей, но убрать кнопку "Продолжить".
+      // Но мы дадим ему шанс, если он просто хочет посмотреть на финальное поле.
+      overlay.classList.remove("active");
+    });
+
+    // ================= СТАРТ =================
+    if (!loadProgress() || gameOver) {
+      restartGame();
+    } else {
+      updateUI();
+    }
   </script>
 </body>
 </html>
