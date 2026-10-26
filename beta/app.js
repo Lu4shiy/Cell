@@ -20025,13 +20025,14 @@ async function saveGame() {
   };
 
   let error;
+  let slug = null;
   if (currentEditingGameId) {
     // Обновление
     const res = await supabase.from("games").update(payload).eq("id", currentEditingGameId);
     error = res.error;
   } else {
     // Создание
-    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Date.now();
+    slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Date.now();
     const res = await supabase.from("games").insert({ ...payload, slug });
     error = res.error;
   }
@@ -20046,7 +20047,7 @@ async function saveGame() {
 
   // Сохраняем достижения
   let targetGameId = currentEditingGameId;
-  if (!targetGameId) {
+  if (!targetGameId && slug) {
     // Если это новая игра, узнаем её ID
     const { data: newGame } = await supabase.from("games").select("id").eq("slug", slug).single();
     if (newGame) targetGameId = newGame.id;
@@ -20477,13 +20478,8 @@ function renderGamingDetail(main, gameId) {
 
   // Системные требования
   const reqs = game.system_requirements || {};
-  const reqRows = [
-    ["ОС", reqs.os],
-    ["Браузер", reqs.browser],
-    ["Память", reqs.memory],
-    ["Хранилище", reqs.storage],
-    ["Сеть", reqs.network],
-  ].filter(([, v]) => v);
+  // Выводим все сохранённые требования, чтобы не зависеть от языка ключа
+  const reqRows = Object.entries(reqs).filter(([, v]) => v);
   const reqHtml = reqRows.length
     ? `<div class="gaming-detail-req">
          <h3>Системные требования</h3>
@@ -20696,6 +20692,51 @@ function openGamePlayer(game) {
         });
         if (error) console.warn("Не удалось сохранить рекорд:", error);
       }
+      return;
+    }
+
+    if (e.data.type === "GET_BALANCE") {
+      try {
+        const { data } = await supabase.from("profiles").select("imagi_tokens").eq("id", currentUser.id).single();
+        const bal = data ? data.imagi_tokens : 0;
+        iframe.contentWindow.postMessage({ type: "BALANCE_UPDATE", balance: bal }, "*");
+      } catch (err) {}
+      return;
+    }
+
+    if (e.data.type === "PURCHASE_ITEM") {
+      const { itemId, itemType, price, itemName } = e.data;
+      const ok = await showConfirmDialog(
+        "Покупка",
+        `Купить <b>${escapeHtml(itemName)}</b> за <b>${price}</b> Chip?`,
+        "Купить",
+        { html: true }
+      );
+      if (!ok) {
+        iframe.contentWindow.postMessage({ type: "PURCHASE_FAILED", itemId, reason: "cancelled" }, "*");
+        return;
+      }
+      
+      const { data: prof } = await supabase.from("profiles").select("imagi_tokens").eq("id", currentUser.id).single();
+      if (!prof || prof.imagi_tokens < price) {
+        iframe.contentWindow.postMessage({ type: "PURCHASE_FAILED", itemId, reason: "not_enough" }, "*");
+        await showAlertDialog("Ошибка", "Недостаточно Chip.");
+        return;
+      }
+      
+      const { error } = await supabase.from("profiles").update({ imagi_tokens: prof.imagi_tokens - price }).eq("id", currentUser.id);
+      if (error) {
+        iframe.contentWindow.postMessage({ type: "PURCHASE_FAILED", itemId, reason: "db_error" }, "*");
+        await showAlertDialog("Ошибка", "Не удалось совершить покупку.");
+        return;
+      }
+      
+      if (myProfile) myProfile.imagi_tokens = prof.imagi_tokens - price;
+      if (typeof refreshBalance === "function") refreshBalance();
+      if (typeof refreshGamingHeader === "function") refreshGamingHeader();
+      
+      iframe.contentWindow.postMessage({ type: "PURCHASE_SUCCESS", itemId }, "*");
+      iframe.contentWindow.postMessage({ type: "BALANCE_UPDATE", balance: myProfile.imagi_tokens }, "*");
       return;
     }
 
