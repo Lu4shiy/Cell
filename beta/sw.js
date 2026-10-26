@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-beta-v49";
+const CACHE_VERSION = "cell-beta-v50";
 
 const CACHE_FILES = [
   "./",
@@ -115,7 +115,7 @@ self.addEventListener("fetch", (event) => {
     const networkPromise = fetch(req)
       .then((res) => {
         if (res && res.status === 200 && res.type === "basic") {
-          try { cache.put(req, res.clone()); } catch (e) { /* silent */ }
+          cache.put(req, res.clone()).catch(() => {});
         }
         return res;
       })

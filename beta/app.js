@@ -20038,25 +20038,27 @@ async function saveGame() {
     if (newGame) targetGameId = newGame.id;
   }
 
-  if (targetGameId && achievementsRaw) {
-    // Удаляем старые достижения этой игры и создаем новые
+  if (targetGameId) {
+    // Удаляем старые достижения этой игры
     await supabase.from("game_achievements").delete().eq("game_id", targetGameId);
     
-    const lines = achievementsRaw.split("\n");
-    const newAchs = [];
-    lines.forEach(line => {
-      const parts = line.split(":");
-      if (parts.length >= 2) {
-        const code = parts[0].trim();
-        const title = parts[1].trim();
-        const desc = parts.slice(2).join(":").trim() || "Секретное достижение";
-        if (code && title) {
-          newAchs.push({ game_id: targetGameId, code, title, description: desc, icon: "🏆" });
+    if (achievementsRaw) {
+      const lines = achievementsRaw.split("\n");
+      const newAchs = [];
+      lines.forEach(line => {
+        const parts = line.split(":");
+        if (parts.length >= 2) {
+          const code = parts[0].trim();
+          const title = parts[1].trim();
+          const desc = parts.slice(2).join(":").trim() || "Секретное достижение";
+          if (code && title) {
+            newAchs.push({ game_id: targetGameId, code, title, description: desc, icon: "🏆" });
+          }
         }
+      });
+      if (newAchs.length) {
+        await supabase.from("game_achievements").insert(newAchs);
       }
-    });
-    if (newAchs.length) {
-      await supabase.from("game_achievements").insert(newAchs);
     }
   }
 
@@ -20328,7 +20330,7 @@ function openGameDetail(gameId) {
   renderGamingMain();
 }
 
-async function renderGamingDetail(main, gameId) {
+function renderGamingDetail(main, gameId) {
   const game = gamingCatalog.find((g) => g.id === gameId || g.slug === gameId);
   if (!game) {
     gamingState.currentGameId = null;
@@ -20396,35 +20398,6 @@ async function renderGamingDetail(main, gameId) {
        </div>`
     : "";
 
-  // 🔴 НОВОЕ: Достижения
-  let achievementsHtml = "";
-  if (isOwned) {
-    const { data: achs } = await supabase.from("game_achievements").select("*").eq("game_id", game.id);
-    if (achs && achs.length) {
-      const { data: userAchs } = await supabase.from("user_achievements")
-        .select("achievement_id").eq("user_id", currentUser.id).in("achievement_id", achs.map(a => a.id));
-      
-      const unlockedSet = new Set((userAchs || []).map(u => u.achievement_id));
-
-      achievementsHtml = `
-        <div class="gaming-achievements">
-          <h3 style="font-size:13px; font-weight:800; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.6px; color:var(--text);">Достижения (${unlockedSet.size} / ${achs.length})</h3>
-          ${achs.map((a) => {
-            const isUnlocked = unlockedSet.has(a.id);
-            return `
-              <div class="gaming-achievement">
-                <div class="gaming-achievement-icon ${isUnlocked ? "unlocked" : ""}">${a.icon}</div>
-                <div class="gaming-achievement-info">
-                  <div class="gaming-achievement-title" style="${!isUnlocked ? 'color:var(--text-dim);' : ''}">${escapeHtml(a.title)}</div>
-                  <div class="gaming-achievement-desc">${isUnlocked ? escapeHtml(a.description) : "Секретное достижение"}</div>
-                </div>
-              </div>
-            `;
-          }).join("")}
-        </div>`;
-    }
-  }
-
   main.innerHTML = `
     <div class="gaming-detail">
       <button type="button" class="gaming-detail-back" id="gaming-detail-back">
@@ -20447,7 +20420,7 @@ async function renderGamingDetail(main, gameId) {
           <div class="gaming-detail-screenshots">${screenshotsHtml}</div>
           ${longDescHtml}
           ${reqHtml}
-          ${achievementsHtml}
+          <div id="achievements-container"></div> <!-- 🔴 Сюда асинхронно вставятся достижения -->
         </div>
 
         <aside class="gaming-detail-side">
@@ -20500,6 +20473,39 @@ async function renderGamingDetail(main, gameId) {
       openMediaViewer(url, "image", list, idx >= 0 ? idx : 0);
     });
   });
+
+  // 🔴 Асинхронно подгружаем достижения, чтобы не тормозить открытие страницы
+  supabase.from("game_achievements").select("*").eq("game_id", game.id).order("created_at").then(async ({ data: achs }) => {
+    if (!achs || !achs.length) return;
+    let unlockedSet = new Set();
+    
+    // Если игра куплена, проверяем, какие достижения открыты
+    if (isOwned) {
+      const { data: userAchs } = await supabase.from("user_achievements")
+        .select("achievement_id").eq("user_id", currentUser.id).in("achievement_id", achs.map(a => a.id));
+      unlockedSet = new Set((userAchs || []).map(u => u.achievement_id));
+    }
+
+    const container = document.getElementById("achievements-container");
+    if (!container) return;
+
+    container.innerHTML = `
+      <div class="gaming-achievements">
+        <h3 style="font-size:13px; font-weight:800; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.6px; color:var(--text);">Достижения (${unlockedSet.size} / ${achs.length})</h3>
+        ${achs.map((a) => {
+          const isUnlocked = unlockedSet.has(a.id);
+          return `
+            <div class="gaming-achievement">
+              <div class="gaming-achievement-icon ${isUnlocked ? "unlocked" : ""}">${a.icon || '🏆'}</div>
+              <div class="gaming-achievement-info">
+                <div class="gaming-achievement-title" style="${!isUnlocked ? 'color:var(--text-dim);' : ''}">${escapeHtml(a.title)}</div>
+                <div class="gaming-achievement-desc">${isUnlocked ? escapeHtml(a.description) : "Секретное достижение"}</div>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>`;
+  });
 }
 
 // ======================================================
@@ -20526,26 +20532,30 @@ function openGamePlayer(game) {
   const startTime = Date.now();
   let isClosing = false;
 
-  // Функция закрытия
+  // Функция закрытия (оптимизирована, чтобы не было лагов)
   const closePlayer = async () => {
     if (isClosing) return;
     isClosing = true;
     
     const elapsed = Math.floor((Date.now() - startTime) / 1000);
     if (elapsed > 0) {
-      // 🔴 ФИКС: используем try/catch вместо .catch()
       try {
         await supabase.rpc("gaming_save_playtime", { p_game_id: game.id, p_seconds: elapsed });
       } catch (e) {
         console.warn("Не удалось сохранить время игры:", e);
       }
-      await loadGamingData(true);
+      
+      // 🔴 Оптимистичное обновление времени в UI (без ожидания загрузки всей базы)
+      const pt = gamingPlaytimeMap.get(game.id) || { seconds: 0, lastPlayed: 0 };
+      pt.seconds += elapsed;
+      pt.lastPlayed = Date.now();
+      gamingPlaytimeMap.set(game.id, pt);
+      
       renderGamingMain();
     }
     
     overlay.remove();
     document.removeEventListener("keydown", onKeyDown);
-    // Очищаем слушатель сообщений от игры
     window.removeEventListener("message", handleGameMessage);
   };
 
@@ -20602,6 +20612,21 @@ function openGamePlayer(game) {
   const closeBtn = document.getElementById("gaming-player-close");
   closeBtn.addEventListener("click", requestExit);
   
+  // 🔴 Внедряем слушатель ESC прямо в iframe (так как фокус находится там)
+  const iframe = document.getElementById("gaming-player-frame");
+  iframe.onload = () => {
+    try {
+      iframe.contentWindow.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          requestExit();
+        }
+      });
+    } catch (err) {
+      console.warn("Не удалось добавить ESC listener в iframe", err);
+    }
+  };
+
   document.addEventListener("keydown", onKeyDown);
   window.addEventListener("message", handleGameMessage);
 }
