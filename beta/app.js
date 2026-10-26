@@ -8129,7 +8129,32 @@ function buildChatTimeline() {
       e.stopPropagation();
       const id = dot.dataset.firstId;
       const target = box.querySelector(`[data-id="${id}"]`);
-      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+      
+      if (target) {
+        // 🔴 ВАЖНО: Отключаем прилипание к низу и программный скролл, 
+        // чтобы анимация не сбивала расчёт высоты
+        stickToBottom = false;
+        programmaticScroll = true;
+
+        // Считаем позицию вручную (как в jumpToMessage), чтобы не сломать flex-разметку
+        const boxRect = box.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const delta = targetRect.top - boxRect.top;
+        
+        // Прокручиваем так, чтобы сообщение было чуть ниже верхней шапки (на 20px)
+        const newTop = box.scrollTop + delta - 20; 
+        
+        box.scrollTo({ top: Math.max(0, newTop), behavior: "smooth" });
+
+        // Возвращаем флаг через 800 мс (длительность анимации)
+        setTimeout(() => { programmaticScroll = false; }, 800);
+        
+        // Подсвечиваем сообщение, к которому прыгнули
+        const prev = target.style.background;
+        target.style.transition = "background 0.4s";
+        target.style.background = "rgba(255,140,66,0.3)";
+        setTimeout(() => { target.style.background = prev; }, 700);
+      }
     });
   });
 
@@ -8501,16 +8526,23 @@ function jumpToMessage(id) {
   if (!box) return;
   const target = box.querySelector(`[data-id="${id}"]`);
   if (!target) return;
+  
   // Замораживаем авто-переключение активного закрепа, чтобы не «прыгал»
   pinBarFrozenUntil = Date.now() + 900;
 
-  // Считаем позицию вручную — scrollIntoView умеет тянуть родительские скроллы
-  // (body/html), из-за чего экран уезжает «в другую сторону».
+  // 🔴 Отключаем stickToBottom и ставим защиту от сбивания скролла
+  stickToBottom = false;
+  programmaticScroll = true;
+
   const boxRect = box.getBoundingClientRect();
   const targetRect = target.getBoundingClientRect();
   const delta = targetRect.top - boxRect.top;
+  // Центрируем сообщение по экрану
   const newTop = box.scrollTop + delta - box.clientHeight / 2 + targetRect.height / 2;
+  
   box.scrollTo({ top: Math.max(0, newTop), behavior: "smooth" });
+
+  setTimeout(() => { programmaticScroll = false; }, 800);
 
   const prev = target.style.background;
   target.style.transition = "background 0.4s";
