@@ -19620,14 +19620,14 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
   let timeoutId = null;
   try {
     const controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), 20000); // Judge0 может работать чуть дольше
+    timeoutId = setTimeout(() => controller.abort(), 15000); 
 
-    // 1. Кодируем код бота и сообщение пользователя в base64
     const sourceCodeB64 = btoa(unescape(encodeURIComponent(botUser.bot_code)));
     const stdinB64 = btoa(unescape(encodeURIComponent(userMessage || "")));
 
-    // 2. Отправляем задачу на выполнение в Judge0 CE
-    const submitRes = await fetch("https://ce.judge0.com/submissions?base64_encoded=true&wait=false", {
+    // Отправляем с wait=true — сервер не ответит, пока код не выполнится.
+    // Это избавляет от необходимости делать дополнительные запросы (polling).
+    const submitRes = await fetch("https://ce.judge0.com/submissions?base64_encoded=true&wait=true", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -19643,29 +19643,23 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
       throw new Error(`Judge0 submit error: ${submitRes.status}`);
     }
 
-    const submitData = await submitRes.json();
-    const token = submitData.token;
-    if (!token) {
-      throw new Error("Judge0 не вернул token");
-    }
-
-    // 3. Опрашиваем результат (polling), пока не выполнится
-    let resultData = null;
-    const startTime = Date.now();
-    const MAX_WAIT_MS = 15000; // максимум 15 секунд на выполнение
-
-    while (Date.now() - startTime < MAX_WAIT_MS) {
-      await new Promise(r => setTimeout(r, 500)); // ждём полсекунды
-
-      const pollRes = await fetch(`https://ce.judge0.com/submissions/${token}?base64_encoded=true`, {
-        signal: controller.signal
-      });
-      if (!pollRes.ok) continue;
-
-      resultData = await pollRes.json();
-      // Статусы Judge0: 1 = In Queue, 2 = Processing. Если больше — выполнение завершено.
-      if (resultData.status && resultData.status.id > 2) {
-        break;
+    let resultData = await submitRes.json();
+    
+    // Если сервер всё равно вернул только token (не поддерживает wait=true),
+    // делаем быстрый опрос (каждые 150мс вместо 500мс).
+    if (resultData.token && !resultData.status) {
+      const token = resultData.token;
+      const startTime = Date.now();
+      while (Date.now() - startTime < 10000) {
+        await new Promise(r => setTimeout(r, 150)); 
+        const pollRes = await fetch(`https://ce.judge0.com/submissions/${token}?base64_encoded=true`, {
+          signal: controller.signal
+        });
+        if (!pollRes.ok) continue;
+        resultData = await pollRes.json();
+        if (resultData.status && resultData.status.id > 2) {
+          break;
+        }
       }
     }
 
