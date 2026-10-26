@@ -6022,3 +6022,44 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   /* 4. Убираем тень, чтобы казалось, что кнопка прижата к экрану */
   box-shadow: none !important; 
 }
+
+/* ====================================================== */
+/* РЕДАКТОР КОДА БОТА                                      */
+/* ====================================================== */
+
+.bot-code-textarea {
+  width: 100%;
+  height: 250px;
+  background: #0d1117; /* Тёмный фон как в GitHub */
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: #c9d1d9;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 12px;
+  outline: none;
+  resize: vertical;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+
+.bot-code-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
+}
+
+.bot-tag {
+  display: inline-block;
+  background: var(--accent);
+  color: #15110d;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}

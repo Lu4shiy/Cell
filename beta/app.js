@@ -4117,6 +4117,7 @@ async function initApp() {
   subscribeToChannelRequests();
   setupForwardDialog(); setupReplyBar(); setupProfilePanel(); setupGiftsUI();
   setupMarketUI();
+  setupBotUI(); // 🔴 Добавили запуск ботов
   // 🔴 Дошлём необработанные роллы моделей/паттернов (если были обрывы сети).
   setTimeout(() => { processGiftRollQueue().catch(() => {}); }, 3000);
   // 🔴 Прогрев всех иконок при старте — чтобы не «мигали» пустыми квадратами.
@@ -7154,7 +7155,9 @@ async function openChatWith(otherUser) {
   const itemEl = document.querySelector(`.user-item[data-user-id="${otherUser.id}"]`);
   const customName = itemEl ? itemEl.dataset.customName : null;
   paintAvatar(document.getElementById("chat-avatar"), otherUser);
-  document.getElementById("chat-title").innerHTML = escapeHtml(customName || otherUser.display_name) + verifiedBadge(otherUser);
+  const botBadge = otherUser.is_bot ? '<span class="bot-tag">BOT</span>' : '';
+  let botBadge = otherUser.is_bot ? '<span class="bot-tag">BOT</span>' : '';
+  document.getElementById("chat-title").innerHTML = escapeHtml(customName || otherUser.display_name) + verifiedBadge(otherUser) + botBadge;
   renderChatSubtitle();
   document.getElementById("chat-placeholder").classList.add("hidden");
   document.getElementById("chat-content").classList.remove("hidden");
@@ -10231,6 +10234,14 @@ async function sendMessage(chatId, content) {
   resortChatsList();
   bringChatToTop(chatId);
 
+  // 🔴 ТРИГГЕР БОТА
+  if (currentOtherUser && currentOtherUser.is_bot) {
+    // Запускаем чуть позже, чтобы UI успел отрисовать сообщение пользователя
+    setTimeout(() => {
+      triggerBotResponse(chatId, currentOtherUser, content).catch(() => {});
+    }, 300);
+  }
+
   // Если это канал — сразу помечаем свой просмотр (баг №1)
   if (currentChannelObj && currentChannelObj.id === chatId) {
     try {
@@ -10551,6 +10562,10 @@ function setupChatMenu() {
         await blockUser(currentOtherUser.id);
       }
       updateBlockUI();
+    } else if (action === "edit-bot") {
+      if (currentOtherUser && currentOtherUser.is_bot) {
+        openBotEditor(currentOtherUser);
+      }
     } else if (action === "channel-configure") {
       if (!currentChannelObj) return;
       openChannelEditDialog();
@@ -16276,6 +16291,17 @@ function resetChatMenuToDm() {
     const b = menu.querySelector(`[data-action="${a}"]`);
     if (b) b.classList.add("hidden");
   });
+  
+  // 🔴 Показываем кнопку настройки бота, если это наш бот
+  const editBotBtn = document.getElementById("menu-edit-bot");
+  if (editBotBtn) {
+    if (currentOtherUser && currentOtherUser.is_bot && currentOtherUser.bot_owner_id === currentUser.id) {
+      editBotBtn.classList.remove("hidden");
+    } else {
+      editBotBtn.classList.add("hidden");
+    }
+  }
+
   const menuBtn = document.getElementById("chat-menu-btn");
   if (menuBtn) menuBtn.classList.remove("hidden");
 }
@@ -17605,6 +17631,8 @@ function applyGrandmaModeUI() {
   if (logoutBtn) logoutBtn.classList.toggle("hidden", on);
   const createChannelBtn = document.getElementById("create-channel-btn");
   if (createChannelBtn) createChannelBtn.classList.toggle("hidden", on);
+  const createBotBtn = document.getElementById("create-bot-btn");
+  if (createBotBtn) createBotBtn.classList.toggle("hidden", on); // 🔴 Скрываем кнопку ботов
 
   // 2. Секции настроек. Ищем по ID, а не по тексту — иначе сломается
   //    при переключении языка.
@@ -19219,5 +19247,286 @@ const ConnectionMonitor = {
     }
   },
 };
+
+// ======================================================
+// СИСТЕМА БОТОВ
+// ======================================================
+
+let currentEditingBot = null;
+let botCreateAvatarUrl = "color:0";
+
+function setupBotUI() {
+  // Кнопка в бургер-меню
+  const btn = document.getElementById("create-bot-btn");
+  if (btn) btn.addEventListener("click", openBotCreateDialog);
+
+  // Модалка создания
+  document.getElementById("bot-create-cancel").addEventListener("click", () => {
+    document.getElementById("bot-create-overlay").classList.add("hidden");
+  });
+  document.getElementById("bot-create-confirm").addEventListener("click", createBot);
+
+  // Проверка юзернейма
+  let botUsernameTimeout = null;
+  let botUsernameValidated = null;
+  document.getElementById("bot-username-input").addEventListener("input", (e) => {
+    clearTimeout(botUsernameTimeout);
+    botUsernameValidated = null;
+    document.getElementById("bot-create-confirm").disabled = true;
+    
+    const val = e.target.value.trim();
+    const hint = document.getElementById("bot-username-hint");
+    
+    if (!val) { hint.className = "username-hint"; hint.textContent = ""; return; }
+    if (!/^[a-zA-Z0-9_-]+$/.test(val)) {
+      hint.className = "username-hint err"; hint.textContent = "Только латиница, цифры, _ и -"; return;
+    }
+    if (val.length < 3) {
+      hint.className = "username-hint err"; hint.textContent = "Минимум 3 символа"; return;
+    }
+
+    hint.className = "username-hint"; hint.textContent = "Проверяю...";
+    
+    botUsernameTimeout = setTimeout(async () => {
+      const { data } = await supabase.from("profiles").select("id").ilike("username", val).limit(1);
+      if (data && data.length > 0) {
+        hint.className = "username-hint err"; hint.textContent = "Занято";
+        botUsernameValidated = null;
+      } else {
+        hint.className = "username-hint ok"; hint.textContent = "Свободно";
+        botUsernameValidated = val;
+      }
+      updateBotCreateButton();
+    }, 400);
+  });
+
+  document.getElementById("bot-name-input").addEventListener("input", updateBotCreateButton);
+
+  // Модалка редактора
+  document.getElementById("bot-editor-close").addEventListener("click", () => {
+    document.getElementById("bot-editor-overlay").classList.add("hidden");
+  });
+  document.getElementById("bot-editor-save").addEventListener("click", saveBotCode);
+  document.getElementById("bot-editor-open-chat").addEventListener("click", () => {
+    document.getElementById("bot-editor-overlay").classList.add("hidden");
+    if (currentEditingBot) {
+      openChatWith(currentEditingBot);
+    }
+  });
+}
+
+function updateBotCreateButton() {
+  const name = document.getElementById("bot-name-input").value.trim();
+  const uname = document.getElementById("bot-username-input").value.trim();
+  // Валидация имени и проверка, что юзернейм совпадает с проверенным
+  const btn = document.getElementById("bot-create-confirm");
+  btn.disabled = !name || !uname || uname !== document.getElementById("bot-username-hint").dataset.validated;
+}
+// Фикс для предыдущей функции
+document.getElementById("bot-username-input").addEventListener("input", (e) => {
+    // вставляем валидированный юзернейм в dataset
+    const hint = document.getElementById("bot-username-hint");
+    if (hint.classList.contains("ok")) {
+        hint.dataset.validated = e.target.value.trim();
+    } else {
+        hint.dataset.validated = "";
+    }
+});
+
+function renderBotAvatarGrid() {
+  const grid = document.getElementById("bot-avatar-grid");
+  grid.innerHTML = "";
+  const letter = firstChar(document.getElementById("bot-name-input").value || "B");
+
+  BASE_AVATARS.forEach((pair, idx) => {
+    const el = document.createElement("div");
+    el.className = "avatar-option";
+    el.dataset.idx = idx;
+    el.style.background = `linear-gradient(135deg, ${pair[0]}, ${pair[1]})`;
+    el.textContent = letter;
+    if (botCreateAvatarUrl === "color:" + idx) el.classList.add("selected");
+    el.addEventListener("click", () => {
+      botCreateAvatarUrl = "color:" + idx;
+      paintAvatar(document.getElementById("bot-avatar-preview"), { display_name: letter, avatar_url: botCreateAvatarUrl });
+      renderBotAvatarGrid();
+    });
+    grid.appendChild(el);
+  });
+}
+
+function openBotCreateDialog() {
+  if (isGrandmaMode()) return;
+  document.querySelector(".sidebar").classList.remove("menu-open");
+  document.getElementById("bot-name-input").value = "";
+  document.getElementById("bot-username-input").value = "";
+  document.getElementById("bot-username-hint").textContent = "";
+  document.getElementById("bot-username-hint").dataset.validated = "";
+  botCreateAvatarUrl = "color:0";
+  renderBotAvatarGrid();
+  updateBotCreateButton();
+  
+  document.getElementById("bot-create-overlay").classList.remove("hidden");
+  setTimeout(() => document.getElementById("bot-name-input").focus(), 60);
+}
+
+async function createBot() {
+  const name = document.getElementById("bot-name-input").value.trim();
+  const uname = document.getElementById("bot-username-input").value.trim();
+  const btn = document.getElementById("bot-create-confirm");
+  
+  btn.disabled = true;
+  btn.textContent = "Создаю...";
+
+  const defaultCode = `import sys\nmsg = sys.stdin.read().strip()\nif not msg:\n    print("Привет! Я бот.")\nelse:\n    print(f"Эхо: {msg}")`;
+
+  // Вызываем RPC
+  const { data: botId, error } = await supabase.rpc("create_bot_profile", {
+    p_username: uname,
+    p_display_name: name,
+    p_avatar_url: botCreateAvatarUrl,
+    p_bot_code: defaultCode
+  });
+
+  btn.disabled = false;
+  btn.textContent = "Создать";
+
+  if (error) {
+    await showAlertDialog("Ошибка", error.message);
+    return;
+  }
+
+  document.getElementById("bot-create-overlay").classList.add("hidden");
+  
+  // Загружаем профиль бота и открываем редактор
+  const { data: botProfile } = await supabase.from("profiles").select("*").eq("id", botId).single();
+  if (botProfile) {
+    profileCache.set(botId, botProfile);
+    openBotEditor(botProfile);
+  }
+}
+
+function openBotEditor(botProfile) {
+  if (isGrandmaMode()) return;
+  currentEditingBot = botProfile;
+  document.getElementById("bot-editor-title").textContent = `Настройка: ${botProfile.display_name}`;
+  document.getElementById("bot-code-input").value = botProfile.bot_code || "";
+  document.getElementById("bot-editor-overlay").classList.remove("hidden");
+}
+
+async function saveBotCode() {
+  if (!currentEditingBot) return;
+  const code = document.getElementById("bot-code-input").value;
+  const btn = document.getElementById("bot-editor-save");
+  
+  btn.disabled = true;
+  btn.textContent = "Сохранение...";
+
+  const { error } = await supabase.from("profiles").update({ bot_code: code }).eq("id", currentEditingBot.id);
+  
+  btn.disabled = false;
+  btn.textContent = "Сохранить код";
+
+  if (error) {
+    await showAlertDialog("Ошибка", error.message);
+  } else {
+    currentEditingBot.bot_code = code;
+    profileCache.set(currentEditingBot.id, currentEditingBot);
+    await showAlertDialog("Успех", "Код бота обновлён!");
+  }
+}
+
+// ======================================================
+// ВЫПОЛНЕНИЕ PYTHON-КОДА (PISTON API)
+// ======================================================
+
+async function triggerBotResponse(chatId, botUser, userMessage) {
+  if (!botUser.is_bot || !botUser.bot_code) return;
+
+  // Показываем, что бот "печатает"
+  const tempId = "tmp_bot_" + Date.now();
+  const tempMsg = {
+    id: tempId, chat_id: chatId, sender_id: botUser.id,
+    content: "Бот печатает...", created_at: new Date().toISOString(),
+    message_type: "text", delivered_at: null, read_at: null,
+  };
+  msgCache.set(tempId, tempMsg);
+  await appendMessage(tempMsg);
+  scrollToBottom();
+
+  try {
+    const res = await fetch("https://emkc.org/api/v2/piston/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        language: "python",
+        version: "3.10.0",
+        files: [{ content: botUser.bot_code }],
+        stdin: userMessage || ""
+      })
+    });
+    
+    const data = await res.json();
+    
+    let responseText = "";
+    if (data.run && data.run.stdout) {
+      responseText = data.run.stdout.trim();
+    } else if (data.run && data.run.stderr) {
+      responseText = "Ошибка в коде бота:\n" + data.run.stderr.trim();
+    } else {
+      responseText = "Бот промолчал.";
+    }
+
+    // Удаляем "Бот печатает..."
+    const tempEl = document.querySelector(`[data-id="${tempId}"]`);
+    if (tempEl) tempEl.remove();
+    msgCache.delete(tempId);
+
+    // Отправляем реальный ответ бота от его имени
+    const payload = {
+      chat_id: chatId,
+      sender_id: botUser.id,
+      content: responseText,
+      encrypted: false,
+    };
+    
+    const { data: newMsg, error } = await supabase.from("messages").insert(payload).select().single();
+    
+    if (!error && newMsg) {
+      await appendMessage(newMsg);
+      scrollToBottom();
+      
+      chatLastMsg.set(chatId, {
+        text: responseText,
+        time: new Date(newMsg.created_at).getTime(),
+        senderId: botUser.id,
+        unread: 0,
+      });
+      updateChatItemPreview(chatId);
+      resortChatsList();
+    }
+  } catch (e) {
+    console.error("Bot error:", e);
+    const tempEl = document.querySelector(`[data-id="${tempId}"]`);
+    if (tempEl) tempEl.remove();
+    msgCache.delete(tempId);
+    
+    // Если API упало, пишем об этом от лица бота
+    const payload = {
+        chat_id: chatId, sender_id: botUser.id, 
+        content: "Произошла ошибка при выполнении кода. Проверьте ваш Python-код.", 
+        encrypted: false
+    };
+    const { data: errMsg } = await supabase.from("messages").insert(payload).select().single();
+    if (errMsg) {
+        await appendMessage(errMsg);
+        scrollToBottom();
+    }
+  }
+}
+
+// Вспомогательная функция для проверки: является ли пользователь ботом
+function isBot(user) {
+  return user && user.is_bot === true;
+}
 
 ConnectionMonitor.init();
