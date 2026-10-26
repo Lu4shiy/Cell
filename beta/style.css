@@ -3702,6 +3702,8 @@ button:not(:disabled):active,
 .cell-icon[data-icon="decrease"]     { --icon: url("https://i.ibb.co/WNH28Vtd/icons8-decrease-100.png"); }
 .cell-icon[data-icon="increase"]     { --icon: url("https://i.ibb.co/dySYFnz/icons8-increase-100.png"); }
 .cell-icon[data-icon="history"]      { --icon: url("https://i.ibb.co/gMN2RM6W/icons8-100.png"); }
+.cell-icon[data-icon="gaming"]      { --icon: url("https://i.ibb.co/5hJr2q4B/icons8-100.png"); }
+.cell-icon[data-icon="chip"]        { --icon: url("https://i.ibb.co/TDP682kQ/icons8-chip-100.png"); }
 
 .icon-btn { display: flex; align-items: center; justify-content: center; }
 
@@ -4526,13 +4528,13 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   user-select: none;
 }
 
-/* Иконка Nectar */
+/* Иконка Chip (валюты) */
 .nectar-icon {
-  width: 1.05em;
-  height: 1.05em;
+  width: 1.1em;
+  height: 1.1em;
   display: inline-block;
-  vertical-align: -0.18em;
-  border-radius: 50%;
+  vertical-align: -0.15em;
+  margin-right: 4px; /* Отступ от текста */
   user-select: none;
   pointer-events: none;
 }

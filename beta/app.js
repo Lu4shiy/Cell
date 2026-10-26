@@ -2257,8 +2257,7 @@ function applyLanguage() {
 applyLanguage();
 
 // ======================= Chip (валюта) =======================
-const NECTAR_ICON_URL = "https://i.ibb.co/TDP682kQ/icons8-chip-100.png";
-const NECTAR_HTML = `<img class="nectar-icon" src="${NECTAR_ICON_URL}" alt="Chip" draggable="false">`;
+const NECTAR_HTML = `<span class="cell-icon nectar-icon" data-icon="chip"></span>`;
 
 function nectarize(text) {
   return escapeHtml(String(text || "")).replace(/🧩/g, NECTAR_HTML);
