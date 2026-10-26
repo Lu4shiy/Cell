@@ -6,7 +6,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Cell</title>
+  <title>Lock</title>
 
 <!-- PWA: манифест создаётся инлайн-скриптом, чтобы Chrome сразу получил правильный манифест.
        Если поставить статический <link rel="manifest" href="manifest.json">, Chrome
@@ -33,28 +33,32 @@
       document.head.appendChild(link);
     })();
   </script>
-  <meta name="theme-color" content="#1d1712">
+  <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Cell">
+  <meta name="apple-mobile-web-app-title" content="Lock">
   <link rel="apple-touch-icon" href="icon-beta-192-v2.png">
   <link rel="icon" type="image/png" sizes="512x512" href="icon-beta-512-v2.png">
 
   <link rel="stylesheet" href="style.css">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpolygon points='50,5 93,27 93,73 50,95 7,73 7,27' fill='%23f5a623'/%3E%3Ccircle cx='50' cy='50' r='13' fill='%2315110d'/%3E%3C/svg%3E">
+  <!-- Новый киберпанк фавикон (буква L с контуром) -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M 35 25 L 35 75 L 75 75 M 35 25 A 15 15 0 0 1 65 25 L 65 45' fill='none' stroke='%2300f3ff' stroke-width='6' stroke-linecap='square' stroke-linejoin='miter'/%3E%3C/svg%3E">
 </head>
 <body>
 
   <div id="auth-screen" class="screen hidden">
     <div class="auth-card">
       <div class="logo-wrap">
-        <svg class="logo-cell" viewBox="0 0 100 100" width="72" height="72" aria-hidden="true">
-          <polygon points="50,5 93,27 93,73 50,95 7,73 7,27" fill="currentColor"/>
-          <circle cx="50" cy="50" r="13" fill="var(--bg-side)"/>
+        <!-- Новый логотип Lock -->
+        <svg class="logo-lock" viewBox="0 0 100 100" width="72" height="72" aria-hidden="true">
+          <path d="M 35 25 L 35 75 L 75 75 M 35 25 A 15 15 0 0 1 65 25 L 65 45" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
+          <circle cx="35" cy="75" r="4" fill="currentColor"/>
+          <circle cx="75" cy="75" r="4" fill="currentColor"/>
+          <circle cx="65" cy="45" r="4" fill="currentColor"/>
         </svg>
       </div>
-      <h1 class="logo">Cell <span style="color:#e8568f;font-size:20px;">BETA</span></h1>
+      <h1 class="logo">Lock <span style="color:#00f3ff;font-size:20px;">BETA</span></h1>
       <p class="tagline" data-i18n="auth.tagline">Собираемся по кусочкам</p>
 
       <div class="tabs">
@@ -221,9 +225,12 @@
 
     <main class="chat-area" id="chat-area">
       <div class="chat-placeholder" id="chat-placeholder">
+        <!-- Новый логотип Lock в центре экрана -->
         <svg class="chat-placeholder-icon" viewBox="0 0 100 100" width="72" height="72" aria-hidden="true">
-          <polygon points="50,5 93,27 93,73 50,95 7,73 7,27" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
-          <circle cx="50" cy="50" r="9" fill="currentColor"/>
+          <path d="M 35 25 L 35 75 L 75 75 M 35 25 A 15 15 0 0 1 65 25 L 65 45" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter"/>
+          <circle cx="35" cy="75" r="3" fill="currentColor"/>
+          <circle cx="75" cy="75" r="3" fill="currentColor"/>
+          <circle cx="65" cy="45" r="3" fill="currentColor"/>
         </svg>
         <p>Выберите чат для начала переписки</p>
       </div>
@@ -912,20 +919,23 @@
   <div id="about-overlay" class="dialog-overlay hidden">
     <div class="dialog dialog-about">
       <div class="about-logo">
-        <div class="about-logo-cell">
+        <div class="about-logo-lock" style="color: var(--accent); margin-bottom: 10px; line-height: 0;">
+          <!-- Новый логотип Lock в окне "О приложении" -->
           <svg viewBox="0 0 100 100" width="64" height="64">
-            <polygon points="50,5 93,27 93,73 50,95 7,73 7,27" fill="currentColor"/>
-            <circle cx="50" cy="50" r="13" fill="var(--bg-card)"/>
+            <path d="M 35 25 L 35 75 L 75 75 M 35 25 A 15 15 0 0 1 65 25 L 65 45" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
+            <circle cx="35" cy="75" r="4" fill="currentColor"/>
+            <circle cx="75" cy="75" r="4" fill="currentColor"/>
+            <circle cx="65" cy="45" r="4" fill="currentColor"/>
           </svg>
         </div>
-        <div class="about-app-name">Cell</div>
+        <div class="about-app-name">Lock</div>
         <div class="about-app-tagline" data-i18n="auth.tagline">Собираемся по кусочкам</div>
       </div>
 
       <div class="about-section">
         <div class="about-section-title" data-i18n="about.section.about">О приложении</div>
         <div class="about-text" data-i18n="about.text.about">
-          Cell — семейный мессенджер. Каждый чат — это ячейка, а вместе они
+          Lock — семейный мессенджер. Каждый чат — это ячейка, а вместе они
           собираются в улей твоих близких. Здесь нет публичного шума: только ты,
           твоя семья и те, кому ты доверяешь.
         </div>
@@ -954,7 +964,7 @@
 
       <div class="about-section">
         <div class="about-section-title" data-i18n="about.section.version">Версия</div>
-        <div class="about-text">beta0.2.14 · Cell</div>
+        <div class="about-text">beta0.2.14 · Lock</div>
       </div>
 
       <div class="dialog-actions">
@@ -1254,7 +1264,7 @@
 
   <!-- Плашка «Доступна новая версия» -->
   <div id="update-banner" class="update-banner hidden">
-    <span>Доступна новая версия Cell</span>
+    <span>Доступна новая версия Lock</span>
     <button type="button" id="update-banner-reload">Перезагрузить</button>
     <button type="button" id="update-banner-close" aria-label="Скрыть">✕</button>
   </div>
@@ -1270,9 +1280,6 @@
         const closeBtn = document.getElementById('update-banner-close');
         let reloadTriggered = false;
 
-        // 🔴 Флаг: SW уже активировался хотя бы раз в этом браузере.
-        // На самой первой установке state становится 'installed', но
-        // это ещё не «обновление» — баннер показывать не надо.
         const SW_EVER_ACTIVE_KEY = "cell_sw_ever_active";
         function swEverActive() {
           try { return localStorage.getItem(SW_EVER_ACTIVE_KEY) === "1"; } catch (e) { return false; }
@@ -1290,8 +1297,6 @@
           updateBanner.classList.add('hidden');
         }
 
-        // 🔴 В режиме «Бабушка» вместо плашки делаем автоматическую
-        // перезагрузку: пользователь не должен ничего нажимать.
         function maybeAutoReloadInGrandmaMode() {
           let grandma = false;
           try { grandma = localStorage.getItem("cell_grandma_mode") === "1"; } catch (e) {}
@@ -1314,9 +1319,6 @@
 
         if (closeBtn) closeBtn.addEventListener('click', hideUpdateBanner);
 
-        // 🔴 Cache-busting перезагрузка: добавляем ?_r=<timestamp> —
-        // браузер считает это новым URL и не берёт index.html из HTTP-кэша.
-        // Вместе с fetch(cache:"reload") в sw.js это даёт аналог Ctrl+Shift+R.
         function hardReload() {
           const url = new URL(window.location.href);
           url.searchParams.set('_r', Date.now());
@@ -1330,10 +1332,7 @@
             navigator.serviceWorker.getRegistration()
               .then((reg) => {
                 if (reg && reg.waiting) {
-                  // Просим новый SW активироваться.
                   reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-                  // 🔴 Fallback: если через 2.5 сек controllerchange не сработал
-                  // (iOS PWA иногда молчит) — делаем cache-busting перезагрузку.
                   setTimeout(() => {
                     if (reloadTriggered) hardReload();
                   }, 2500);
@@ -1345,30 +1344,18 @@
           });
         }
 
-        // Когда новый SW активировался после нашего SKIP_WAITING — перезагружаем страницу.
-        // ⚠️ Только если это был наш явный перезапуск. Иначе не трогаем —
-        // фоновое обновление SW не должно ронять страницу.
         navigator.serviceWorker.addEventListener('controllerchange', () => {
-          // Первый раз контроллер появился — значит SW только что
-          // встал впервые. Запоминаем, но баннер не трогаем.
           markSwActive();
           if (!reloadTriggered) return;
           reloadTriggered = false;
-          // 🔴 Cache-busting — см. hardReload() выше.
           const url = new URL(window.location.href);
           url.searchParams.set('_r', Date.now());
           window.location.replace(url.toString());
         });
 
       navigator.serviceWorker
-        // 🔴 updateViaCache: 'none' — обязательно для PWA. Иначе Chrome
-        // кэширует sw.js через HTTP-кэш (у GH Pages есть Cache-Control),
-        // и reg.update() не видит новую версию. Плашка обновления никогда
-        // не появится, пока не почистишь кэш руками.
         .register('./sw.js', { scope: './', updateViaCache: 'none' })
         .then((reg) => {
-          // 🔴 Баннер (или авто-reload в «Бабушке») — только если SW уже
-          // был активен раньше. Иначе это первая установка.
           if (reg.waiting && swEverActive()) {
             if (!maybeAutoReloadInGrandmaMode()) showUpdateBanner();
           }
@@ -1385,16 +1372,8 @@
             });
           });
 
-          // Если SW уже активен прямо сейчас — сразу ставим флаг,
-          // чтобы следующие загрузки не считались «первой установкой».
           if (navigator.serviceWorker.controller) markSwActive();
 
-          // 🔴 Проверяем обновления АГРЕССИВНО:
-          // — сразу при загрузке;
-          // — раз в 1 минуту (было 5, в PWA страница живёт сутками);
-          // — при visibilitychange (возврат на вкладку);
-          // — при focus (клик по окну);
-          // — при pageshow (iOS PWA «раскрывается» из фона именно так).
           const checkUpdate = () => {
             reg.update().catch(() => {});
             if (reg.waiting && swEverActive()) {
