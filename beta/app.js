@@ -2722,9 +2722,8 @@ function renderGiftModel(value, sizePx) {
 function renderPreviewHtml(text) {
   const s = String(text || "").slice(0, 60);
   let html = escapeHtml(s);
-  // Chip
-  html = html.replace(/🧩/g,
-    `<img class="nectar-icon" src="${NECTAR_ICON_URL}" alt="Nectar" draggable="false">`);
+  // Chip — уже HTML-фрагмент (span + CSS-маска), NECTAR_ICON_URL больше не нужен.
+  html = html.replace(/🧩/g, NECTAR_HTML);
   // Иконки-замены emoji в превью
   html = html.replace(/🎁/g, iconInline("gift"));
   html = html.replace(/📷/g, iconInline("camera"));
@@ -14628,10 +14627,8 @@ function preloadAllIcons() {
     }
   });
 
-  // Chip-иконка (используется как <img> и как HTML-фрагмент).
-  if (!seen.has(NECTAR_ICON_URL)) {
-    try { const i = new Image(); i.src = NECTAR_ICON_URL; } catch (e) {}
-  }
+  // Chip-иконка прогревается автоматически через Object.values(ICONS) —
+  // она теперь живёт как ICONS.chip (span + CSS-маска, не <img>).
 }
 
 let patternIconsPreloaded = false;
