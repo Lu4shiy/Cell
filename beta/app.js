@@ -386,6 +386,31 @@ const I18N = {
 
     // ---- Сайдбар ----
     "sidebar.menu.createChannel": "Создать канал",
+    "sidebar.menu.createBot": "Создать бота",
+    
+    // ---- Боты ----
+    "bot.create.title": "Создать бота",
+    "bot.create.avatar": "Аватар бота",
+    "bot.create.name": "Имя бота",
+    "bot.create.namePlaceholder": "Имя",
+    "bot.create.username": "Юзернейм",
+    "bot.create.confirm": "Создать",
+    "bot.create.creating": "Создаю...",
+    "bot.err.usernameEnd": "Юзернейм должен заканчиваться на «bot»",
+    "bot.editor.title": "Настройка бота",
+    "bot.editor.desc": "Введите код на <b>Python 3</b>. Чтобы получить текст от пользователя, используйте <code>input()</code> или <code>sys.stdin.read()</code>. Всё, что выведет <code>print()</code>, отправится в чат.",
+    "bot.editor.save": "Сохранить код",
+    "bot.editor.saving": "Сохранение...",
+    "bot.editor.openChat": "Перейти в чат",
+    "bot.editor.loading": "Загрузка кода...",
+    "bot.typing": "Бот печатает...",
+    "bot.silent": "Бот промолчал.",
+    "bot.err.compile": "❌ Ошибка компиляции:\n",
+    "bot.err.runtime": "❌ Ошибка выполнения:\n",
+    "bot.err.failed": "❌ Ошибка: не удалось выполнить код бота.",
+    "bot.err.timeout": "❌ Ошибка: превышено время ожидания (20 секунд).",
+    "bot.saved.title": "Успех",
+    "bot.saved.text": "Код бота обновлён!",
     "sidebar.menu.market": "Маркет",
     "sidebar.menu.settings": "Настройки",
 
@@ -1235,6 +1260,31 @@ const I18N = {
 
     // ---- Sidebar ----
     "sidebar.menu.createChannel": "Create channel",
+    "sidebar.menu.createBot": "Create bot",
+
+    // ---- Bots ----
+    "bot.create.title": "Create bot",
+    "bot.create.avatar": "Bot avatar",
+    "bot.create.name": "Bot name",
+    "bot.create.namePlaceholder": "Name",
+    "bot.create.username": "Username",
+    "bot.create.confirm": "Create",
+    "bot.create.creating": "Creating...",
+    "bot.err.usernameEnd": "Username must end with «bot»",
+    "bot.editor.title": "Bot setup",
+    "bot.editor.desc": "Enter <b>Python 3</b> code. To get user input, use <code>input()</code> or <code>sys.stdin.read()</code>. Everything <code>print()</code> outputs will be sent to the chat.",
+    "bot.editor.save": "Save code",
+    "bot.editor.saving": "Saving...",
+    "bot.editor.openChat": "Go to chat",
+    "bot.editor.loading": "Loading code...",
+    "bot.typing": "Bot is typing...",
+    "bot.silent": "Bot remained silent.",
+    "bot.err.compile": "❌ Compilation error:\n",
+    "bot.err.runtime": "❌ Runtime error:\n",
+    "bot.err.failed": "❌ Error: failed to execute bot code.",
+    "bot.err.timeout": "❌ Error: timeout exceeded (20 seconds).",
+    "bot.saved.title": "Success",
+    "bot.saved.text": "Bot code updated!",
     "sidebar.menu.market": "Market",
     "sidebar.menu.settings": "Settings",
 
@@ -19305,27 +19355,27 @@ function setupBotUI() {
 
     if (!val) { hint.className = "username-hint"; hint.textContent = ""; return; }
     if (!/^[a-zA-Z0-9_-]+$/.test(val)) {
-      hint.className = "username-hint err"; hint.textContent = "Только латиница, цифры, _ и -"; return;
+      hint.className = "username-hint err"; hint.textContent = t("username.onlyLatin"); return;
     }
     if (val.length < 3) {
-      hint.className = "username-hint err"; hint.textContent = "Минимум 3 символа"; return;
+      hint.className = "username-hint err"; hint.textContent = t("username.tooShort"); return;
     }
     if (!/bot$/i.test(val)) {
       hint.className = "username-hint err";
-      hint.textContent = "Юзернейм должен заканчиваться на «bot»";
+      hint.textContent = t("bot.err.usernameEnd");
       return;
     }
 
-    hint.className = "username-hint"; hint.textContent = "Проверяю...";
+    hint.className = "username-hint"; hint.textContent = t("username.checking");
 
     botUsernameTimeout = setTimeout(async () => {
       const { data } = await supabase.from("profiles").select("id").ilike("username", val).limit(1);
       if (data && data.length > 0) {
-        hint.className = "username-hint err"; hint.textContent = "Занято";
+        hint.className = "username-hint err"; hint.textContent = tFmt("username.taken", { username: val });
         botUsernameValidated = null;
         hint.dataset.validated = "";
       } else {
-        hint.className = "username-hint ok"; hint.textContent = "Свободно";
+        hint.className = "username-hint ok"; hint.textContent = tFmt("username.free", { username: val });
         botUsernameValidated = val;
         hint.dataset.validated = val;
       }
@@ -19408,12 +19458,12 @@ async function createBot() {
   const btn = document.getElementById("bot-create-confirm");
 
   if (!/bot$/i.test(uname)) {
-    await showAlertDialog("Ошибка", "Юзернейм бота должен заканчиваться на «bot».");
+    await showAlertDialog(t("auth.err.prefix"), t("bot.err.usernameEnd"));
     return;
   }
   
   btn.disabled = true;
-  btn.textContent = "Создаю...";
+  btn.textContent = t("bot.create.creating");
 
   const defaultCode = `import sys\nmsg = sys.stdin.read().strip()\nif not msg:\n    print("Привет! Я бот.")\nelse:\n    print(f"Эхо: {msg}")`;
 
@@ -19426,7 +19476,7 @@ async function createBot() {
   });
 
   btn.disabled = false;
-  btn.textContent = "Создать";
+  btn.textContent = t("bot.create.confirm");
 
   if (error) {
     await showAlertDialog("Ошибка", error.message);
@@ -19446,8 +19496,8 @@ async function createBot() {
 async function openBotEditor(botProfile) {
   if (isGrandmaMode()) return;
   currentEditingBot = botProfile;
-  document.getElementById("bot-editor-title").textContent = `Настройка: ${botProfile.display_name}`;
-  document.getElementById("bot-code-input").value = "Загрузка кода...";
+  document.getElementById("bot-editor-title").textContent = `${t("bot.editor.title")}: ${botProfile.display_name}`;
+  document.getElementById("bot-code-input").value = t("bot.editor.loading");
   document.getElementById("bot-editor-overlay").classList.remove("hidden");
   
   try {
@@ -19467,7 +19517,7 @@ async function saveBotCode() {
   const btn = document.getElementById("bot-editor-save");
   
   btn.disabled = true;
-  btn.textContent = "Сохранение...";
+  btn.textContent = t("bot.editor.saving");
 
   const { error } = await supabase.rpc("update_bot_code", { 
     p_bot_id: currentEditingBot.id, 
@@ -19475,14 +19525,14 @@ async function saveBotCode() {
   });
   
   btn.disabled = false;
-  btn.textContent = "Сохранить код";
+  btn.textContent = t("bot.editor.save");
 
   if (error) {
-    await showAlertDialog("Ошибка", error.message);
+    await showAlertDialog(t("auth.err.prefix"), error.message);
   } else {
     currentEditingBot.bot_code = code;
     profileCache.set(currentEditingBot.id, currentEditingBot);
-    await showAlertDialog("Успех", "Код бота обновлён!");
+    await showAlertDialog(t("bot.saved.title"), t("bot.saved.text"));
   }
 }
 
@@ -19509,7 +19559,7 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
   const tempId = "tmp_bot_" + Date.now();
   const tempMsg = {
     id: tempId, chat_id: chatId, sender_id: botUser.id,
-    content: "Бот печатает...", created_at: new Date().toISOString(),
+    content: t("bot.typing"), created_at: new Date().toISOString(),
     message_type: "text", delivered_at: null, read_at: null,
   };
   msgCache.set(tempId, tempMsg);
@@ -19575,13 +19625,13 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
     const compileOutput = resultData.compile_output ? decodeURIComponent(escape(atob(resultData.compile_output))).trim() : "";
 
     if (compileOutput) {
-      responseText = "❌ Ошибка компиляции:\n" + compileOutput;
+      responseText = t("bot.err.compile") + compileOutput;
     } else if (stderr) {
-      responseText = "❌ Ошибка выполнения:\n" + stderr;
+      responseText = t("bot.err.runtime") + stderr;
     } else if (stdout) {
       responseText = stdout;
     } else {
-      responseText = "Бот промолчал.";
+      responseText = t("bot.silent");
     }
 
     // Удаляем "Бот печатает..."
@@ -19624,11 +19674,11 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
     if (tempEl) tempEl.remove();
     msgCache.delete(tempId);
 
-    let errorMsg = "❌ Ошибка: не удалось выполнить код бота.";
+    let errorMsg = t("bot.err.failed");
     if (e.name === "AbortError") {
-      errorMsg = "❌ Ошибка: превышено время ожидания (20 секунд).";
+      errorMsg = t("bot.err.timeout");
     } else if (e.message) {
-      errorMsg = "❌ Ошибка: " + e.message;
+      errorMsg = "❌ " + e.message;
     }
 
     const { data: errMsg } = await supabase.rpc("send_bot_message", {
