@@ -19628,7 +19628,7 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         language: "python",
-        version: "3.10.0",
+        version: "*",
         files: [{ content: botUser.bot_code }],
         stdin: userMessage || ""
       }),
@@ -19637,16 +19637,20 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
     clearTimeout(timeoutId);
     
     const data = await res.json();
+    console.log("Piston API response:", data);
     
     let responseText = "";
     if (data.compile && data.compile.stderr) {
       responseText = "❌ Ошибка компиляции:\n" + data.compile.stderr.trim();
-    } else if (data.run && data.run.stdout) {
-      responseText = data.run.stdout.trim();
     } else if (data.run && data.run.stderr) {
       responseText = "❌ Ошибка выполнения:\n" + data.run.stderr.trim();
+    } else if (data.run && data.run.stdout) {
+      responseText = data.run.stdout.trim();
+    } else if (data.run && data.run.output) {
+      responseText = data.run.output.trim();
     } else {
-      responseText = "Бот промолчал.";
+      // Если ничего не пришло — показываем, что реально вернул API (для отладки)
+      responseText = "Бот промолчал. Ответ API:\n" + JSON.stringify(data, null, 2);
     }
 
     // Удаляем "Бот печатает..."
