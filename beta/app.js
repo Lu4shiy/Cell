@@ -19974,6 +19974,24 @@ async function saveGame() {
     return;
   }
 
+  const btn = document.getElementById("gaming-add-save");
+  btn.disabled = true;
+  btn.textContent = "Сохранение...";
+
+  // 🔴 Проверка на дубликат названия
+  let checkQuery = supabase.from("games").select("id").eq("title", title);
+  if (currentEditingGameId) {
+    checkQuery = checkQuery.neq("id", currentEditingGameId);
+  }
+  const { data: existingGame } = await checkQuery.maybeSingle();
+  
+  if (existingGame) {
+    await showAlertDialog("Ошибка", "Игра с таким названием уже существует. Придумайте другое.");
+    btn.disabled = false;
+    btn.textContent = "Сохранить";
+    return;
+  }
+
   const tags = tagsRaw.split(",").map(t => t.trim()).filter(Boolean);
   const screenshots = screenshotsRaw ? screenshotsRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
   
@@ -19989,10 +20007,6 @@ async function saveGame() {
       }
     });
   }
-
-  const btn = document.getElementById("gaming-add-save");
-  btn.disabled = true;
-  btn.textContent = "Сохранение...";
 
   const payload = {
     title,
@@ -20067,8 +20081,10 @@ async function saveGame() {
   
   if (currentEditingGameId) {
     renderGamingDetail(document.getElementById("gaming-main"), currentEditingGameId);
+    await showAlertDialog("Успех", "Игра успешно обновлена!");
   } else {
     renderGamingMain();
+    await showAlertDialog("Успех", "Игра успешно создана!");
   }
   currentEditingGameId = null;
 }
