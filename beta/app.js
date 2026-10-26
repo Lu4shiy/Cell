@@ -19570,7 +19570,10 @@ async function saveBotCode() {
   btn.disabled = true;
   btn.textContent = "Сохранение...";
 
-  const { error } = await supabase.from("profiles").update({ bot_code: code }).eq("id", currentEditingBot.id);
+  const { error } = await supabase.rpc("update_bot_code", { 
+    p_bot_id: currentEditingBot.id, 
+    p_code: code 
+  });
   
   btn.disabled = false;
   btn.textContent = "Сохранить код";
@@ -19625,7 +19628,7 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         language: "python",
-        version: "*",
+        version: "3.10.0",
         files: [{ content: botUser.bot_code }],
         stdin: userMessage || ""
       }),
@@ -19651,17 +19654,29 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
     if (tempEl) tempEl.remove();
     msgCache.delete(tempId);
 
-    const payload = {
-      chat_id: chatId,
-      sender_id: botUser.id,
-      content: responseText,
-      encrypted: false,
-    };
-    
-    const { data: newMsg, error } = await supabase.from("messages").insert(payload).select().single();
+    const { data: newMsg, error } = await supabase.rpc("send_bot_message", {
+      p_chat_id: chatId,
+      p_bot_id: botUser.id,
+      p_content: responseText
+    });
     
     if (!error && newMsg) {
-      await appendMessage(newMsg);
+      // RPC возвращает объект (иногда обёрнутый в массив)
+      const insertedMsg = Array.isArray(newMsg) ? newMsg[0] : newMsg;
+      await appendMessage(insertedMsg);
+      scrollToBottom();
+      
+      chatLastMsg.set(chatId, {
+        text: responseText,
+        time: new Date(insertedMsg.created_at).getTime(),
+        senderId: botUser.id,
+        unread: 0,
+      });
+      updateChatItemPreview(chatId);
+      resortChatsList();
+    }
+  } catch (e) {
+    // ... (начало catch-блока)
       scrollToBottom();
       
       chatLastMsg.set(chatId, {
@@ -19692,14 +19707,14 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
       errorMsg = "❌ Ошибка: превышено время ожидания (15 секунд).";
     }
     
-    const payload = {
-        chat_id: chatId, sender_id: botUser.id, 
-        content: errorMsg, 
-        encrypted: false
-    };
-    const { data: errMsg } = await supabase.from("messages").insert(payload).select().single();
+    const { data: errMsg } = await supabase.rpc("send_bot_message", {
+        p_chat_id: chatId,
+        p_bot_id: botUser.id,
+        p_content: errorMsg
+    });
     if (errMsg) {
-        await appendMessage(errMsg);
+        const insertedMsg = Array.isArray(errMsg) ? errMsg[0] : errMsg;
+        await appendMessage(insertedMsg);
         scrollToBottom();
     }
   }
