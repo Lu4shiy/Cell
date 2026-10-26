@@ -6063,3 +6063,53 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+
+/* ====================================================== */
+/* BOT KEYBOARD (ВСТРОЕННЫЕ КНОПКИ)                       */
+/* ====================================================== */
+.bot-keyboard-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  background: var(--bg-side);
+  border-top: 1px solid var(--border);
+  max-height: 33vh; /* Кнопки не займут больше трети экрана */
+  overflow-y: auto; /* Если кнопок много — они будут скроллиться */
+  scrollbar-width: thin;
+  animation: keyboardSlideUp 0.2s ease-out;
+}
+
+@keyframes keyboardSlideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.bot-keyboard-row {
+  display: flex;
+  gap: 6px;
+}
+
+.bot-keyboard-btn {
+  flex: 1;
+  padding: 10px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+}
+
+.bot-keyboard-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.bot-keyboard-btn:active {
+  transform: scale(0.96);
+}

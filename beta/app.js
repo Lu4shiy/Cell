@@ -7247,6 +7247,7 @@ async function openChatWith(otherUser) {
   await markChatRead(chatId);
   setWheelSelected(chatId);
   updateE2eeComposerHint();
+  updateBotKeyboardForChat().catch(() => {});
 }
 
 // Подсвечивает активный чат в списке. Работает независимо от того,
@@ -7750,7 +7751,9 @@ async function buildMsgHtml(msg) {
       html += `<div class="msg-text" style="margin-top:6px;">${replaceFlagsInHtml(applyFormatting(escapeHtml(plainCap)))}</div>`;
     }
   } else {
-    const plain = await getPlaintext(msg);
+    let plain = await getPlaintext(msg);
+    // Скрываем служебные теги клавиатуры от глаз пользователя
+    plain = plain.replace(/\[KEYBOARD\][\s\S]*?\[\/KEYBOARD\]/g, "").trim();
     // 🔴 emoji-only — для ЛЮБОГО числа эмодзи и пробелов (убирает «пузырь»).
     // emoji-single — только для одного эмодзи (делает крупный размер).
     const onlyEmoji = isOnlyEmoji(plain);
@@ -10198,6 +10201,8 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
 });
 
 async function sendMessage(chatId, content) {
+  renderBotKeyboard(null); // Скрываем старую клавиатуру при ручном вводе
+  
   // Защита: если chatId — это канал, отправка возможна только когда он открыт
   // и только владельцем или подписанным админом
   const isKnownChannel = channelCache.has(chatId);
@@ -10828,6 +10833,7 @@ function closeCurrentChat() {
   if (sbBtn) sbBtn.classList.remove("visible");
   document.getElementById("chat-content").classList.add("hidden");
   document.getElementById("chat-placeholder").classList.remove("hidden");
+  renderBotKeyboard(null);
 }
 
 // Возвращает актуальный URL медиа для отображения (учитывая E2EE).
@@ -16010,6 +16016,84 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+// Парсит сообщение бота, извлекая JSON-клавиатуру
+function parseBotMessage(content) {
+  if (!content) return { text: "", keyboard: null };
+  const match = /\[KEYBOARD\]([\s\S]*?)\[\/KEYBOARD\]/.exec(content);
+  if (!match) return { text: content, keyboard: null };
+  let keyboard = null;
+  try {
+    keyboard = JSON.parse(match[1]);
+  } catch (e) { /* silent */ }
+  const cleanText = content.replace(match[0], "").trim();
+  return { text: cleanText, keyboard };
+}
+
+// Рендерит клавиатуру над инпутом
+function renderBotKeyboard(keyboard) {
+  const container = document.getElementById("bot-keyboard-container");
+  if (!container) return;
+  
+  if (!keyboard || !keyboard.buttons || !keyboard.buttons.length) {
+    container.classList.add("hidden");
+    container.innerHTML = "";
+    return;
+  }
+  
+  container.innerHTML = keyboard.buttons.map(row => {
+    return `<div class="bot-keyboard-row">` + row.map(btn => {
+      const label = btn.text || "";
+      const data = btn.data || label;
+      return `<button type="button" class="bot-keyboard-btn" data-callback="${escapeHtml(data)}">${escapeHtml(label)}</button>`;
+    }).join("") + `</div>`;
+  }).join("");
+  
+  container.querySelectorAll(".bot-keyboard-btn").forEach(btn => {
+    btn.onclick = () => {
+      const text = btn.dataset.callback;
+      const input = document.getElementById("message-input");
+      if (input) {
+        input.innerHTML = "";
+        input.appendChild(document.createTextNode(text));
+        document.getElementById("composer").dispatchEvent(new Event("submit", { cancelable: true }));
+      }
+    };
+  });
+  
+  container.classList.remove("hidden");
+}
+
+// Проверяет последнее сообщение и показывает/скрывает клавиатуру
+async function updateBotKeyboardForChat() {
+  const container = document.getElementById("bot-keyboard-container");
+  if (!container) return;
+  
+  if (!currentOtherUser || !currentOtherUser.is_bot) {
+    container.classList.add("hidden");
+    container.innerHTML = "";
+    return;
+  }
+  
+  let lastBotMsg = null;
+  for (const m of msgCache.values()) {
+    if (m.sender_id === currentOtherUser.id) {
+      if (!lastBotMsg || new Date(m.created_at) > new Date(lastBotMsg.created_at)) {
+        lastBotMsg = m;
+      }
+    }
+  }
+  
+  if (lastBotMsg) {
+    const plain = await getPlaintext(lastBotMsg);
+    const parsed = parseBotMessage(plain);
+    if (parsed.keyboard) {
+      renderBotKeyboard(parsed.keyboard);
+      return;
+    }
+  }
+  renderBotKeyboard(null);
+}
+
 window.addEventListener("unhandledrejection", (e) => {
   console.error("Unhandled promise rejection:", e.reason);
 });
@@ -19496,17 +19580,23 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
   await appendMessage(tempMsg);
   scrollToBottom();
 
+  let timeoutId = null;
   try {
+    const controller = new AbortController();
+    timeoutId = setTimeout(() => controller.abort(), 15000);
+    
     const res = await fetch("https://emkc.org/api/v2/piston/execute", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         language: "python",
-        version: "*", // "*" подтянет актуальную версию, это надежнее
+        version: "*",
         files: [{ content: botUser.bot_code }],
         stdin: userMessage || ""
-      })
+      }),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
     
     const data = await res.json();
     
@@ -19526,7 +19616,6 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
     if (tempEl) tempEl.remove();
     msgCache.delete(tempId);
 
-    // Отправляем реальный ответ бота от его имени
     const payload = {
       chat_id: chatId,
       sender_id: botUser.id,
@@ -19548,17 +19637,29 @@ async function triggerBotResponse(chatId, botUser, userMessage) {
       });
       updateChatItemPreview(chatId);
       resortChatsList();
+      
+      const parsed = parseBotMessage(responseText);
+      if (parsed.keyboard) {
+        renderBotKeyboard(parsed.keyboard);
+      } else {
+        renderBotKeyboard(null);
+      }
     }
   } catch (e) {
+    clearTimeout(timeoutId);
     console.error("Bot error:", e);
     const tempEl = document.querySelector(`[data-id="${tempId}"]`);
     if (tempEl) tempEl.remove();
     msgCache.delete(tempId);
     
-    // Если API упало, пишем об этом от лица бота
+    let errorMsg = "❌ Ошибка: не удалось связаться с сервером ботов.";
+    if (e.name === "AbortError") {
+      errorMsg = "❌ Ошибка: превышено время ожидания (15 секунд).";
+    }
+    
     const payload = {
         chat_id: chatId, sender_id: botUser.id, 
-        content: "Произошла ошибка при выполнении кода. Проверьте ваш Python-код.", 
+        content: errorMsg, 
         encrypted: false
     };
     const { data: errMsg } = await supabase.from("messages").insert(payload).select().single();
