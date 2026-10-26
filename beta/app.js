@@ -217,6 +217,10 @@ const ICONS = {
   decrease:        "https://i.ibb.co/WNH28Vtd/icons8-decrease-100.png",
   increase:        "https://i.ibb.co/dySYFnz/icons8-increase-100.png",
   history:         "https://i.ibb.co/gMN2RM6W/icons8-100.png",
+  
+  // === Новые разделы ===
+  gaming:          "https://i.ibb.co/5hJr2q4B/icons8-100.png",
+  chip:            "https://i.ibb.co/TDP682kQ/icons8-chip-100.png",
 };
 
 function verifiedBadge(profile) {
@@ -432,18 +436,18 @@ const I18N = {
     "market.sort.priceDesc": "Дорогие → дешёвые",
     "market.sort.priceAsc": "Дешёвые → дорогие",
     "market.buy.title": "Купить подарок",
-    "market.buy.text": "Подарок перейдёт в ваш профиль. Спишется {price} Nectar.",
+    "market.buy.text": "Подарок перейдёт в ваш профиль. Спишется {price} Chip.",
     "market.buy.confirm": "Купить",
     "market.filter.selectedN": "Выбрано: {n}",
     "market.list.title": "Выставить на продажу",
-    "market.list.text": "Укажите цену в Nectar. Подарок исчезнет из вашего профиля и появится в маркете.",
+    "market.list.text": "Укажите цену в Chip. Подарок исчезнет из вашего профиля и появится в маркете.",
     "market.list.invalid": "Цена должна быть целым числом больше нуля.",
     "market.card.changePrice": "Цена",
     "market.card.unlist": "Снять",
     "market.profile.myListings": "Мои предложения",
     "market.profile.noListings": "У вас пока нет активных предложений.",
     "market.changePrice.title": "Изменить цену",
-    "market.changePrice.text": "Новая цена в Nectar:",
+    "market.changePrice.text": "Новая цена в Chip:",
     "market.unlist.title": "Снять с продажи",
     "market.unlist.text": "Подарок вернётся в ваш профиль. Продолжить?",
     "market.unlist.confirm": "Снять",
@@ -458,7 +462,7 @@ const I18N = {
     "market.cart.buyAllText": "Купить все подарки из корзины за {sum}?",
     "market.err.ownListing": "Нельзя купить собственный лот.",
     "market.err.alreadyListed": "Этот подарок уже выставлен на маркет. Сначала снимите его с продажи.",
-    "market.err.notEnoughNectar": "Недостаточно Nectar.",
+    "market.err.notEnoughNectar": "Недостаточно Chip.",
     "market.err.cartEmpty": "Корзина пуста.",
     "market.err.listingUnavailable": "Этот лот больше недоступен.",
     "market.err.alreadySold": "Ошибка, уже куплено.",
@@ -467,7 +471,7 @@ const I18N = {
     "market.err.notAvailable": "Лот больше недоступен.",
     "market.err.notAuth": "Нужно войти в аккаунт.",
     "market.notif.soldTitle": "Подарок продан",
-    "market.notif.soldBody": "«{name}»{model} куплен за {price} Nectar.",
+    "market.notif.soldBody": "«{name}»{model} куплен за {price} Chip.",
     // Профиль продавца
     "market.profile.level": "Уровень продавца",
     "market.profile.bought": "Куплено за всё время",
@@ -496,7 +500,7 @@ const I18N = {
     "chat.search.open": "Поиск в чате",
     "chat.pins.open": "Закреплённые",
     "chat.menu.open": "Меню",
-    "chat.menu.tokens": "Отправить Nectar",
+    "chat.menu.tokens": "Отправить Chip",
     "chat.menu.clear": "Очистить чат",
     "chat.menu.delete": "Удалить чат",
     "chat.menu.block": "Заблокировать",
@@ -766,10 +770,10 @@ const I18N = {
     "gifts.send.confirmTitle": "Передать подарок",
     "gifts.send.confirmText": "Передача стоит {price}. Продолжить?",
     "gifts.send.confirmAction": "Передать за {price}",
-    "gifts.send.notEnough": "Недостаточно Nectar",
-    "gifts.send.notEnoughText": "Для передачи нужно {need} Nectar, у вас {have}.",
+    "gifts.send.notEnough": "Недостаточно Chip",
+    "gifts.send.notEnoughText": "Для передачи нужно {need} Chip, у вас {have}.",
     "gifts.sell.title": "Продать подарок",
-    "gifts.sell.text": "Продать за {price} Nectar (комиссия 15%)?",
+    "gifts.sell.text": "Продать за {price} Chip (комиссия 15%)?",
     "gifts.sell.confirm": "Продать",
     "gifts.notFound": "Не найдено",
     "gifts.error": "Ошибка",
@@ -1060,8 +1064,8 @@ const I18N = {
     // ---- Emoji picker ----
     "emoji.recent.empty": "Здесь появятся недавно использованные эмодзи",
 
-    // ---- Nectar ----
-    "tokens.title": "Отправить Nectar",
+    // ---- Chip ----
+    "tokens.title": "Отправить Chip",
     "tokens.to": "Кому: {name}",
     "tokens.balance": "У вас: {balance}",
     "tokens.amountPlaceholder": "Сумма",
@@ -1073,9 +1077,9 @@ const I18N = {
     "msg.gift.sent.female": "{name} отправила вам подарок за {price} {icon}",
     "msg.gift.sent.other": "{name} отправил(а) вам подарок за {price} {icon}",
     "msg.tokens.youSent": "Вы отправили {amount} {icon}",
-    "msg.tokens.sent.male": "{name} отправил вам {amount} {icon} Nectar",
-    "msg.tokens.sent.female": "{name} отправила вам {amount} {icon} Nectar",
-    "msg.tokens.sent.other": "{name} отправил(а) вам {amount} {icon} Nectar",
+    "msg.tokens.sent.male": "{name} отправил вам {amount} {icon} Chip",
+    "msg.tokens.sent.female": "{name} отправила вам {amount} {icon} Chip",
+    "msg.tokens.sent.other": "{name} отправил(а) вам {amount} {icon} Chip",
 
     // ---- Пустые состояния ----
     "empty.noChats": "У вас пока нет чатов.<br>Введи @username выше, чтобы найти человека.",
@@ -1185,6 +1189,9 @@ const I18N = {
     "attach.err.uploadTitle": "Ошибка загрузки",
     "attach.err.notSent": "Не отправлено",
     "attach.err.network": "Ошибка сети",
+
+    // ---- Другое ----
+    "sidebar.menu.gamingCenter": "Gaming Center",
   },
   en: {
     // ---- Settings ----
@@ -1306,18 +1313,18 @@ const I18N = {
     "market.sort.priceDesc": "Price: high to low",
     "market.sort.priceAsc": "Price: low to high",
     "market.buy.title": "Buy gift",
-    "market.buy.text": "Gift will move to your profile. You'll spend {price} Nectar.",
+    "market.buy.text": "Gift will move to your profile. You'll spend {price} Chip.",
     "market.buy.confirm": "Buy",
     "market.filter.selectedN": "{n} selected",
     "market.list.title": "List for sale",
-    "market.list.text": "Enter a price in Nectar. The gift will disappear from your profile and appear on the market.",
+    "market.list.text": "Enter a price in Chip. The gift will disappear from your profile and appear on the market.",
     "market.list.invalid": "Price must be a positive integer.",
     "market.card.changePrice": "Price",
     "market.card.unlist": "Unlist",
     "market.profile.myListings": "My listings",
     "market.profile.noListings": "You have no active listings yet.",
     "market.changePrice.title": "Change price",
-    "market.changePrice.text": "New price in Nectar:",
+    "market.changePrice.text": "New price in Chip:",
     "market.unlist.title": "Unlist",
     "market.unlist.text": "The gift will return to your profile. Continue?",
     "market.unlist.confirm": "Unlist",
@@ -1332,7 +1339,7 @@ const I18N = {
     "market.cart.buyAllText": "Buy all gifts from your cart for {sum}?",
     "market.err.ownListing": "You can't buy your own listing.",
     "market.err.alreadyListed": "This gift is already listed on the market. Unlist it first.",
-    "market.err.notEnoughNectar": "Not enough Nectar.",
+    "market.err.notEnoughNectar": "Not enough Chip.",
     "market.err.cartEmpty": "Your cart is empty.",
     "market.err.listingUnavailable": "This listing is no longer available.",
     "market.err.alreadySold": "Error: already sold.",
@@ -1341,7 +1348,7 @@ const I18N = {
     "market.err.notAvailable": "Listing is no longer available.",
     "market.err.notAuth": "Please sign in.",
     "market.notif.soldTitle": "Gift sold",
-    "market.notif.soldBody": "\"{name}\"{model} sold for {price} Nectar.",
+    "market.notif.soldBody": "\"{name}\"{model} sold for {price} Chip.",
     // Seller profile
     "market.profile.level": "Seller level",
     "market.profile.bought": "Bought all time",
@@ -1370,7 +1377,7 @@ const I18N = {
     "chat.search.open": "Search in chat",
     "chat.pins.open": "Pinned",
     "chat.menu.open": "Menu",
-    "chat.menu.tokens": "Send Nectar",
+    "chat.menu.tokens": "Send Chip",
     "chat.menu.clear": "Clear chat",
     "chat.menu.delete": "Delete chat",
     "chat.menu.block": "Block",
@@ -1640,10 +1647,10 @@ const I18N = {
     "gifts.send.confirmTitle": "Transfer gift",
     "gifts.send.confirmText": "Transfer costs {price}. Continue?",
     "gifts.send.confirmAction": "Transfer for {price}",
-    "gifts.send.notEnough": "Not enough Nectar",
-    "gifts.send.notEnoughText": "You need {need} Nectar to transfer, you have {have}.",
+    "gifts.send.notEnough": "Not enough Chip",
+    "gifts.send.notEnoughText": "You need {need} Chip to transfer, you have {have}.",
     "gifts.sell.title": "Sell gift",
-    "gifts.sell.text": "Sell for {price} Nectar (15% fee)?",
+    "gifts.sell.text": "Sell for {price} Chip (15% fee)?",
     "gifts.sell.confirm": "Sell",
     "gifts.notFound": "Not found",
     "gifts.error": "Error",
@@ -1934,8 +1941,8 @@ const I18N = {
     // ---- Emoji picker ----
     "emoji.recent.empty": "Recently used emojis will appear here",
 
-    // ---- Nectar ----
-    "tokens.title": "Send Nectar",
+    // ---- Chip ----
+    "tokens.title": "Send Chip",
     "tokens.to": "To: {name}",
     "tokens.balance": "You have: {balance}",
     "tokens.amountPlaceholder": "Amount",
@@ -1947,9 +1954,9 @@ const I18N = {
     "msg.gift.sent.female": "{name} sent you a gift worth {price} {icon}",
     "msg.gift.sent.other": "{name} sent you a gift worth {price} {icon}",
     "msg.tokens.youSent": "You sent {amount} {icon}",
-    "msg.tokens.sent.male": "{name} sent you {amount} {icon} Nectar",
-    "msg.tokens.sent.female": "{name} sent you {amount} {icon} Nectar",
-    "msg.tokens.sent.other": "{name} sent you {amount} {icon} Nectar",
+    "msg.tokens.sent.male": "{name} sent you {amount} {icon} Chip",
+    "msg.tokens.sent.female": "{name} sent you {amount} {icon} Chip",
+    "msg.tokens.sent.other": "{name} sent you {amount} {icon} Chip",
 
     // ---- Empty states ----
     "empty.noChats": "No chats yet.<br>Type @username above to find someone.",
@@ -2059,6 +2066,9 @@ const I18N = {
     "attach.err.uploadTitle": "Upload error",
     "attach.err.notSent": "Not sent",
     "attach.err.network": "Network error",
+
+    // ---- Another ----
+    "sidebar.menu.gamingCenter": "Gaming Center",
   },
 };
 
@@ -2246,9 +2256,9 @@ function applyLanguage() {
 // (app.js подключён как type="module" → defer-поведение).
 applyLanguage();
 
-// ======================= Nectar (валюта) =======================
-const NECTAR_ICON_URL = "https://i.ibb.co/MkfVPGwZ/icons8-100.png";
-const NECTAR_HTML = `<img class="nectar-icon" src="${NECTAR_ICON_URL}" alt="Nectar" draggable="false">`;
+// ======================= Chip (валюта) =======================
+const NECTAR_ICON_URL = "https://i.ibb.co/TDP682kQ/icons8-chip-100.png";
+const NECTAR_HTML = `<img class="nectar-icon" src="${NECTAR_ICON_URL}" alt="Chip" draggable="false">`;
 
 function nectarize(text) {
   return escapeHtml(String(text || "")).replace(/🧩/g, NECTAR_HTML);
@@ -2713,7 +2723,7 @@ function renderGiftModel(value, sizePx) {
 function renderPreviewHtml(text) {
   const s = String(text || "").slice(0, 60);
   let html = escapeHtml(s);
-  // Nectar
+  // Chip
   html = html.replace(/🧩/g,
     `<img class="nectar-icon" src="${NECTAR_ICON_URL}" alt="Nectar" draggable="false">`);
   // Иконки-замены emoji в превью
@@ -4143,6 +4153,16 @@ async function initApp() {
   initApp.__done = true;
 
   setupSidebarMenu();
+  
+  // 🔴 Gaming Center (заглушка для будущего развития)
+  const gamingBtn = document.getElementById("gaming-center-btn");
+  if (gamingBtn) {
+    gamingBtn.addEventListener("click", () => {
+      document.querySelector(".sidebar").classList.remove("menu-open");
+      showAlertDialog("Gaming Center", "Раздел в разработке. Скоро здесь появится много интересного!");
+    });
+  }
+
   setupMobileBackButton();
   setupE2eeUI();
   setupSearch(); setupChatMenu(); setupMessageMenu(); setupSelectionToolbar();
@@ -4394,7 +4414,7 @@ function showConfirmDialog(title, text, confirmLabel, opts) {
     const confirmBtn = document.getElementById("dialog-confirm");
     const cancelBtn = document.getElementById("dialog-cancel");
     document.getElementById("dialog-title").textContent = title;
-    // opts.html — разрешает HTML в тексте и на кнопке (для вставки <img> Nectar).
+    // opts.html — разрешает HTML в тексте и на кнопке (для вставки <img> Chip).
     // Используется ТОЛЬКО с нашими собственными строками — не с пользовательскими.
     if (opts.html) {
       document.getElementById("dialog-text").innerHTML = text || "";
@@ -6743,6 +6763,17 @@ function setupSidebarMenu() {
     e.stopPropagation();
     sidebar.classList.toggle("menu-open");
   };
+
+  // 🔴 Кнопка Gaming Center
+  const gamingBtn = document.getElementById("gaming-center-btn");
+  if (gamingBtn) {
+    gamingBtn.onclick = (e) => {
+      e.stopPropagation();
+      sidebar.classList.remove("menu-open"); // Закрываем бургер-меню
+      // Показываем заглушку (потом заменишь на открытие своего окна)
+      showAlertDialog("Gaming Center", "Раздел в разработке. Скоро здесь появится много интересного!");
+    };
+  }
 
   // Закрытие при клике по любому пункту drawer'а — через флаг на самом элементе,
   // чтобы повторный setup не навесил второй такой же обработчик.
@@ -13994,10 +14025,10 @@ function renderMarketFilters() {
   const cat = giftCatalogCache.find((c) => c.id === f.giftId);
   const hasModels = !!(cat && Array.isArray(cat.models) && cat.models.length);
 
-  const chips = [];
+  const Chip = [];
 
   // Подарок — одиночный выбор.
-  chips.push(`
+  Chip.push(`
     <button type="button" class="market-filter-chip ${f.giftId ? "active" : ""}" data-filter="gift">
       <span>${escapeHtml(cat ? cat.name : t("market.filter.gift"))}</span>
       <span class="cell-icon cell-icon-sm" data-icon="down"></span>
@@ -14005,14 +14036,14 @@ function renderMarketFilters() {
 
   // Модель — мультивыбор (только если выбран подарок с моделями).
   if (hasModels) {
-    chips.push(multiFilterChip("model", f.modelIds, cat.models.map((m) => ({ id: m.id, name: m.name || m.id })), t("market.filter.model")));
+    Chip.push(multiFilterChip("model", f.modelIds, cat.models.map((m) => ({ id: m.id, name: m.name || m.id })), t("market.filter.model")));
   }
 
   // Фон — мультивыбор.
-  chips.push(multiFilterChip("background", f.backgroundNames, null, t("market.filter.background")));
+  Chip.push(multiFilterChip("background", f.backgroundNames, null, t("market.filter.background")));
 
   // Паттерн — мультивыбор.
-  chips.push(multiFilterChip("pattern", f.patternIds, null, t("market.filter.pattern")));
+  Chip.push(multiFilterChip("pattern", f.patternIds, null, t("market.filter.pattern")));
 
   // Сортировка.
   const sortLabel = ({
@@ -14021,19 +14052,19 @@ function renderMarketFilters() {
     "price-desc": t("market.sort.priceDesc"),
     "price-asc":  t("market.sort.priceAsc"),
   })[f.sort] || t("market.sort.label");
-  chips.push(`
+  Chip.push(`
     <button type="button" class="market-filter-chip" data-filter="sort">
       <span>${escapeHtml(sortLabel)}</span>
       <span class="cell-icon cell-icon-sm" data-icon="down"></span>
     </button>`);
 
   const dirty = JSON.stringify(f) !== JSON.stringify(marketState.filtersApplied);
-  chips.push(`
+  Chip.push(`
     <button type="button" class="market-filter-apply" id="market-apply-btn" ${dirty ? "" : "disabled"}>
       ${escapeHtml(t("market.filter.apply"))}
     </button>`);
 
-  return `<div class="market-filters">${chips.join("")}</div>`;
+  return `<div class="market-filters">${Chip.join("")}</div>`;
 }
 
 function multiFilterChip(filterName, ids, allItems, baseLabel) {
@@ -14578,7 +14609,7 @@ function fillGiftPatternsIn(rootEl) {
 // Предзагрузка всех иконок паттернов в кэш браузера.
 // Без этого после покупки подарка паттерн появляется с задержкой —
 // браузер только в этот момент начинает скачивать картинку с i.ibb.co.
-// 🔴 Прогрев ВСЕХ иконок Cell (cell-icon, verified, nectar, паттерны) при старте.
+// 🔴 Прогрев ВСЕХ иконок Cell (cell-icon, verified, Chip, паттерны) при старте.
 // Иначе при первом открытии экранов с ними — «мигание» пустых квадратов.
 let allIconsPreloaded = false;
 function preloadAllIcons() {
@@ -14598,7 +14629,7 @@ function preloadAllIcons() {
     }
   });
 
-  // Nectar-иконка (используется как <img> и как HTML-фрагмент).
+  // Chip-иконка (используется как <img> и как HTML-фрагмент).
   if (!seen.has(NECTAR_ICON_URL)) {
     try { const i = new Image(); i.src = NECTAR_ICON_URL; } catch (e) {}
   }
@@ -15685,7 +15716,7 @@ async function renderGiftDetail(ownerId, ug, opts) {
     ? (profileCache.get(ug.owner_id) || await getProfile(ug.owner_id))
     : null;
   const ownerName = ownerProfile ? ownerProfile.display_name : "—";
-  // 🔴 Если владельца нет (подарок обменян на Nectar / удалён) —
+  // 🔴 Если владельца нет (подарок обменян на Chip / удалён) —
   // рендерим как обычный текст, а не как ссылку. Иначе «—» выглядит
   // кликабельным, но никуда не ведёт.
   const ownerValueHtml = ug.owner_id
@@ -15976,7 +16007,7 @@ async function openGiftSend(ug) {
     const { error } = await supabase.rpc("transfer_gift", { p_gift_id: ug.id, p_new_owner: selectedId });
     if (error) { await showAlertDialog("Ошибка", error.message); return; }
 
-    // Обновляем баланс в UI — RPC уже списал Nectar
+    // Обновляем баланс в UI — RPC уже списал Chip
     await refreshBalance();
 
     // Отправляем системное сообщение о подарке в чат с получателем
