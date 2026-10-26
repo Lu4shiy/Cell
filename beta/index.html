@@ -1354,15 +1354,14 @@ print(f'Привет! Ты написал: {msg}')"></textarea>
         const closeBtn = document.getElementById('update-banner-close');
         let reloadTriggered = false;
 
-        // 🔴 Флаг: SW уже активировался хотя бы раз в этом браузере.
-        // На самой первой установке state становится 'installed', но
-        // это ещё не «обновление» — баннер показывать не надо.
-        const SW_EVER_ACTIVE_KEY = "cell_sw_ever_active";
+        // 🔴 Надёжная проверка: если есть активный controller — приложение
+        // уже было установлено раньше (или SW взял контроль). Значит, любой
+        // waiting — это обновление, а не первая установка.
         function swEverActive() {
-          try { return localStorage.getItem(SW_EVER_ACTIVE_KEY) === "1"; } catch (e) { return false; }
+          return !!navigator.serviceWorker.controller;
         }
         function markSwActive() {
-          try { localStorage.setItem(SW_EVER_ACTIVE_KEY, "1"); } catch (e) {}
+          // Больше не нужно, оставляем пустым для совместимости.
         }
 
         function showUpdateBanner() {
@@ -1455,6 +1454,9 @@ print(f'Привет! Ты написал: {msg}')"></textarea>
           // был активен раньше. Иначе это первая установка.
           if (reg.waiting && swEverActive()) {
             if (!maybeAutoReloadInGrandmaMode()) showUpdateBanner();
+          } else if (reg.waiting && !swEverActive()) {
+            // Первая установка: SW скачан, но ждёт. Активируем без баннера.
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
           }
 
           reg.addEventListener('updatefound', () => {
@@ -1464,6 +1466,8 @@ print(f'Привет! Ты написал: {msg}')"></textarea>
               if (newWorker.state === 'installed') {
                 if (swEverActive()) {
                   if (!maybeAutoReloadInGrandmaMode()) showUpdateBanner();
+                } else if (reg.waiting) {
+                  reg.waiting.postMessage({ type: 'SKIP_WAITING' });
                 }
               }
             });

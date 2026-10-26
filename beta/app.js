@@ -20094,7 +20094,7 @@ function renderGamingDetail(main, gameId) {
       ${isWished ? "★ В желаемом" : "☆ В желаемое"}
     </button>`;
 
-  // Скриншоты: из БД или сгенерированные SVG-заглушки (если пусто)
+  // Скриншоты
   const screenshots = Array.isArray(game.screenshots) ? game.screenshots.filter(Boolean) : [];
   const screenshotsHtml = screenshots.length
     ? screenshots.map((url) => `
@@ -20133,6 +20133,25 @@ function renderGamingDetail(main, gameId) {
        </div>`
     : "";
 
+  // Достижения (заглушка для UI)
+  const achievements = []; // В будущем будем брать из БД
+  let achievementsHtml = "";
+  if (isOwned && achievements.length > 0) {
+     achievementsHtml = `
+       <div class="gaming-achievements">
+         <h3>Достижения</h3>
+         ${achievements.map((a) => `
+            <div class="gaming-achievement">
+              <div class="gaming-achievement-icon ${a.unlocked ? "unlocked" : ""}">${a.icon}</div>
+              <div class="gaming-achievement-info">
+                <div class="gaming-achievement-title">${escapeHtml(a.title)}</div>
+                <div class="gaming-achievement-desc">${escapeHtml(a.description)}</div>
+              </div>
+            </div>
+         `).join("")}
+       </div>`;
+  }
+
   main.innerHTML = `
     <div class="gaming-detail">
       <button type="button" class="gaming-detail-back" id="gaming-detail-back">
@@ -20155,6 +20174,7 @@ function renderGamingDetail(main, gameId) {
           <div class="gaming-detail-screenshots">${screenshotsHtml}</div>
           ${longDescHtml}
           ${reqHtml}
+          ${achievementsHtml}
         </div>
 
         <aside class="gaming-detail-side">
@@ -20177,8 +20197,12 @@ function renderGamingDetail(main, gameId) {
   });
 
   const playBtn = document.getElementById("gaming-detail-play");
-  if (playBtn) playBtn.addEventListener("click", async () => {
-    await showAlertDialog(game.title, "Игровой плеер появится на этапе 5.");
+  if (playBtn) playBtn.addEventListener("click", () => {
+    if (!game.url) {
+       showAlertDialog("Ошибка", "Ссылка на игру не указана в БД.");
+       return;
+    }
+    openGamePlayer(game);
   });
 
   const buyBtn = document.getElementById("gaming-detail-buy");
@@ -20187,7 +20211,7 @@ function renderGamingDetail(main, gameId) {
   const wishBtn = document.getElementById("gaming-detail-wish");
   if (wishBtn) wishBtn.addEventListener("click", () => { toggleGamingWishlist(game); });
 
-  // Клик по реальному скриншоту — открывает media-viewer с навигацией
+  // Клик по реальному скриншоту
   main.querySelectorAll(".gaming-detail-screenshot[data-screenshot-url]").forEach((el) => {
     el.addEventListener("click", () => {
       const url = el.dataset.screenshotUrl;
@@ -20195,6 +20219,51 @@ function renderGamingDetail(main, gameId) {
       const idx = screenshots.indexOf(url);
       openMediaViewer(url, "image", list, idx >= 0 ? idx : 0);
     });
+  });
+}
+
+// ======================================================
+// ИГРОВОЙ ПЛЕЕР
+// ======================================================
+
+function openGamePlayer(game) {
+  // Создаём оверлей
+  const overlay = document.createElement("div");
+  overlay.className = "gaming-player-overlay";
+  overlay.id = "gaming-player-overlay";
+  
+  overlay.innerHTML = `
+    <div class="gaming-player-header">
+      <div class="gaming-player-title">${escapeHtml(game.title)}</div>
+      <button class="gaming-player-close" id="gaming-player-close">
+        <span class="cell-icon" data-icon="cancel"></span>
+      </button>
+    </div>
+    <iframe class="gaming-player-frame" id="gaming-player-frame" src="${escapeHtml(game.url)}" allowfullscreen sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+  `;
+  
+  document.body.appendChild(overlay);
+
+  // Отслеживание времени
+  let playTime = 0;
+  const timer = setInterval(() => {
+    playTime += 1;
+    if (playTime % 30 === 0) { // Сохраняем каждые 30 секунд
+      supabase.rpc("gaming_save_playtime", { p_game_id: game.id, p_seconds: 30 }).catch(() => {});
+    }
+  }, 1000);
+
+  // Закрытие
+  const closeBtn = document.getElementById("gaming-player-close");
+  closeBtn.addEventListener("click", () => {
+    clearInterval(timer);
+    // Сохраняем остаток
+    if (playTime % 30 > 0) {
+      supabase.rpc("gaming_save_playtime", { p_game_id: game.id, p_seconds: playTime % 30 }).catch(() => {});
+    }
+    overlay.remove();
+    // Обновляем библиотеку на случай, если время изменилось
+    renderGamingMain();
   });
 }
 

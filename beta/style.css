@@ -6893,3 +6893,110 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 .gaming-req-row:first-child { padding-top: 0; }
 .gaming-req-label { color: var(--text-dim); flex-shrink: 0; }
 .gaming-req-value { color: var(--text); text-align: right; }
+
+/* ====================================================== */
+/* GAMING CENTER — ПЛЕЕР И БИБЛИОТЕКА (этап 4)             */
+/* ====================================================== */
+
+/* Полноэкранный плеер */
+.gaming-player-overlay {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+}
+
+.gaming-player-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  padding-top: calc(12px + env(safe-area-inset-top, 0));
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  transform: translateY(-100%);
+  transition: transform 0.25s ease;
+}
+/* Показываем шапку при наведении или на мобилках всегда */
+.gaming-player-overlay:hover .gaming-player-header,
+@media (max-width: 768px) and (pointer: coarse) {
+  .gaming-player-header { transform: translateY(0); }
+}
+
+.gaming-player-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.gaming-player-close {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #fff;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.gaming-player-frame {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #000;
+}
+
+/* Достижения (в детальной карточке) */
+.gaming-achievements {
+  margin-top: 20px;
+}
+.gaming-achievement {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+.gaming-achievement-icon {
+  font-size: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--bg-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+.gaming-achievement-icon.unlocked {
+  opacity: 1;
+  filter: none;
+  background: rgba(var(--accent-rgb), 0.15);
+  border: 1px solid var(--accent);
+}
+.gaming-achievement-info { flex: 1; }
+.gaming-achievement-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.gaming-achievement-desc { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+
+/* Карточка в библиотеке */
+.game-card-playtime {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
