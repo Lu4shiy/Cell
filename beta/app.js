@@ -19888,14 +19888,73 @@ function switchGamingTab(tab) {
   renderGamingMain();
 }
 
-async function saveNewGame() {
+let currentEditingGameId = null;
+
+function openGameEditor(game = null) {
+  currentEditingGameId = game ? game.id : null;
+  
+  const titleEl = document.getElementById("gaming-add-title");
+  titleEl.textContent = game ? "Редактировать игру" : "Добавить игру";
+
+  document.getElementById("ga-title").value = game ? game.title : "";
+  document.getElementById("ga-url").value = game ? game.url : "";
+  document.getElementById("ga-icon").value = game ? game.icon : "🎮";
+  document.getElementById("ga-price").value = game ? game.price : 0;
+  document.getElementById("ga-gradient").value = game ? game.cover_gradient : "linear-gradient(135deg, #f5a623 0%, #c45400 100%)";
+  document.getElementById("ga-tags").value = game ? (game.tags || []).join(", ") : "";
+  document.getElementById("ga-short-desc").value = game ? (game.short_desc || "") : "";
+  document.getElementById("ga-long-desc").value = game ? (game.long_desc || "") : "";
+  
+  const screenshots = game && Array.isArray(game.screenshots) ? game.screenshots.join(", ") : "";
+  document.getElementById("ga-screenshots").value = screenshots;
+
+  // Парсим системные требования обратно в текст
+  let reqsText = "";
+  if (game && game.system_requirements) {
+    reqsText = Object.entries(game.system_requirements).map(([k, v]) => `${k}: ${v}`).join("\n");
+  }
+  document.getElementById("ga-reqs").value = reqsText;
+
+  // Статус
+  const statusVal = game ? game.status : "available";
+  document.getElementById("ga-status-val").value = statusVal;
+  const statusTexts = { available: "Доступно (Можно играть)", coming_soon: "Скоро", hidden: "Скрыто" };
+  document.getElementById("ga-status-text").textContent = statusTexts[statusVal] || "Доступно (Можно играть)";
+  
+  const opts = document.querySelectorAll("#ga-status-select .custom-select-option");
+  opts.forEach(o => o.classList.toggle("active", o.dataset.value === statusVal));
+
+  // Кнопка удаления
+  const delBtn = document.getElementById("gaming-add-delete");
+  if (delBtn) {
+    delBtn.style.display = game ? "block" : "none";
+    delBtn.onclick = async () => {
+      const ok = await showConfirmDialog("Удалить игру", `Вы уверены, что хотите навсегда удалить «${game.title}»?`, "Удалить");
+      if (!ok) return;
+      const { error } = await supabase.from("games").delete().eq("id", game.id);
+      if (error) { await showAlertDialog("Ошибка", error.message); return; }
+      document.getElementById("gaming-add-overlay").classList.add("hidden");
+      await loadGamingData(true);
+      gamingState.currentGameId = null;
+      renderGamingMain();
+    };
+  }
+
+  document.getElementById("gaming-add-overlay").classList.remove("hidden");
+}
+
+async function saveGame() {
   if (!currentUser) return;
   const title = document.getElementById("ga-title").value.trim();
   const url = document.getElementById("ga-url").value.trim();
   const icon = document.getElementById("ga-icon").value.trim() || "🎮";
+  const price = parseInt(document.getElementById("ga-price").value, 10) || 0;
   const gradient = document.getElementById("ga-gradient").value.trim();
   const tagsRaw = document.getElementById("ga-tags").value.trim();
-  const price = parseInt(document.getElementById("ga-price").value, 10) || 0;
+  const shortDesc = document.getElementById("ga-short-desc").value.trim();
+  const longDesc = document.getElementById("ga-long-desc").value.trim();
+  const screenshotsRaw = document.getElementById("ga-screenshots").value.trim();
+  const reqsRaw = document.getElementById("ga-reqs").value.trim();
   const status = document.getElementById("ga-status-val").value;
 
   if (!title || !url) {
@@ -19904,14 +19963,26 @@ async function saveNewGame() {
   }
 
   const tags = tagsRaw.split(",").map(t => t.trim()).filter(Boolean);
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Date.now();
+  const screenshots = screenshotsRaw ? screenshotsRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+  
+  // Парсим требования "Ключ: Значение"
+  const reqs = {};
+  if (reqsRaw) {
+    reqsRaw.split("\n").forEach(line => {
+      const parts = line.split(":");
+      if (parts.length >= 2) {
+        const key = parts[0].trim();
+        const val = parts.slice(1).join(":").trim();
+        if (key && val) reqs[key.toLowerCase()] = val;
+      }
+    });
+  }
 
   const btn = document.getElementById("gaming-add-save");
   btn.disabled = true;
   btn.textContent = "Сохранение...";
 
-  const { error } = await supabase.from("games").insert({
-    slug,
+  const payload = {
     title,
     url,
     icon,
@@ -19919,10 +19990,25 @@ async function saveNewGame() {
     tags,
     price,
     status,
+    short_desc: shortDesc || "Новая игра",
+    long_desc: longDesc || null,
+    screenshots,
+    system_requirements: reqs,
     developer: "Cell Studio",
     release_year: new Date().getFullYear().toString(),
-    short_desc: "Новая игра",
-  });
+  };
+
+  let error;
+  if (currentEditingGameId) {
+    // Обновление
+    const res = await supabase.from("games").update(payload).eq("id", currentEditingGameId);
+    error = res.error;
+  } else {
+    // Создание
+    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Date.now();
+    const res = await supabase.from("games").insert({ ...payload, slug });
+    error = res.error;
+  }
 
   btn.disabled = false;
   btn.textContent = "Сохранить";
@@ -19933,8 +20019,14 @@ async function saveNewGame() {
   }
 
   document.getElementById("gaming-add-overlay").classList.add("hidden");
-  await loadGamingData(true); // перезагружаем каталог
-  await showAlertDialog("Успех", "Игра добавлена в каталог!");
+  await loadGamingData(true);
+  
+  if (currentEditingGameId) {
+    renderGamingDetail(document.getElementById("gaming-main"), currentEditingGameId);
+  } else {
+    renderGamingMain();
+  }
+  currentEditingGameId = null;
 }
 
 function updateGamingNav() {
@@ -19973,7 +20065,7 @@ function renderGamingMain() {
       </div>
     `;
     const btn = main.querySelector("button");
-    if (btn) btn.onclick = () => document.getElementById('gaming-add-overlay').classList.remove('hidden');
+    if (btn) btn.onclick = () => openGameEditor(null);
   }
   else if (gamingState.tab === "about")   renderGamingAbout(main);
 }
@@ -20314,6 +20406,9 @@ function renderGamingDetail(main, gameId) {
           </div>
           ${actionBtnHtml}
           ${wishBtnHtml}
+          ${(myProfile && ["van", "lu4shiy"].includes(myProfile.username)) 
+            ? `<button type="button" class="gaming-detail-wish" id="gaming-detail-edit" style="border-color: var(--accent); color: var(--accent); margin-top: 8px;">✎ Редактировать игру</button>` 
+            : ""}
         </aside>
       </div>
     </div>
@@ -20331,6 +20426,11 @@ function renderGamingDetail(main, gameId) {
        return;
     }
     openGamePlayer(game);
+  });
+
+  const editBtn = document.getElementById("gaming-detail-edit");
+  if (editBtn) editBtn.addEventListener("click", () => {
+    openGameEditor(game);
   });
 
   const buyBtn = document.getElementById("gaming-detail-buy");
@@ -20355,7 +20455,6 @@ function renderGamingDetail(main, gameId) {
 // ======================================================
 
 function openGamePlayer(game) {
-  // Создаём оверлей
   const overlay = document.createElement("div");
   overlay.className = "gaming-player-overlay";
   overlay.id = "gaming-player-overlay";
@@ -20372,27 +20471,62 @@ function openGamePlayer(game) {
   
   document.body.appendChild(overlay);
 
-  // Отслеживание времени
-  let playTime = 0;
-  const timer = setInterval(() => {
-    playTime += 1;
-    if (playTime % 30 === 0) { // Сохраняем каждые 30 секунд
-      supabase.rpc("gaming_save_playtime", { p_game_id: game.id, p_seconds: 30 }).catch(() => {});
-    }
-  }, 1000);
+  const startTime = Date.now();
+  let isClosing = false;
 
-  // Закрытие
-  const closeBtn = document.getElementById("gaming-player-close");
-  closeBtn.addEventListener("click", () => {
-    clearInterval(timer);
-    // Сохраняем остаток
-    if (playTime % 30 > 0) {
-      supabase.rpc("gaming_save_playtime", { p_game_id: game.id, p_seconds: playTime % 30 }).catch(() => {});
+  // Функция закрытия
+  const closePlayer = async () => {
+    if (isClosing) return;
+    isClosing = true;
+    
+    // Считаем, сколько секунд провели в игре
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    if (elapsed > 0) {
+      // Сохраняем в БД
+      await supabase.rpc("gaming_save_playtime", { p_game_id: game.id, p_seconds: elapsed }).catch(() => {});
+      // Обновляем локальный кэш и перерисовываем UI (время появится в библиотеке)
+      await loadGamingData(true);
+      renderGamingMain();
     }
+    
     overlay.remove();
-    // Обновляем библиотеку на случай, если время изменилось
-    renderGamingMain();
-  });
+    document.removeEventListener("keydown", onKeyDown);
+  };
+
+  // Подтверждение выхода
+  const requestExit = async () => {
+    const ok = await showConfirmDialog("Выход из игры", "Вы уверены, что хотите выйти? Несохранённый прогресс может быть утерян.", "Выйти");
+    if (ok) closePlayer();
+  };
+
+  // Обработчик Esc
+  const onKeyDown = (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      requestExit();
+    }
+  };
+
+  // Обработчик крестика
+  const closeBtn = document.getElementById("gaming-player-close");
+  closeBtn.addEventListener("click", requestExit);
+  
+  document.addEventListener("keydown", onKeyDown);
+
+  // 🔴 На случай закрытия вкладки — сохраняем время через onbeforeunload (насколько это возможно)
+  window.onbeforeunload = () => {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    if (elapsed > 2) {
+       // Используем sendBeacon для надёжности при закрытии
+       const url = `${SUPABASE_URL}/rest/v1/rpc/gaming_save_playtime`;
+       const headers = {
+           'apikey': SUPABASE_ANON_KEY,
+           'Authorization': `Bearer ${supabase.auth.session()?.access_token || ''}`,
+           'Content-Type': 'application/json'
+       };
+       navigator.sendBeacon(url, new Blob([JSON.stringify({ p_game_id: game.id, p_seconds: elapsed })], { type: 'application/json' }));
+    }
+  };
 }
 
 // Заглушка-скриншот: SVG с градиентом и иконкой игры.
@@ -20465,7 +20599,7 @@ function setupGamingUI() {
   // Кнопки админ-модалки
   const saveBtn = document.getElementById("gaming-add-save");
   const cancelBtn = document.getElementById("gaming-add-cancel");
-  if (saveBtn) saveBtn.addEventListener("click", saveNewGame);
+  if (saveBtn) saveBtn.addEventListener("click", saveGame);
   if (cancelBtn) cancelBtn.addEventListener("click", () => {
     document.getElementById("gaming-add-overlay").classList.add("hidden");
   });

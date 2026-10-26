@@ -1235,10 +1235,10 @@
     <button type="button" id="update-banner-close" aria-label="Скрыть">✕</button>
   </div>
 
-  <!-- ═══════ ДОБАВЛЕНИЕ ИГРЫ (АДМИН) ═══════ -->
+  <!-- ═══════ ДОБАВЛЕНИЕ / РЕДАКТИРОВАНИЕ ИГРЫ (АДМИН) ═══════ -->
   <div id="gaming-add-overlay" class="dialog-overlay hidden" style="z-index: 9800;">
-    <div class="dialog dialog-profile">
-      <div class="dialog-title">Добавить игру</div>
+    <div class="dialog dialog-profile" style="max-width: 500px;">
+      <div class="dialog-title" id="gaming-add-title">Добавить игру</div>
       
       <div class="profile-section">
         <div class="profile-label">Название</div>
@@ -1248,12 +1248,17 @@
       <div class="profile-section">
         <div class="profile-label">Ссылка на игру (URL)</div>
         <input type="text" id="ga-url" placeholder="games/my-game/index.html" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;">
-        <div class="username-hint">Можно указать локальный путь или полный URL (https://...)</div>
       </div>
 
-      <div class="profile-section">
-        <div class="profile-label">Иконка (эмодзи)</div>
-        <input type="text" id="ga-icon" placeholder="🎮" maxlength="2" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;">
+      <div style="display: flex; gap: 10px;">
+        <div class="profile-section" style="flex: 1;">
+          <div class="profile-label">Иконка (эмодзи)</div>
+          <input type="text" id="ga-icon" placeholder="🎮" maxlength="2" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;">
+        </div>
+        <div class="profile-section" style="flex: 1;">
+          <div class="profile-label">Цена (Chip)</div>
+          <input type="number" id="ga-price" value="0" min="0" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;">
+        </div>
       </div>
 
       <div class="profile-section">
@@ -1267,8 +1272,23 @@
       </div>
 
       <div class="profile-section">
-        <div class="profile-label">Цена (Chip)</div>
-        <input type="number" id="ga-price" value="0" min="0" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;">
+        <div class="profile-label">Короткое описание (в каталоге)</div>
+        <input type="text" id="ga-short-desc" placeholder="О чём игра?" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;">
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Длинное описание (в карточке)</div>
+        <textarea id="ga-long-desc" placeholder="Подробное описание игры..." style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;min-height:100px;resize:vertical;"></textarea>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Скриншоты (ссылки через запятую)</div>
+        <textarea id="ga-screenshots" placeholder="https://example.com/img1.jpg, https://example.com/img2.jpg" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;min-height:60px;resize:vertical;"></textarea>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-label">Системные требования (Формат: ОС: Windows)</div>
+        <textarea id="ga-reqs" placeholder="ОС: Любая&#10;Браузер: Chrome&#10;Память: 2 ГБ" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;min-height:80px;resize:vertical;"></textarea>
       </div>
 
       <div class="profile-section">
@@ -1287,9 +1307,12 @@
         <input type="hidden" id="ga-status-val" value="available">
       </div>
 
-      <div class="dialog-actions">
-        <button class="dialog-btn dialog-primary" id="gaming-add-save">Сохранить</button>
-        <button class="dialog-btn dialog-cancel" id="gaming-add-cancel">Отмена</button>
+      <div class="dialog-actions" style="flex-direction: row; gap: 8px;">
+        <button class="dialog-btn dialog-primary" id="gaming-add-save" style="flex: 1;">Сохранить</button>
+        <button class="dialog-btn dialog-cancel" id="gaming-add-cancel" style="flex: 1;">Отмена</button>
+      </div>
+      <div class="dialog-actions" style="margin-top: 8px;">
+        <button class="dialog-btn" id="gaming-add-delete" style="color: var(--danger); border-color: transparent; display: none;">Удалить игру</button>
       </div>
     </div>
   </div>
