@@ -20701,6 +20701,7 @@ function openGamePlayer(game) {
         const bal = data ? data.imagi_tokens : 0;
         iframe.contentWindow.postMessage({ type: "BALANCE_UPDATE", balance: bal }, "*");
       } catch (err) {}
+      iframe.contentWindow.focus();
       return;
     }
 
@@ -20737,6 +20738,7 @@ function openGamePlayer(game) {
       
       iframe.contentWindow.postMessage({ type: "PURCHASE_SUCCESS", itemId }, "*");
       iframe.contentWindow.postMessage({ type: "BALANCE_UPDATE", balance: myProfile.imagi_tokens }, "*");
+      iframe.contentWindow.focus();
       return;
     }
 
@@ -20756,11 +20758,11 @@ function openGamePlayer(game) {
 
     if (!ach) return; // Такого достижения нет
 
-    // Пытаемся выдать
-    const { error } = await supabase.from("user_achievements").insert({
+    // Пытаемся выдать (upsert предотвращает ошибку 409 при повторной отправке)
+    const { error } = await supabase.from("user_achievements").upsert({
       user_id: currentUser.id,
       achievement_id: ach.id
-    });
+    }, { onConflict: 'user_id,achievement_id', ignoreDuplicates: true });
 
     if (!error) {
       // Показываем красивый тост о получении ачивки

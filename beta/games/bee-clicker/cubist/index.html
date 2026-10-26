@@ -20,6 +20,7 @@
     }
   </script>
   <style>
+    html, body { height: 100dvh; width: 100vw; overflow: hidden; }
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
     ::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.5); border-radius: 3px; }
@@ -28,10 +29,10 @@
     .glow-purple { box-shadow: 0 0 25px rgba(139, 92, 246, 0.4); }
   </style>
 </head>
-<body class="h-full w-full overflow-hidden select-none flex flex-col justify-between font-sans bg-slate-950 text-white">
+<body class="w-full h-full overflow-hidden select-none flex flex-col font-sans bg-slate-950 text-white">
 
   <!-- TOP HUD -->
-  <header class="w-full max-w-4xl mx-auto p-3 sm:p-4 flex items-center justify-between z-10 shrink-0">
+  <header class="w-full max-w-5xl mx-auto p-3 sm:p-4 flex items-center justify-between z-10 shrink-0">
     <div class="flex items-center gap-3">
       <button id="btnProfile" class="flex items-center gap-2 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 rounded-xl px-3 py-1.5 transition-all active:scale-95">
         <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center font-bold text-sm shadow">
@@ -49,9 +50,15 @@
       </div>
     </div>
 
-    <div class="text-center">
-      <div class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Счет</div>
-      <div class="text-2xl sm:text-3xl font-black text-purple-400 tracking-tight" id="hudScore">0</div>
+    <div class="flex items-center gap-6">
+      <div class="text-center">
+        <div class="text-[10px] sm:text-xs text-slate-400 font-semibold uppercase tracking-wider">Время</div>
+        <div class="text-xl sm:text-3xl font-black text-emerald-400 tracking-tight" id="hudTime">00:00</div>
+      </div>
+      <div class="text-center">
+        <div class="text-[10px] sm:text-xs text-slate-400 font-semibold uppercase tracking-wider">Счет</div>
+        <div class="text-xl sm:text-3xl font-black text-purple-400 tracking-tight" id="hudScore">0</div>
+      </div>
     </div>
 
     <div class="flex items-center gap-2">
@@ -68,7 +75,7 @@
   </header>
 
   <!-- MAIN CANVAS CONTAINER -->
-  <main class="relative flex-1 w-full max-w-4xl mx-auto flex items-center justify-center p-2 min-h-0">
+  <main class="relative flex-1 w-full mx-auto flex items-center justify-center p-2 min-h-0 overflow-hidden">
     <canvas id="gameCanvas" class="rounded-2xl shadow-2xl border border-slate-800/80 bg-slate-900"></canvas>
 
     <!-- Overlays -->
@@ -291,6 +298,7 @@
         sound.playBuy();
         savePlayerData();
         renderShop();
+        render(); // Мгновенно перерисовываем сцену, чтобы сменился цвет
         requestBalance();
       }
     });
@@ -307,11 +315,11 @@
         }
         if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
       }
-      playJump() { this._beep('sine', 150, 400, 0.08, 0.2); }
+      playJump() { this._beep('square', 200, 600, 0.1, 0.3); } // Сделал громче и квадратнее
       playCoin() { this._beep('triangle', 800, 1200, 0.15, 0.2); }
       playExplosion() { this._beep('sawtooth', 100, 20, 0.3, 0.4); }
       playBuy() { this._beep('sine', 500, 1000, 0.25, 0.2); }
-      playWarning() { this._beep('square', 300, 300, 0.05, 0.05); }
+      playWarning() { this._beep('square', 300, 300, 0.1, 0.08); }
       _beep(type, f1, f2, dur, vol) {
         if (!this.ctx) return;
         const osc = this.ctx.createOscillator();
@@ -398,13 +406,11 @@
     const ctx = canvas.getContext('2d');
 
     let gameActive = false, isPaused = false, score = 0, sessionCoins = 0;
-    let spawnTimer = 0, difficultyTimer = 0, cameraShake = 0, gameTime = 0;
+    let spawnTimer = 0, difficultyTimer = 0, cameraShake = 0, gameTime = 0, survivalTicks = 0;
     let rafId = null;
 
     let cube = { x: 4, y: 4, targetX: 4, targetY: 4, animProgress: 1 };
     let coins = [], hazards = [], monsters = [], particles = [], floatingTexts = [];
-    
-    // Новое событие: Выжженное поле
     let scorchedEarth = { active: false, side: null, timer: 0, isBurning: false };
 
     let tileSize = 40, originX = 0, originY = 0;
@@ -444,9 +450,9 @@
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
       sound.init();
       loadPlayerData();
-      requestBalance(); // Запрашиваем баланс Chip
+      requestBalance();
 
-      score = 0; sessionCoins = 0; spawnTimer = 0; difficultyTimer = 0; gameTime = 0; cameraShake = 0;
+      score = 0; sessionCoins = 0; spawnTimer = 0; difficultyTimer = 0; gameTime = 0; survivalTicks = 0; cameraShake = 0;
       cube = { x: 4, y: 4, targetX: 4, targetY: 4, animProgress: 1 };
       coins = []; hazards = []; monsters = []; particles = []; floatingTexts = [];
       scorchedEarth = { active: false, side: null, timer: 0, isBurning: false };
@@ -481,7 +487,7 @@
 
       submitScoreToCell(score);
 
-      // 🔴 Редкие достижения
+      // 🔴 Редкие достижения (пороги увеличены)
       tryUnlock('games_20', player.gamesPlayed >= 20);
       tryUnlock('coins_250', sessionCoins >= 250);
       tryUnlock('score_5000', score >= 5000);
@@ -524,11 +530,8 @@
         }
       }
 
-      // Уничтожаем монеты
       coins = coins.filter(c => !(Math.abs(c.x - tntX) <= 1 && Math.abs(c.y - tntY) <= 1));
-      // Уничтожаем монстров
       monsters = monsters.filter(m => !(Math.abs(m.x - tntX) <= 1 && Math.abs(m.y - tntY) <= 1));
-      // Уничтожаем шипы и прочие опасности (кроме падающих, у них нет x,y на земле)
       hazards = hazards.filter(h => {
         if ((h.type === 'spike' || h.type === 'tnt' || h.type === 'boulder') && Math.abs(h.x - tntX) <= 1 && Math.abs(h.y - tntY) <= 1) return false;
         return true;
@@ -551,11 +554,10 @@
     // 🔴 Событие "Выжженное поле"
     function spawnScorchedEarth() {
       if (scorchedEarth.active) return;
-      if (Math.random() < 0.003) { // ~1 раз в 5-6 секунд
+      if (Math.random() < 0.003) {
         scorchedEarth.active = true;
-        const sides = ['top', 'bottom', 'left', 'right'];
-        scorchedEarth.side = sides[Math.floor(Math.random() * sides.length)];
-        scorchedEarth.timer = 120; // 2 сек на предупреждение + огонь
+        scorchedEarth.side = ['top', 'bottom', 'left', 'right'][Math.floor(Math.random() * 4)];
+        scorchedEarth.timer = 150; // 2.5 секунды (150 кадров)
         scorchedEarth.isBurning = false;
         sound.playWarning();
       }
@@ -600,7 +602,12 @@
 
     function update() {
       if (!gameActive || isPaused) return;
-      score++; gameTime += 1 / 60;
+      
+      // 🔴 Убрали score++, теперь очки капают за время и монетки
+      gameTime += 1 / 60;
+      survivalTicks++;
+      if (survivalTicks % 60 === 0) score += 10; // 10 очков в секунду за выживание
+
       if (cameraShake > 0) cameraShake *= 0.85;
 
       if (cube.animProgress < 1) {
@@ -610,15 +617,16 @@
       const currCubeX = cube.x + (cube.targetX - cube.x) * cube.animProgress;
       const currCubeY = cube.y + (cube.targetY - cube.y) * cube.animProgress;
 
-      // 🔴 Логика Выжженного поля
+      // 🔴 Логика Выжженного поля (2.5 сек предупреждение)
       if (scorchedEarth.active) {
         scorchedEarth.timer--;
+        
         if (scorchedEarth.timer === 60 && !scorchedEarth.isBurning) {
-          scorchedEarth.isBurning = true;
-          sound.playExplosion();
-          cameraShake = 10;
-          
-          // Уничтожаем всё в зоне
+          scorchedEarth.isBurning = true; // Последняя секунда горит красным
+        }
+        
+        if (scorchedEarth.timer <= 0) {
+          // ВЗРЫВ
           for (let x = 0; x < GRID_SIZE; x++) {
             for (let y = 0; y < GRID_SIZE; y++) {
               if (isInScorchedZone(x, y)) createExplosion(x, y, '#ef4444');
@@ -632,8 +640,10 @@
           });
 
           if (isInScorchedZone(cube.targetX, cube.targetY)) { gameOver(); return; }
+          
+          scorchedEarth.active = false; scorchedEarth.isBurning = false;
+          cameraShake = 15; sound.playExplosion();
         }
-        if (scorchedEarth.timer <= 0) { scorchedEarth.active = false; scorchedEarth.isBurning = false; }
       }
 
       // Coin Pickup
@@ -642,6 +652,7 @@
         coin.bounce += 0.1;
         if (Math.hypot(currCubeX - coin.x, currCubeY - coin.y) < 0.6) {
           sessionCoins += 5;
+          score += 50; // 🔴 50 очков за монетку
           addFloatingText(gridToScreen(coin.x + 0.5, coin.y + 0.5).x, gridToScreen(coin.x + 0.5, coin.y + 0.5).y - 10, '+5', '#f59e0b');
           sound.playCoin();
           coins.splice(idx, 1); spawnCoin();
@@ -723,7 +734,11 @@
       tryUnlock('survive_180s', gameTime >= 180);
       tryUnlock('level_10', player.level >= 10);
 
+      // Обновляем HUD (таймер и очки)
       document.getElementById('hudScore').innerText = Math.floor(score);
+      const mnt = Math.floor(gameTime / 60).toString().padStart(2, '0');
+      const sec = Math.floor(gameTime % 60).toString().padStart(2, '0');
+      document.getElementById('hudTime').innerText = `${mnt}:${sec}`;
     }
 
     /* =========================================================================
@@ -737,7 +752,6 @@
       const activeMapObj = MAPS.find(m => m.id === player.activeMap) || MAPS[0];
       const activeSkinObj = SKINS.find(s => s.id === player.activeSkin) || SKINS[0];
 
-      // Выжженное поле (рендер ДО сетки, чтобы было под монетами)
       if (scorchedEarth.active) {
         let x = 0, y = 0, w = 0, h = 0;
         if (scorchedEarth.side === 'top') { x = originX; y = originY; w = GRID_SIZE * tileSize; h = 5 * tileSize; }
@@ -815,7 +829,7 @@
       ctx.save(); ctx.beginPath(); ctx.arc(centerX, centerY, tileSize * 0.25, 0, Math.PI * 2);
       ctx.fillStyle = '#f59e0b'; ctx.fill(); ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 2; ctx.stroke();
       ctx.fillStyle = '#78350f'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('C', centerX, centerY); ctx.restore(); // Сменил символ на C (Chip)
+      ctx.fillText('C', centerX, centerY); ctx.restore();
     }
     function drawShadowAndTarget(gx, gy, color) {
       const pos = gridToScreen(gx, gy);
@@ -1024,8 +1038,7 @@
       if (e.code === 'Escape') { e.preventDefault(); togglePause(); return; }
       if (!gameActive || isPaused) return;
       
-      // 🔴 Отсекаем автоповтор (зажатие клавиши)
-      if (e.repeat) return; 
+      if (e.repeat) return; // 🔴 Отключаем ускорение при зажатии
       
       if (['ArrowUp', 'KeyW'].includes(e.code)) { e.preventDefault(); movePlayer(0, -1); }
       if (['ArrowDown', 'KeyS'].includes(e.code)) { e.preventDefault(); movePlayer(0, 1); }
