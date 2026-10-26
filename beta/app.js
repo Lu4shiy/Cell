@@ -563,8 +563,6 @@ const I18N = {
     "settings.scrollMode.hint": "Обычный — привычный список. Современный — колесо с центрированием и плавным переходом.",
     "settings.quickReaction.label": "Быстрая реакция",
     "settings.quickReaction.hint": "Двойной тап по сообщению поставит эту реакцию.",
-    "settings.appIcon.label": "Иконка приложения",
-    "settings.appIcon.hint": "Выбери иконку — она применится к установленному приложению. На iPhone иконку сменить нельзя — это ограничение iOS.",
     "settings.grandma.label": "Режим «Бабушка»",
     "settings.grandma.hint": "Упрощает интерфейс: убирает 2FA, шифрование, выход из аккаунта и лишние пункты меню. Отключить можно долгим нажатием на аватар в боковом меню (1.5 сек).",
     "settings.grandma.enable": "Включить режим «Бабушка»",
@@ -1414,8 +1412,6 @@ const I18N = {
     "settings.scrollMode.hint": "Classic — a familiar list. Modern — a wheel with centering and smooth transition.",
     "settings.quickReaction.label": "Quick reaction",
     "settings.quickReaction.hint": "Double-tap a message to set this reaction.",
-    "settings.appIcon.label": "App icon",
-    "settings.appIcon.hint": "Pick an icon — it will apply to the installed app. On iPhone the icon cannot be changed — this is an iOS limitation.",
     "settings.grandma.label": "Grandma mode",
     "settings.grandma.hint": "Simplifies the interface: removes 2FA, encryption, sign-out and extra menu items. Can be disabled by long-pressing the avatar in the sidebar (1.5 sec).",
     "settings.grandma.enable": "Enable Grandma mode",
@@ -17766,7 +17762,6 @@ function applyGrandmaModeUI() {
     "settings-mfa-section",
     "settings-e2ee-section",
     "settings-quick-reaction-section",
-    "settings-app-icon-section",
     "settings-scroll-mode-section",
   ];
   sectionIds.forEach((id) => {
@@ -17887,88 +17882,6 @@ function setupGrandmaEscapeHatch() {
       return;
     }
   }, true);
-}
-
-// ======================================================
-// ВЫБОР ИКОНКИ ПРИЛОЖЕНИЯ (только PWA)
-// ======================================================
-
-const APP_ICON_KEY = "cell_app_icon";
-const APP_ICON_MANIFESTS = {
-  classic:    "manifest.json",
-  monochrome: "manifest-monochrome.json",
-  sea:        "manifest-sea.json",
-  fury:       "manifest-fury.json",
-  inverse:    "manifest-inverse.json",
-  gradient:   "manifest-gradient.json",
-};
-const APP_ICON_LABELS = {
-  classic:    "Классический",
-  monochrome: "Монохром",
-  sea:        "Море",
-  fury:       "Ярость",
-  inverse:    "Реверсивный",
-  gradient:   "Градиент",
-};
-
-function applyAppIcon(key) {
-  if (!APP_ICON_MANIFESTS[key]) key = "classic";
-  const link = document.getElementById("app-manifest-link");
-  if (link) link.setAttribute("href", APP_ICON_MANIFESTS[key]);
-  try { localStorage.setItem(APP_ICON_KEY, key); } catch (e) {}
-  document.querySelectorAll("[data-app-icon]").forEach((el) => {
-    el.classList.toggle("selected", el.dataset.appIcon === key);
-  });
-}
-
-// Применяем сохранённую иконку при загрузке (сразу, до initApp).
-(function initAppIconEarly() {
-  // Применяем только в PWA — на сайте иконка не имеет смысла.
-  if (!isStandalonePWA) return;
-  let saved = "classic";
-  try { saved = localStorage.getItem(APP_ICON_KEY) || "classic"; } catch (e) {}
-  const link = document.getElementById("app-manifest-link");
-  if (link && APP_ICON_MANIFESTS[saved]) {
-    link.setAttribute("href", APP_ICON_MANIFESTS[saved]);
-  }
-})();
-
-function renderAppIconGrid() {
-  const grid = document.getElementById("app-icon-grid");
-  if (!grid) return;
-  const keys = Object.keys(APP_ICON_MANIFESTS);
-  let current = "classic";
-  try { current = localStorage.getItem(APP_ICON_KEY) || "classic"; } catch (e) {}
-
-  grid.innerHTML = keys.map((k) => `
-    <button type="button" class="app-icon-option ${k === current ? "selected" : ""}"
-            data-app-icon="${k}" title="${APP_ICON_LABELS[k]}">
-      <span class="app-icon-preview app-icon-${k}"></span>
-      <span class="app-icon-label">${APP_ICON_LABELS[k]}</span>
-    </button>
-  `).join("");
-
-  grid.querySelectorAll("[data-app-icon]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const k = btn.dataset.appIcon;
-      if (k === current) return;
-      current = k;
-      applyAppIcon(k);
-      if (isStandalonePWA) {
-        await showAlertDialog(
-          "Иконка изменена",
-          "Чтобы увидеть новую иконку, полностью закрой приложение и запусти снова.\n\n" +
-          "Если иконка не обновилась — удали PWA и установи заново."
-        );
-      } else {
-        await showAlertDialog(
-          "Иконка выбрана",
-          "Теперь установи Cell как приложение: значок установки в адресной строке браузера.\n\n" +
-          "Выбранная иконка применится при установке."
-        );
-      }
-    });
-  });
 }
 
 // ======================================================
@@ -18141,20 +18054,6 @@ function setupSettings() {
     const toggleBlock = document.getElementById("settings-scroll-mode");
     const section = toggleBlock ? toggleBlock.closest(".profile-section") : null;
     if (section) section.style.display = "none";
-  }
-
-  // Секция «Иконка приложения». Скрываем только на iOS — Safari не даёт
-  // менять иконку после установки на домашний экран. Везде остальное —
-  // показываем, чтобы пользователь мог ВЫБРАТЬ иконку ДО установки PWA.
-  const iconSection = document.getElementById("settings-app-icon-section");
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-                (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  if (iconSection) {
-    if (isIOS) {
-      iconSection.style.display = "none";
-    } else {
-      renderAppIconGrid();
-    }
   }
 
   if (toggle) {

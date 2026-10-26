@@ -11,48 +11,24 @@
 <!-- PWA: манифест создаётся инлайн-скриптом, чтобы Chrome сразу получил правильный манифест.
        Если поставить статический <link rel="manifest" href="manifest.json">, Chrome
        прочитает его раньше, чем выполнится app.js — и иконка не сменится при переустановке. -->
-  <script>
-    (function () {
-      var map = {
-        classic:    "manifest.json",
-        monochrome: "manifest-monochrome.json",
-        sea:        "manifest-sea.json",
-        fury:       "manifest-fury.json",
-        inverse:    "manifest-inverse.json",
-        gradient:   "manifest-gradient.json"
-      };
-      var href = "manifest.json";
-      try {
-        var saved = localStorage.getItem("cell_app_icon");
-        if (saved && map[saved]) href = map[saved];
-      } catch (e) { /* silent */ }
-      var link = document.createElement("link");
-      link.rel = "manifest";
-      link.href = href;
-      link.id = "app-manifest-link";
-      document.head.appendChild(link);
-    })();
-  </script>
+  <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1d1712">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Cell">
-  <link rel="apple-touch-icon" href="icon-beta-192-v2.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="icon-beta-512-v2.png">
+  <link rel="apple-touch-icon" href="https://i.ibb.co/KjjsrcmQ/image.png">
+  <link rel="icon" type="image/png" href="https://i.ibb.co/KjjsrcmQ/image.png">
 
   <link rel="stylesheet" href="style.css">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpolygon points='50,5 93,27 93,73 50,95 7,73 7,27' fill='%23f5a623'/%3E%3Ccircle cx='50' cy='50' r='13' fill='%2315110d'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/png" href="https://i.ibb.co/KjjsrcmQ/image.png">
 </head>
 <body>
 
   <div id="auth-screen" class="screen hidden">
     <div class="auth-card">
       <div class="logo-wrap">
-        <svg class="logo-cell" viewBox="0 0 100 100" width="72" height="72" aria-hidden="true">
-          <polygon points="50,5 93,27 93,73 50,95 7,73 7,27" fill="currentColor"/>
-          <circle cx="50" cy="50" r="13" fill="var(--bg-side)"/>
-        </svg>
+        <img src="https://i.ibb.co/KjjsrcmQ/image.png" class="logo-cell" width="76" height="76" alt="Cell" style="border-radius: 20px; box-shadow: 0 0 20px rgba(245, 166, 35, 0.25);">
       </div>
       <h1 class="logo">Cell <span style="color:#e8568f;font-size:20px;">BETA</span></h1>
       <p class="tagline" data-i18n="auth.tagline">Собираемся по кусочкам</p>
@@ -879,14 +855,6 @@
         <div class="quick-reaction-grid" id="quick-reaction-grid"></div>
       </div>
 
-      <div class="profile-section" id="settings-app-icon-section">
-        <div class="profile-label" data-i18n="settings.appIcon.label">Иконка приложения</div>
-        <div class="username-hint" style="margin-bottom:8px;" data-i18n="settings.appIcon.hint">
-          Выбери иконку — она применится к установленному приложению. На iPhone иконку сменить нельзя — это ограничение iOS.
-        </div>
-        <div class="app-icon-grid" id="app-icon-grid"></div>
-      </div>
-
       <div class="profile-section" id="settings-grandma-section">
         <div class="profile-label" data-i18n="settings.grandma.label">Режим «Бабушка»</div>
         <div class="username-hint" style="margin-bottom:10px;" data-i18n="settings.grandma.hint">
@@ -920,10 +888,7 @@
     <div class="dialog dialog-about">
       <div class="about-logo">
         <div class="about-logo-cell">
-          <svg viewBox="0 0 100 100" width="64" height="64">
-            <polygon points="50,5 93,27 93,73 50,95 7,73 7,27" fill="currentColor"/>
-            <circle cx="50" cy="50" r="13" fill="var(--bg-card)"/>
-          </svg>
+          <img src="https://i.ibb.co/KjjsrcmQ/image.png" width="64" height="64" alt="Cell" style="border-radius: 16px;">
         </div>
         <div class="about-app-name">Cell</div>
         <div class="about-app-tagline" data-i18n="auth.tagline">Собираемся по кусочкам</div>

@@ -6113,3 +6113,14 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 .bot-keyboard-btn:active {
   transform: scale(0.96);
 }
+
+/* Анимация свечения для новой иконки */
+.logo-wrap img.logo-cell {
+  animation: cellPulseImg 4s ease-in-out infinite;
+  will-change: box-shadow;
+}
+
+@keyframes cellPulseImg {
+  0%, 100% { box-shadow: 0 0 15px rgba(245, 166, 35, 0.15); }
+  50%      { box-shadow: 0 0 30px rgba(245, 166, 35, 0.4); }
+}
