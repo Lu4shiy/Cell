@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>2048</title>
+  <style>
+    :root {
+      --bg: #15110d;
+      --grid-bg: #1d1712;
+      --cell-bg: #2a2018;
+      --text: #f5eadd;
+      --text-dark: #15110d;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 90vw;
+      max-width: 400px;
+      margin-bottom: 20px;
+    }
+    .title {
+      font-size: 32px;
+      font-weight: 900;
+      color: var(--text);
+    }
+    .score-box {
+      background: var(--grid-bg);
+      padding: 10px 20px;
+      border-radius: 12px;
+      border: 1px solid var(--cell-bg);
+      text-align: center;
+    }
+    .score-label {
+      font-size: 12px;
+      color: #8a7a6d;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .score-value {
+      font-size: 20px;
+      font-weight: 800;
+      color: #f5a623;
+    }
+    .game-container {
+      position: relative;
+      width: 90vw;
+      max-width: 400px;
+      aspect-ratio: 1;
+      background: var(--grid-bg);
+      border-radius: 16px;
+      padding: 10px;
+      box-sizing: border-box;
+      border: 1px solid var(--cell-bg);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(4, 1fr);
+      gap: 10px;
+      width: 100%;
+      height: 100%;
+    }
+    .cell {
+      background: var(--cell-bg);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--text-dark);
+      transition: all 0.15s ease-in-out;
+    }
+    /* Цвета плиток */
+    .cell[data-val="2"] { background: #eee4da; color: #776e65; }
+    .cell[data-val="4"] { background: #ede0c8; color: #776e65; }
+    .cell[data-val="8"] { background: #f2b179; color: #f9f6f2; }
+    .cell[data-val="16"] { background: #f59563; color: #f9f6f2; }
+    .cell[data-val="32"] { background: #f67c5f; color: #f9f6f2; }
+    .cell[data-val="64"] { background: #f65e3b; color: #f9f6f2; }
+    .cell[data-val="128"] { background: #edcf72; color: #f9f6f2; font-size: 24px; }
+    .cell[data-val="256"] { background: #edcc61; color: #f9f6f2; font-size: 24px; }
+    .cell[data-val="512"] { background: #edc850; color: #f9f6f2; font-size: 24px; }
+    .cell[data-val="1024"] { background: #edc53f; color: #f9f6f2; font-size: 20px; }
+    .cell[data-val="2048"] { background: #edc22e; color: #f9f6f2; font-size: 20px; box-shadow: 0 0 20px #edc22e; }
+    .cell.pop { animation: pop 0.2s ease-in-out; }
+    @keyframes pop {
+      0% { transform: scale(0.8); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(21, 17, 13, 0.8);
+      backdrop-filter: blur(4px);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .overlay-title {
+      font-size: 36px;
+      font-weight: 900;
+      margin-bottom: 20px;
+    }
+    .btn {
+      padding: 12px 30px;
+      background: #f5a623;
+      color: var(--text-dark);
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      font-family: inherit;
+      transition: transform 0.1s;
+    }
+    .btn:active { transform: scale(0.95); }
+    .hint {
+      margin-top: 20px;
+      font-size: 13px;
+      color: #8a7a6d;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="title">2048</div>
+    <div class="score-box">
+      <div class="score-label">Счёт</div>
+      <div class="score-value" id="score">0</div>
+    </div>
+  </div>
+
+  <div class="game-container">
+    <div class="grid" id="grid"></div>
+    <div class="overlay" id="overlay">
+      <div class="overlay-title" id="overlay-title">Игра окончена!</div>
+      <button class="btn" id="restart-btn">Начать заново</button>
+    </div>
+  </div>
+
+  <div class="hint">Свайпай или используй стрелки</div>
+
+  <script>
+    let board = [[0,0,0,0], [0,0,0,0], [0,0,0,0], [0,0,0,0]];
+    let score = 0;
+    let moves = 0;
+    let gameOver = false;
+    let hasWon = false;
+
+    // Флаги для достижений (чтобы не отправлять их много раз)
+    let achMoves10 = false;
+    let achLoss = false;
+    let ach2048 = false;
+
+    const gridEl = document.getElementById("grid");
+    const scoreEl = document.getElementById("score");
+    const overlay = document.getElementById("overlay");
+    const overlayTitle = document.getElementById("overlay-title");
+
+    // Инициализация сетки (16 пустых ячеек)
+    for (let i = 0; i < 16; i++) {
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      cell.id = "cell-" + i;
+      gridEl.appendChild(cell);
+    }
+
+    function sendAchievement(code) {
+      window.parent.postMessage({ type: "UNLOCK_ACHIEVEMENT", code: code }, "*");
+    }
+
+    function updateUI() {
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          const idx = r * 4 + c;
+          const val = board[r][c];
+          const cell = document.getElementById("cell-" + idx);
+          if (val === 0) {
+            cell.textContent = "";
+            cell.removeAttribute("data-val");
+          } else {
+            cell.textContent = val;
+            cell.setAttribute("data-val", val);
+          }
+        }
+      }
+      scoreEl.textContent = score;
+    }
+
+    function spawnTile() {
+      let empty = [];
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          if (board[r][c] === 0) empty.push({ r, c });
+        }
+      }
+      if (empty.length === 0) return;
+      const spot = empty[Math.floor(Math.random() * empty.length)];
+      board[spot.r][spot.c] = Math.random() < 0.9 ? 2 : 4;
+      
+      // Анимация появления
+      const idx = spot.r * 4 + spot.c;
+      const cell = document.getElementById("cell-" + idx);
+      cell.classList.remove("pop");
+      void cell.offsetWidth; // Триггер рефлоу
+      cell.classList.add("pop");
+    }
+
+    function slide(row) {
+      let arr = row.filter(val => val);
+      let missing = 4 - arr.length;
+      let zeros = Array(missing).fill(0);
+      return arr.concat(zeros); // Плитки сдвигаются влево, а нули — вправо
+    }
+
+    function merge(row) {
+      for (let i = 0; i < 3; i++) {
+        if (row[i] !== 0 && row[i] === row[i + 1]) {
+          row[i] *= 2;
+          score += row[i];
+          row[i + 1] = 0;
+          
+          if (row[i] === 2048 && !ach2048) {
+            ach2048 = true;
+            sendAchievement("reach_2048");
+          }
+        }
+      }
+      return row;
+    }
+
+    function moveLeft() {
+      let moved = false;
+      for (let r = 0; r < 4; r++) {
+        let row = board[r];
+        let slid = slide(row);
+        let merged = merge(slid);
+        let finalRow = slide(merged);
+        if (JSON.stringify(row) !== JSON.stringify(finalRow)) moved = true;
+        board[r] = finalRow;
+      }
+      return moved;
+    }
+
+    function moveRight() {
+      let moved = false;
+      for (let r = 0; r < 4; r++) {
+        let row = board[r].slice().reverse();
+        let slid = slide(row);
+        let merged = merge(slid);
+        let finalRow = slide(merged).reverse();
+        if (JSON.stringify(board[r]) !== JSON.stringify(finalRow)) moved = true;
+        board[r] = finalRow;
+      }
+      return moved;
+    }
+
+    function moveUp() {
+      let moved = false;
+      for (let c = 0; c < 4; c++) {
+        let col = [board[0][c], board[1][c], board[2][c], board[3][c]];
+        let slid = slide(col);
+        let merged = merge(slid);
+        let finalCol = slide(merged);
+        if (JSON.stringify(col) !== JSON.stringify(finalCol)) moved = true;
+        for (let r = 0; r < 4; r++) board[r][c] = finalCol[r];
+      }
+      return moved;
+    }
+
+    function moveDown() {
+      let moved = false;
+      for (let c = 0; c < 4; c++) {
+        let col = [board[0][c], board[1][c], board[2][c], board[3][c]].reverse();
+        let slid = slide(col);
+        let merged = merge(slid);
+        let finalCol = slide(merged).reverse();
+        if (JSON.stringify([board[0][c], board[1][c], board[2][c], board[3][c]]) !== JSON.stringify(finalCol)) moved = true;
+        for (let r = 0; r < 4; r++) board[r][c] = finalCol[r];
+      }
+      return moved;
+    }
+
+    function checkGameOver() {
+      // Если есть пустые места — игра не окончена
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          if (board[r][c] === 0) return false;
+        }
+      }
+      // Проверяем, можно ли сделать ход
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          if (c < 3 && board[r][c] === board[r][c + 1]) return false;
+          if (r < 3 && board[r][c] === board[r + 1][c]) return false;
+        }
+      }
+      return true;
+    }
+
+    function handleMove(dir) {
+      if (gameOver) return;
+      let moved = false;
+      if (dir === "left") moved = moveLeft();
+      else if (dir === "right") moved = moveRight();
+      else if (dir === "up") moved = moveUp();
+      else if (dir === "down") moved = moveDown();
+
+      if (moved) {
+        spawnTile();
+        updateUI();
+        moves++;
+        
+        if (moves >= 10 && !achMoves10) {
+          achMoves10 = true;
+          sendAchievement("moves_10");
+        }
+
+        if (checkGameOver()) {
+          gameOver = true;
+          overlay.classList.add("active");
+          overlayTitle.textContent = "Игра окончена!";
+          overlayTitle.style.color = "#ff6a6a";
+          
+          if (!achLoss) {
+            achLoss = true;
+            sendAchievement("first_loss");
+          }
+        }
+      }
+    }
+
+    function restartGame() {
+      board = [[0,0,0,0], [0,0,0,0], [0,0,0,0], [0,0,0,0]];
+      score = 0;
+      moves = 0;
+      gameOver = false;
+      overlay.classList.remove("active");
+      spawnTile();
+      spawnTile();
+      updateUI();
+    }
+
+    // Клавиатура
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "ф") { e.preventDefault(); handleMove("left"); }
+      else if (e.key === "ArrowRight" || e.key === "d" || e.key === "в") { e.preventDefault(); handleMove("right"); }
+      else if (e.key === "ArrowUp" || e.key === "w" || e.key === "ц") { e.preventDefault(); handleMove("up"); }
+      else if (e.key === "ArrowDown" || e.key === "s" || e.key === "ы") { e.preventDefault(); handleMove("down"); }
+    });
+
+    // Свайпы
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    document.addEventListener("touchstart", (e) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    document.addEventListener("touchend", (e) => {
+      if (!touchStartX || !touchStartY) return;
+      let dx = e.changedTouches[0].clientX - touchStartX;
+      let dy = e.changedTouches[0].clientY - touchStartY;
+      let absDx = Math.abs(dx);
+      let absDy = Math.abs(dy);
+      
+      if (Math.max(absDx, absDy) > 30) {
+        if (absDx > absDy) {
+          handleMove(dx > 0 ? "right" : "left");
+        } else {
+          handleMove(dy > 0 ? "down" : "up");
+        }
+      }
+      touchStartX = 0;
+      touchStartY = 0;
+    }, { passive: true });
+
+    document.getElementById("restart-btn").addEventListener("click", restartGame);
+
+    // Старт
+    restartGame();
+  </script>
+</body>
+</html>
