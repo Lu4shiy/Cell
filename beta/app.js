@@ -226,6 +226,17 @@ function verifiedBadge(profile) {
   </span>`;
 }
 
+// Иконка канала вместо эмодзи 📢 в названии.
+// Берём `notification` из ICONS — это самое близкое к «рупору/анонсу».
+function channelIconInline() {
+  return '<span class="cell-icon channel-mark-icon" data-icon="notification" style="width:14px;height:14px;vertical-align:-2px;margin-left:4px;opacity:0.7;"></span>';
+}
+
+// Иконка бота рядом с именем в списке чатов.
+function botIconInline() {
+  return '<span class="cell-icon bot-mark-icon" data-icon="bot" style="width:14px;height:14px;vertical-align:-2px;margin-left:4px;color:var(--accent);"></span>';
+}
+
 // ======================================================
 // Глобальный тултип для галочки verified — рендерится вне
 // .user-item-name (у которого overflow: hidden), поэтому
@@ -5231,7 +5242,7 @@ function subscribeToMemberships() {
             const ch = channelCache.get(chatId);
             if (ch) {
               nameEl.innerHTML = escapeHtml(newCustomName || ch.name) +
-                verifiedBadge(ch) + '<span class="channel-mark">📢</span>';
+                verifiedBadge(ch) + channelIconInline();
             }
           } else {
             const uid = el.dataset.userId;
@@ -5782,6 +5793,7 @@ function renderDmItemHtml(it, profileMap) {
   if (!user) return "";
   const blocked = isBlockedByMe(user.id) ? " 🚫" : "";
   const name = it.customName || user.display_name;
+  const botMark = user.is_bot ? botIconInline() : "";
   const time = it.lastTime ? formatChatTime(it.lastTime) : "";
   let preview = "";
   if (it.lastMsg) {
@@ -5804,7 +5816,7 @@ function renderDmItemHtml(it, profileMap) {
       <div class="avatar"></div>
       <div class="user-item-body">
         <div class="user-item-row1">
-          <div class="user-item-name">${escapeHtml(name)}${verifiedBadge(user)}${blocked}${mutedMark}</div>
+          <div class="user-item-name">${escapeHtml(name)}${verifiedBadge(user)}${botMark}${blocked}${mutedMark}</div>
           <div class="user-item-time">${time}</div>
         </div>
         <div class="user-item-row2">
@@ -5832,7 +5844,7 @@ function renderChannelItemHtml(it) {
       <div class="avatar"></div>
       <div class="user-item-body">
         <div class="user-item-row1">
-          <div class="user-item-name">${escapeHtml(ch.name)}${verifiedBadge(ch)}<span class="channel-mark">📢</span>${mutedMark}</div>
+          <div class="user-item-name">${escapeHtml(ch.name)}${verifiedBadge(ch)}${channelIconInline()}${mutedMark}</div>
           <div class="user-item-time">${time}</div>
         </div>
         <div class="user-item-row2">
@@ -5882,7 +5894,7 @@ async function refreshChannelRights(channelId) {
     const el = document.querySelector(`.user-item[data-chat-id="${channelId}"][data-chat-type="channel"]`);
     if (el) {
       const nameEl = el.querySelector(".user-item-name");
-      if (nameEl) nameEl.innerHTML = escapeHtml(ch.name) + verifiedBadge(ch) + '<span class="channel-mark">📢</span>';
+      if (nameEl) nameEl.innerHTML = escapeHtml(ch.name) + verifiedBadge(ch) + channelIconInline();
       paintAvatar(el.querySelector(".avatar"), { id: ch.id, display_name: ch.name, avatar_url: ch.avatar_url });
     }
   }
@@ -16738,7 +16750,7 @@ async function saveChannelEdit() {
     const itemEl = document.querySelector(`.user-item[data-chat-id="${ch.id}"][data-chat-type="channel"]`);
     if (itemEl) {
       const nameEl = itemEl.querySelector(".user-item-name");
-      if (nameEl) nameEl.innerHTML = escapeHtml(name) + verifiedBadge(ch) + '<span class="channel-mark">📢</span>';
+      if (nameEl) nameEl.innerHTML = escapeHtml(name) + verifiedBadge(ch) + channelIconInline();
       paintAvatar(itemEl.querySelector(".avatar"), { id: ch.id, display_name: name, avatar_url: payload.avatar_url });
     }
 
@@ -19283,6 +19295,11 @@ function setupBotUI() {
     if (val.length < 3) {
       hint.className = "username-hint err"; hint.textContent = "Минимум 3 символа"; return;
     }
+    if (!/bot$/i.test(val)) {
+      hint.className = "username-hint err";
+      hint.textContent = "Юзернейм должен заканчиваться на «bot»";
+      return;
+    }
 
     hint.className = "username-hint"; hint.textContent = "Проверяю...";
     
@@ -19299,7 +19316,10 @@ function setupBotUI() {
     }, 400);
   });
 
-  document.getElementById("bot-name-input").addEventListener("input", updateBotCreateButton);
+  document.getElementById("bot-name-input").addEventListener("input", () => {
+  updateBotCreateButton();
+  renderBotAvatarGrid();
+});
 
   // Модалка редактора
   document.getElementById("bot-editor-close").addEventListener("click", () => {
@@ -19335,7 +19355,7 @@ document.getElementById("bot-username-input").addEventListener("input", (e) => {
 function renderBotAvatarGrid() {
   const grid = document.getElementById("bot-avatar-grid");
   grid.innerHTML = "";
-  const letter = firstChar(document.getElementById("bot-name-input").value || "B");
+  const letter = firstChar(document.getElementById("bot-name-input").value);
 
   BASE_AVATARS.forEach((pair, idx) => {
     const el = document.createElement("div");
@@ -19350,6 +19370,12 @@ function renderBotAvatarGrid() {
       renderBotAvatarGrid();
     });
     grid.appendChild(el);
+  });
+
+  // Обновляем большую превьюшку — первая буква названия, а не эмодзи 🤖.
+  paintAvatar(document.getElementById("bot-avatar-preview"), {
+    display_name: letter,
+    avatar_url: botCreateAvatarUrl,
   });
 }
 
@@ -19372,6 +19398,11 @@ async function createBot() {
   const name = document.getElementById("bot-name-input").value.trim();
   const uname = document.getElementById("bot-username-input").value.trim();
   const btn = document.getElementById("bot-create-confirm");
+
+  if (!/bot$/i.test(uname)) {
+    await showAlertDialog("Ошибка", "Юзернейм бота должен заканчиваться на «bot».");
+    return;
+  }
   
   btn.disabled = true;
   btn.textContent = "Создаю...";
