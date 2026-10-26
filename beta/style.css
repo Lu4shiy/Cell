@@ -6032,7 +6032,7 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 }
 
 /* --- 5. ДЕЙСТВИЕ ПРИ НАЖАТИИ (клик/тап) --- */
-/* Элементы резко проседают вниз, давая тактильный отклик */
+/* 🔴 МОЩНЫЙ ЭФФЕКТ ПРОВАЛА: сдвиг вниз на 4px, уменьшение до 90% и затемнение */
 .btn-primary:active,
 .dialog-btn:active,
 .send-btn:active,
@@ -6048,8 +6048,18 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
 .menu button:active,
 .context-menu button:active,
 .market-tab:active,
-.market-card:active {
-  transform: translateY(2px) scale(0.92) !important;
-  transition-duration: 0.08s !important; /* Мгновенный отклик */
-  box-shadow: none !important;
+.market-card:active,
+.update-banner button:active {
+  
+  /* 1. Двигаем вниз на 4 пикселя и сжимаем до 90% */
+  transform: translateY(4px) scale(0.9) !important;
+  
+  /* 2. Затемняем кнопку (визуальный эффект нажатия) */
+  filter: brightness(0.8) !important; 
+  
+  /* 3. Мгновенная скорость (0.05 сек), чтобы отклик был как у настоящей кнопки */
+  transition-duration: 0.05s !important; 
+  
+  /* 4. Убираем тень, чтобы казалось, что кнопка прижата к экрану */
+  box-shadow: none !important; 
 }
