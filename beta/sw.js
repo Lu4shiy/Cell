@@ -5,7 +5,7 @@
 // Стратегия: network-first с fallback на кэш.
 // ======================================================
 
-const CACHE_VERSION = "cell-beta-v48";
+const CACHE_VERSION = "cell-beta-v49";
 
 const CACHE_FILES = [
   "./",
@@ -13,21 +13,7 @@ const CACHE_FILES = [
   "./style.css",
   "./app.js",
   "./crypto.js",
-  "./icon.svg",
-  "./icon-192.png",
-  "./icon-512.png",
-  "./manifest.json",
-  "./manifest-monochrome.json",
-  "./manifest-sea.json",
-  "./manifest-fury.json",
-  "./manifest-inverse.json",
-  "./manifest-gradient.json",
-  "./icons/icon-classic.svg",
-  "./icons/icon-monochrome.svg",
-  "./icons/icon-sea.svg",
-  "./icons/icon-fury.svg",
-  "./icons/icon-inverse.svg",
-  "./icons/icon-gradient.svg",
+  "./manifest-bee.json",
 ];
 
 self.addEventListener("install", (event) => {

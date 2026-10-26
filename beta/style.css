@@ -7077,3 +7077,69 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   opacity: 1;
   filter: none;
 }
+
+/* ====================================================== */
+/* КАСТОМНЫЙ СЕЛЕКТ (в стиле приложения)                   */
+/* ====================================================== */
+
+.custom-select {
+  position: relative;
+  width: 100%;
+  user-select: none;
+}
+
+.custom-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.custom-select-trigger:hover {
+  border-color: var(--accent);
+}
+.custom-select-trigger .cell-icon {
+  transition: transform 0.2s;
+}
+
+.custom-select.open .custom-select-trigger .cell-icon {
+  transform: rotate(180deg);
+}
+
+.custom-select-options {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+  z-index: 100;
+  animation: popIn 0.15s ease-out;
+}
+
+.custom-select-option {
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--text-sub);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.custom-select-option:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.custom-select-option.active {
+  background: rgba(var(--accent-rgb), 0.15);
+  color: var(--accent);
+  font-weight: 600;
+}

@@ -19896,7 +19896,7 @@ async function saveNewGame() {
   const gradient = document.getElementById("ga-gradient").value.trim();
   const tagsRaw = document.getElementById("ga-tags").value.trim();
   const price = parseInt(document.getElementById("ga-price").value, 10) || 0;
-  const status = document.getElementById("ga-status").value;
+  const status = document.getElementById("ga-status-val").value;
 
   if (!title || !url) {
     await showAlertDialog("Ошибка", "Заполните название и ссылку на игру.");
@@ -20469,6 +20469,37 @@ function setupGamingUI() {
   if (cancelBtn) cancelBtn.addEventListener("click", () => {
     document.getElementById("gaming-add-overlay").classList.add("hidden");
   });
+
+  // Кастомный селект статуса
+  const statusSelect = document.getElementById("ga-status-select");
+  if (statusSelect) {
+    const trigger = statusSelect.querySelector(".custom-select-trigger");
+    const optionsBox = statusSelect.querySelector(".custom-select-options");
+    const statusText = document.getElementById("ga-status-text");
+    const statusVal = document.getElementById("ga-status-val");
+
+    trigger.addEventListener("click", (e) => {
+      e.stopPropagation();
+      statusSelect.classList.toggle("open");
+      optionsBox.classList.toggle("hidden");
+    });
+
+    optionsBox.querySelectorAll(".custom-select-option").forEach(opt => {
+      opt.addEventListener("click", () => {
+        statusText.textContent = opt.textContent;
+        statusVal.value = opt.dataset.value;
+        optionsBox.querySelectorAll(".custom-select-option").forEach(o => o.classList.remove("active"));
+        opt.classList.add("active");
+        statusSelect.classList.remove("open");
+        optionsBox.classList.add("hidden");
+      });
+    });
+
+    document.addEventListener("click", () => {
+      statusSelect.classList.remove("open");
+      optionsBox.classList.add("hidden");
+    });
+  }
 }
 
 setupGamingUI();

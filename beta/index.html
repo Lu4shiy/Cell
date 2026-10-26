@@ -1273,11 +1273,18 @@
 
       <div class="profile-section">
         <div class="profile-label">Статус</div>
-        <select id="ga-status" style="width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;appearance:none;">
-          <option value="available">Доступно (Можно играть)</option>
-          <option value="coming_soon">Скоро</option>
-          <option value="hidden">Скрыто</option>
-        </select>
+        <div class="custom-select" id="ga-status-select">
+          <div class="custom-select-trigger">
+            <span id="ga-status-text">Доступно (Можно играть)</span>
+            <span class="cell-icon cell-icon-sm" data-icon="down"></span>
+          </div>
+          <div class="custom-select-options hidden">
+            <div class="custom-select-option active" data-value="available">Доступно (Можно играть)</div>
+            <div class="custom-select-option" data-value="coming_soon">Скоро</div>
+            <div class="custom-select-option" data-value="hidden">Скрыто</div>
+          </div>
+        </div>
+        <input type="hidden" id="ga-status-val" value="available">
       </div>
 
       <div class="dialog-actions">
