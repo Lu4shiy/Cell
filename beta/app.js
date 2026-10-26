@@ -6745,7 +6745,7 @@ async function performSearch(query) {
   const reqId = ++searchReqId;
 
   const [profilesRes, customRes, channelsRes] = await Promise.all([
-    supabase.from("profiles").select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified")
+    supabase.from("profiles").select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified, is_bot, bot_owner_id")
       .neq("id", currentUser.id).or(`username.ilike.%${clean}%,display_name.ilike.%${clean}%`).limit(20),
     supabase.from("chat_members").select("chat_id, custom_name").eq("user_id", currentUser.id).ilike("custom_name", `%${clean}%`),
     supabase.from("channels").select("*")
@@ -6781,7 +6781,7 @@ async function performSearch(query) {
   let allProfiles = [];
   if (resultIds.size) {
     const { data } = await supabase.from("profiles")
-      .select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified").in("id", [...resultIds]);
+      .select("id, username, display_name, avatar_url, last_seen, gender, birthday, verified, is_bot, bot_owner_id").in("id", [...resultIds]);
     allProfiles = data || [];
     allProfiles.forEach((p) => profileCache.set(p.id, p));
   }
@@ -7173,6 +7173,18 @@ async function openChatWith(otherUser) {
   if (wasSearch) loadRecentChats().catch(() => {});
   const itemEl = document.querySelector(`.user-item[data-user-id="${otherUser.id}"]`);
   const customName = itemEl ? itemEl.dataset.customName : null;
+
+  // 🔴 Если это бот, подгружаем его полный профиль (включая bot_code)
+  if (otherUser.is_bot) {
+    try {
+      const { data: botData } = await supabase.from("profiles")
+        .select("bot_code, is_bot, bot_owner_id").eq("id", otherUser.id).single();
+      if (botData) {
+        Object.assign(otherUser, botData);
+        profileCache.set(otherUser.id, { ...profileCache.get(otherUser.id), ...botData });
+      }
+    } catch (e) { /* silent */ }
+  }
   paintAvatar(document.getElementById("chat-avatar"), otherUser);
   const botBadge = otherUser.is_bot ? '<span class="bot-tag">BOT</span>' : '';
   document.getElementById("chat-title").innerHTML = escapeHtml(customName || otherUser.display_name) + verifiedBadge(otherUser) + botBadge;
@@ -19532,12 +19544,22 @@ async function createBot() {
   }
 }
 
-function openBotEditor(botProfile) {
+async function openBotEditor(botProfile) {
   if (isGrandmaMode()) return;
   currentEditingBot = botProfile;
   document.getElementById("bot-editor-title").textContent = `Настройка: ${botProfile.display_name}`;
-  document.getElementById("bot-code-input").value = botProfile.bot_code || "";
+  document.getElementById("bot-code-input").value = "Загрузка кода...";
   document.getElementById("bot-editor-overlay").classList.remove("hidden");
+  
+  try {
+    const { data } = await supabase.from("profiles").select("bot_code").eq("id", botProfile.id).single();
+    if (data) {
+      botProfile.bot_code = data.bot_code || "";
+      profileCache.set(botProfile.id, { ...profileCache.get(botProfile.id), ...data });
+    }
+  } catch (e) { /* silent */ }
+  
+  document.getElementById("bot-code-input").value = botProfile.bot_code || "";
 }
 
 async function saveBotCode() {
@@ -19567,7 +19589,20 @@ async function saveBotCode() {
 // ======================================================
 
 async function triggerBotResponse(chatId, botUser, userMessage) {
-  if (!botUser.is_bot || !botUser.bot_code) return;
+  if (!botUser.is_bot) {
+    console.log("triggerBotResponse: это не бот");
+    return;
+  }
+  if (!botUser.bot_code) {
+    console.warn("triggerBotResponse: у бота нет кода (bot_code пуст)");
+    // Подгружаем на всякий случай
+    const { data } = await supabase.from("profiles").select("bot_code").eq("id", botUser.id).single();
+    if (data && data.bot_code) {
+      botUser.bot_code = data.bot_code;
+    } else {
+      return;
+    }
+  }
 
   // Показываем, что бот "печатает"
   const tempId = "tmp_bot_" + Date.now();
