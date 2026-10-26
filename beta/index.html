@@ -1288,6 +1288,61 @@ print(f'Привет! Ты написал: {msg}')"></textarea>
     </div>
   </div>
 
+  <!-- ═══════ GAMING CENTER ═══════ -->
+  <div id="gaming-overlay" class="dialog-overlay gaming-overlay hidden">
+    <div class="gaming-window">
+      <header class="gaming-header">
+        <div class="gaming-logo">
+          <span class="cell-icon cell-icon-lg" data-icon="gaming"></span>
+          <span>Gaming Center</span>
+        </div>
+        <div class="gaming-balance">
+          <span class="cell-icon nectar-icon" data-icon="chip"></span>
+          <span id="gaming-balance-value">0</span>
+        </div>
+        <div class="gaming-search-wrap">
+          <span class="cell-icon cell-icon-sm" data-icon="search"></span>
+          <input type="text" id="gaming-search-input" placeholder="Поиск игр..." autocomplete="off">
+        </div>
+        <div class="gaming-user">
+          <div class="avatar" id="gaming-user-avatar">?</div>
+          <span id="gaming-user-name">—</span>
+        </div>
+        <button class="gaming-close" id="gaming-close-btn" type="button" title="Закрыть">
+          <span class="cell-icon" data-icon="cancel"></span>
+        </button>
+      </header>
+
+      <div class="gaming-layout">
+        <nav class="gaming-sidebar">
+          <button class="gaming-nav-item active" data-gaming-tab="store" type="button">
+            <span class="cell-icon" data-icon="shop"></span>
+            <span>Магазин</span>
+          </button>
+          <button class="gaming-nav-item" data-gaming-tab="library" type="button">
+            <span class="cell-icon" data-icon="folder"></span>
+            <span>Библиотека</span>
+          </button>
+          <button class="gaming-nav-item" data-gaming-tab="wishlist" type="button">
+            <span class="cell-icon" data-icon="favorite"></span>
+            <span>Желаемое</span>
+          </button>
+          <button class="gaming-nav-item" data-gaming-tab="profile" type="button">
+            <span class="cell-icon" data-icon="accountMale"></span>
+            <span>Профиль</span>
+          </button>
+          <div class="gaming-nav-sep"></div>
+          <button class="gaming-nav-item" data-gaming-tab="about" type="button">
+            <span class="cell-icon" data-icon="info"></span>
+            <span>О сервисе</span>
+          </button>
+        </nav>
+
+        <main class="gaming-main" id="gaming-main"></main>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="app.js"></script>
 
   <!-- Регистрация service worker (PWA) -->

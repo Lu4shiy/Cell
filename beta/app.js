@@ -4151,15 +4151,7 @@ async function initApp() {
   initApp.__done = true;
 
   setupSidebarMenu();
-  
-  // 🔴 Gaming Center (заглушка для будущего развития)
-  const gamingBtn = document.getElementById("gaming-center-btn");
-  if (gamingBtn) {
-    gamingBtn.addEventListener("click", () => {
-      document.querySelector(".sidebar").classList.remove("menu-open");
-      showAlertDialog("Gaming Center", "Раздел в разработке. Скоро здесь появится много интересного!");
-    });
-  }
+  // Gaming Center обрабатывается в setupSidebarMenu() через openGamingCenter().
 
   setupMobileBackButton();
   setupE2eeUI();
@@ -6767,9 +6759,8 @@ function setupSidebarMenu() {
   if (gamingBtn) {
     gamingBtn.onclick = (e) => {
       e.stopPropagation();
-      sidebar.classList.remove("menu-open"); // Закрываем бургер-меню
-      // Показываем заглушку (потом заменишь на открытие своего окна)
-      showAlertDialog("Gaming Center", "Раздел в разработке. Скоро здесь появится много интересного!");
+      sidebar.classList.remove("menu-open");
+      openGamingCenter();
     };
   }
 
@@ -19728,3 +19719,463 @@ function isBot(user) {
 }
 
 ConnectionMonitor.init();
+
+// ======================================================
+// GAMING CENTER
+// ======================================================
+
+// Демо-каталог (этап 1). На этапе 2 заменится данными из Supabase.
+const GAMING_DEMO_CATALOG = [
+  {
+    id: "hive-defender",
+    title: "Hive Defender",
+    icon: "🐝",
+    coverGradient: "linear-gradient(135deg, #f5a623 0%, #c45400 100%)",
+    tags: ["Стратегия", "Tower Defense"],
+    price: 0,
+    status: "available",
+    developer: "Cell Studio",
+    releaseYear: "2026",
+    shortDesc: "Защищай улей от ос и жуков, расставляя пчелиные башни.",
+    featured: true,
+  },
+  {
+    id: "cell-match",
+    title: "Cell Match",
+    icon: "🍯",
+    coverGradient: "linear-gradient(135deg, #ffd84a 0%, #f5a623 100%)",
+    tags: ["Головоломка", "Match-3"],
+    price: 0,
+    status: "available",
+    developer: "Cell Studio",
+    releaseYear: "2026",
+    shortDesc: "Собирай линии из мёда и взрывай соты.",
+  },
+  {
+    id: "word-cell",
+    title: "Word Cell",
+    icon: "📝",
+    coverGradient: "linear-gradient(135deg, #2ab5a0 0%, #136e60 100%)",
+    tags: ["Слова", "Головоломка"],
+    price: 0,
+    status: "available",
+    developer: "Cell Studio",
+    releaseYear: "2026",
+    shortDesc: "Угадай слово за шесть попыток. Пчёлы-подсказчики помогают.",
+  },
+  {
+    id: "snake-2d",
+    title: "Snake 2D",
+    icon: "🐍",
+    coverGradient: "linear-gradient(135deg, #6fbf4a 0%, #3f7528 100%)",
+    tags: ["Аркада", "Классика"],
+    price: 0,
+    status: "available",
+    developer: "Cell Studio",
+    releaseYear: "2026",
+    shortDesc: "Классическая змейка с нектаровой механикой.",
+  },
+  {
+    id: "memory-hive",
+    title: "Memory Hive",
+    icon: "🧠",
+    coverGradient: "linear-gradient(135deg, #e8568f 0%, #a03060 100%)",
+    tags: ["Память", "Головоломка"],
+    price: 0,
+    status: "available",
+    developer: "Cell Studio",
+    releaseYear: "2026",
+    shortDesc: "Найди пары и не задень осу.",
+  },
+  {
+    id: "hex-chess",
+    title: "Hex Chess",
+    icon: "♟️",
+    coverGradient: "linear-gradient(135deg, #a45cc9 0%, #5e2f7a 100%)",
+    tags: ["Стратегия", "Шахматы"],
+    price: 200,
+    status: "coming_soon",
+    developer: "Cell Studio",
+    releaseYear: "2026",
+    shortDesc: "Шахматы на гексагональной доске.",
+  },
+  {
+    id: "miner-bee",
+    title: "Miner Bee",
+    icon: "⛏️",
+    coverGradient: "linear-gradient(135deg, #d4a574 0%, #6b4423 100%)",
+    tags: ["Аркада", "Кликер"],
+    price: 150,
+    status: "coming_soon",
+    developer: "Cell Studio",
+    releaseYear: "2026",
+    shortDesc: "Копай мёд, прокачивай пчёл, разоряй соты.",
+  },
+  {
+    id: "hex-sprint",
+    title: "Hex Sprint",
+    icon: "🏃",
+    coverGradient: "linear-gradient(135deg, #e85a4a 0%, #8a2a1f 100%)",
+    tags: ["Гонки", "Раннер"],
+    price: 250,
+    status: "coming_soon",
+    developer: "Cell Studio",
+    releaseYear: "2026",
+    shortDesc: "Пробеги по шоссе сот, уворачиваясь от ос.",
+  },
+];
+
+const gamingState = {
+  tab: "store",
+  categoryFilter: "all",
+  searchQuery: "",
+  currentGameId: null,
+  library: new Set(),
+  wishlist: new Set(),
+};
+
+function openGamingCenter() {
+  const overlay = document.getElementById("gaming-overlay");
+  if (!overlay) return;
+  // Сброс поиска при каждом открытии
+  const searchEl = document.getElementById("gaming-search-input");
+  if (searchEl) searchEl.value = "";
+  gamingState.searchQuery = "";
+  gamingState.categoryFilter = "all";
+  gamingState.tab = "store";
+  gamingState.currentGameId = null;
+
+  refreshGamingHeader();
+  updateGamingNav();
+  renderGamingMain();
+  overlay.classList.remove("hidden");
+}
+
+function closeGamingCenter() {
+  const overlay = document.getElementById("gaming-overlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+function refreshGamingHeader() {
+  const balEl = document.getElementById("gaming-balance-value");
+  if (balEl) balEl.textContent = String((myProfile && myProfile.imagi_tokens) || 0);
+  const avEl = document.getElementById("gaming-user-avatar");
+  const nameEl = document.getElementById("gaming-user-name");
+  if (avEl && myProfile) paintAvatar(avEl, myProfile);
+  if (nameEl && myProfile) nameEl.textContent = myProfile.display_name || "—";
+
+  if (currentUser) {
+    supabase.from("profiles").select("imagi_tokens").eq("id", currentUser.id).single()
+      .then(({ data }) => {
+        if (data) {
+          if (balEl) balEl.textContent = String(data.imagi_tokens || 0);
+          if (myProfile) myProfile.imagi_tokens = data.imagi_tokens;
+        }
+      }, () => {});
+  }
+}
+
+function switchGamingTab(tab) {
+  if (!tab) return;
+  gamingState.tab = tab;
+  gamingState.currentGameId = null;
+  updateGamingNav();
+  renderGamingMain();
+}
+
+function updateGamingNav() {
+  document.querySelectorAll(".gaming-nav-item").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.gamingTab === gamingState.tab);
+  });
+}
+
+function renderGamingMain() {
+  const main = document.getElementById("gaming-main");
+  if (!main) return;
+  if (gamingState.currentGameId) {
+    renderGamingDetail(main, gamingState.currentGameId);
+    return;
+  }
+  if (gamingState.tab === "store")        renderGamingStore(main);
+  else if (gamingState.tab === "library") renderGamingLibrary(main);
+  else if (gamingState.tab === "wishlist") renderGamingWishlist(main);
+  else if (gamingState.tab === "profile") renderGamingProfile(main);
+  else if (gamingState.tab === "about")   renderGamingAbout(main);
+}
+
+function renderGamingStore(main) {
+  const q = gamingState.searchQuery.trim().toLowerCase();
+  const games = GAMING_DEMO_CATALOG.filter((g) => {
+    if (q) {
+      const hay = (g.title + " " + g.tags.join(" ") + " " + g.shortDesc).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (gamingState.categoryFilter !== "all" && !g.tags.includes(gamingState.categoryFilter)) return false;
+    return true;
+  });
+
+  let heroHtml = "";
+  if (!q && gamingState.categoryFilter === "all") {
+    const featured = GAMING_DEMO_CATALOG.find((g) => g.featured);
+    if (featured) {
+      heroHtml = `
+        <div class="gaming-hero" data-game-id="${featured.id}" style="background: ${featured.coverGradient};">
+          <div class="gaming-hero-icon">${featured.icon}</div>
+          <div class="gaming-hero-content">
+            <div class="gaming-hero-badge">Рекомендуем</div>
+            <div class="gaming-hero-title">${escapeHtml(featured.title)}</div>
+            <div class="gaming-hero-desc">${escapeHtml(featured.shortDesc)}</div>
+          </div>
+        </div>`;
+    }
+  }
+
+  const allTags = new Set();
+  GAMING_DEMO_CATALOG.forEach((g) => g.tags.forEach((t) => allTags.add(t)));
+  const chips = [
+    `<button type="button" class="gaming-filter-chip ${gamingState.categoryFilter === "all" ? "active" : ""}" data-cat="all">Все</button>`
+  ];
+  [...allTags].sort().forEach((tag) => {
+    chips.push(`<button type="button" class="gaming-filter-chip ${gamingState.categoryFilter === tag ? "active" : ""}" data-cat="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`);
+  });
+
+  const gridHtml = games.length
+    ? `<div class="gaming-grid">${games.map(renderGameCard).join("")}</div>`
+    : `<div class="gaming-empty"><div class="gaming-empty-icon">🔍</div><div>Ничего не найдено.</div></div>`;
+
+  main.innerHTML = `
+    ${heroHtml}
+    <div class="gaming-section-title">Каталог игр</div>
+    <div class="gaming-filters">${chips.join("")}</div>
+    ${gridHtml}
+  `;
+
+  main.querySelectorAll("[data-game-id]").forEach((el) => {
+    el.addEventListener("click", () => openGameDetail(el.dataset.gameId));
+  });
+  main.querySelectorAll(".gaming-filter-chip[data-cat]").forEach((el) => {
+    el.addEventListener("click", () => {
+      gamingState.categoryFilter = el.dataset.cat;
+      renderGamingMain();
+    });
+  });
+}
+
+function renderGameCard(game) {
+  const priceText = game.price > 0 ? `${NECTAR_HTML} ${game.price}` : "Бесплатно";
+  const badge = game.status === "available"
+    ? `<div class="game-card-badge available">Доступно</div>`
+    : `<div class="game-card-badge">Скоро</div>`;
+  return `
+    <div class="game-card" data-game-id="${game.id}">
+      <div class="game-card-cover" style="background: ${game.coverGradient};">
+        <div class="game-card-cover-icon">${game.icon}</div>
+        ${badge}
+      </div>
+      <div class="game-card-info">
+        <div class="game-card-title">${escapeHtml(game.title)}</div>
+        <div class="game-card-tags">${game.tags.map(escapeHtml).join(" · ")}</div>
+        <div class="game-card-price">${priceText}</div>
+      </div>
+    </div>`;
+}
+
+function renderGamingLibrary(main) {
+  const owned = GAMING_DEMO_CATALOG.filter((g) => gamingState.library.has(g.id));
+  if (!owned.length) {
+    main.innerHTML = `
+      <div class="gaming-empty">
+        <div class="gaming-empty-icon">📚</div>
+        <div>Библиотека пуста.</div>
+        <div style="margin-top:8px;opacity:0.7;">Купленные игры появятся здесь.</div>
+      </div>`;
+    return;
+  }
+  main.innerHTML = `
+    <div class="gaming-section-title">Мои игры</div>
+    <div class="gaming-grid">${owned.map(renderGameCard).join("")}</div>
+  `;
+  main.querySelectorAll("[data-game-id]").forEach((el) => {
+    el.addEventListener("click", () => openGameDetail(el.dataset.gameId));
+  });
+}
+
+function renderGamingWishlist(main) {
+  const wish = GAMING_DEMO_CATALOG.filter((g) => gamingState.wishlist.has(g.id));
+  if (!wish.length) {
+    main.innerHTML = `
+      <div class="gaming-empty">
+        <div class="gaming-empty-icon">⭐</div>
+        <div>В желаемом пока пусто.</div>
+        <div style="margin-top:8px;opacity:0.7;">Добавляйте игры из каталога.</div>
+      </div>`;
+    return;
+  }
+  main.innerHTML = `
+    <div class="gaming-section-title">Желаемое</div>
+    <div class="gaming-grid">${wish.map(renderGameCard).join("")}</div>
+  `;
+  main.querySelectorAll("[data-game-id]").forEach((el) => {
+    el.addEventListener("click", () => openGameDetail(el.dataset.gameId));
+  });
+}
+
+function renderGamingProfile(main) {
+  const owned = gamingState.library.size;
+  const wish = gamingState.wishlist.size;
+  main.innerHTML = `
+    <div class="gaming-section-title">Профиль</div>
+    <div style="padding:16px;border-radius:14px;background:var(--bg-input);border:1px solid var(--border);display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+      <div class="avatar avatar-large" id="gaming-profile-avatar">?</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:18px;font-weight:700;color:var(--text);" id="gaming-profile-name">—</div>
+        <div style="font-size:13px;color:var(--text-dim);margin-top:2px;" id="gaming-profile-username">@—</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">
+      <div style="padding:14px;border-radius:12px;background:var(--bg-input);border:1px solid var(--border);">
+        <div style="font-size:22px;font-weight:800;color:var(--accent);">${owned}</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">Игр в библиотеке</div>
+      </div>
+      <div style="padding:14px;border-radius:12px;background:var(--bg-input);border:1px solid var(--border);">
+        <div style="font-size:22px;font-weight:800;color:var(--accent);">${wish}</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">В желаемом</div>
+      </div>
+    </div>
+  `;
+  if (myProfile) {
+    const avEl = document.getElementById("gaming-profile-avatar");
+    const nmEl = document.getElementById("gaming-profile-name");
+    const usEl = document.getElementById("gaming-profile-username");
+    if (avEl) paintAvatar(avEl, myProfile);
+    if (nmEl) nmEl.textContent = myProfile.display_name || "—";
+    if (usEl) usEl.textContent = "@" + (myProfile.username || "");
+  }
+}
+
+function renderGamingAbout(main) {
+  main.innerHTML = `
+    <div class="gaming-section-title">О сервисе</div>
+    <div style="padding:20px;border-radius:14px;background:var(--bg-input);border:1px solid var(--border);line-height:1.65;font-size:14px;color:var(--text-sub);">
+      <h3 style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:10px;">Cell Games</h3>
+      <p>Игровая платформа внутри Cell. Каталог, библиотека, желаемое — всё в одном месте.</p>
+      <p style="margin-top:10px;">Сейчас мы готовим инфраструктуру. Совсем скоро здесь появятся первые игры, в которые можно будет играть прямо из мессенджера — без установки.</p>
+      <p style="margin-top:10px;font-size:12px;color:var(--text-dim);">Этап разработки: <b style="color:var(--accent);">1 из 6</b></p>
+    </div>
+  `;
+}
+
+function openGameDetail(gameId) {
+  gamingState.currentGameId = gameId;
+  renderGamingMain();
+}
+
+function renderGamingDetail(main, gameId) {
+  const game = GAMING_DEMO_CATALOG.find((g) => g.id === gameId);
+  if (!game) {
+    gamingState.currentGameId = null;
+    renderGamingMain();
+    return;
+  }
+  const isWished = gamingState.wishlist.has(game.id);
+  const isAvailable = game.status === "available";
+  const priceText = game.price > 0 ? `${NECTAR_HTML} ${game.price}` : "Бесплатно";
+
+  main.innerHTML = `
+    <div class="gaming-detail">
+      <button type="button" class="gaming-detail-back" id="gaming-detail-back">
+        <span class="cell-icon cell-icon-sm" data-icon="left"></span>
+        <span>Назад в каталог</span>
+      </button>
+
+      <div class="gaming-detail-hero" style="background: ${game.coverGradient};">
+        <div class="gaming-detail-hero-icon">${game.icon}</div>
+        <div class="gaming-detail-hero-content">
+          <div class="gaming-detail-title">${escapeHtml(game.title)}</div>
+          <div class="gaming-detail-tags">
+            ${game.tags.map((t) => `<span class="gaming-detail-tag">${escapeHtml(t)}</span>`).join("")}
+          </div>
+        </div>
+      </div>
+
+      <div class="gaming-detail-body">
+        <div class="gaming-detail-desc">${escapeHtml(game.shortDesc)}</div>
+        <div class="gaming-detail-side">
+          <div class="gaming-detail-price">${priceText}</div>
+          <div class="gaming-detail-meta">
+            <div>Разработчик: <b>${escapeHtml(game.developer)}</b></div>
+            <div>Год: <b>${escapeHtml(game.releaseYear)}</b></div>
+            <div>Статус: <b style="color:${isAvailable ? "var(--accent)" : "var(--text-sub)"};">${isAvailable ? "Доступно" : "Скоро"}</b></div>
+          </div>
+          <button type="button" class="gaming-detail-play ${isAvailable ? "" : "coming-soon"}" id="gaming-detail-play">
+            ${isAvailable ? "▶ Играть" : "Скоро"}
+          </button>
+          <button type="button" class="gaming-detail-wish ${isWished ? "active" : ""}" id="gaming-detail-wish">
+            ${isWished ? "★ В желаемом" : "☆ В желаемое"}
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("gaming-detail-back").addEventListener("click", () => {
+    gamingState.currentGameId = null;
+    renderGamingMain();
+  });
+  document.getElementById("gaming-detail-play").addEventListener("click", async () => {
+    if (!isAvailable) {
+      await showAlertDialog("Скоро", "Игра появится в ближайшем обновлении.");
+      return;
+    }
+    await showAlertDialog(game.title, "Игровой плеер появится в следующем этапе (этап 5).");
+  });
+  document.getElementById("gaming-detail-wish").addEventListener("click", () => {
+    if (gamingState.wishlist.has(game.id)) gamingState.wishlist.delete(game.id);
+    else gamingState.wishlist.add(game.id);
+    renderGamingDetail(main, game.id);
+  });
+}
+
+function setupGamingUI() {
+  const overlay = document.getElementById("gaming-overlay");
+  if (!overlay || overlay.__gamingBound) return;
+  overlay.__gamingBound = true;
+
+  const closeBtn = document.getElementById("gaming-close-btn");
+  if (closeBtn) closeBtn.addEventListener("click", closeGamingCenter);
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeGamingCenter();
+  });
+
+  overlay.querySelectorAll(".gaming-nav-item").forEach((btn) => {
+    btn.addEventListener("click", () => switchGamingTab(btn.dataset.gamingTab));
+  });
+
+  const searchInput = document.getElementById("gaming-search-input");
+  if (searchInput) {
+    let searchTimer = null;
+    searchInput.addEventListener("input", () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        gamingState.searchQuery = searchInput.value;
+        if (gamingState.currentGameId) {
+          gamingState.currentGameId = null;
+          if (gamingState.tab !== "store") switchGamingTab("store");
+        }
+        renderGamingMain();
+      }, 250);
+    });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (overlay.classList.contains("hidden")) return;
+    const dialog = document.getElementById("dialog-overlay");
+    if (dialog && !dialog.classList.contains("hidden")) return;
+    e.preventDefault();
+    closeGamingCenter();
+  });
+}
+
+setupGamingUI();
