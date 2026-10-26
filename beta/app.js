@@ -6091,7 +6091,6 @@ async function openChannel(chatId) {
   if (currentChannelIsSubscribed) await markChatRead(chatId);
 
   setWheelSelected(chatId);
-  buildChatTimeline();
 }
 
 function updateChatItemPreview(chatId) {
@@ -7214,7 +7213,6 @@ async function openChatWith(otherUser) {
   subscribeToChat(chatId); subscribeToReactions();
   await markChatRead(chatId);
   setWheelSelected(chatId);
-  buildChatTimeline();
   updateE2eeComposerHint();
 }
 
@@ -7422,7 +7420,6 @@ async function loadMessages(chatId, mySeq) {
   scrollToBottom();
   rerenderPinMarks();
   refreshMessageGroups();
-  buildChatTimeline();
 
   setTimeout(() => { refreshAttachmentUrls().catch(() => {}); }, 800);
 
@@ -7554,7 +7551,6 @@ async function loadOlderMessages() {
     await loadReactionsForVisibleMessages();
     rerenderPinMarks();
     refreshMessageGroups();
-    buildChatTimeline();
   } catch (e) {
     console.warn("loadOlderMessages catch:", e);
     loader.remove();
@@ -8096,102 +8092,6 @@ function formatDateHeader(d) {
   if (d.getFullYear() === today.getFullYear()) return d.getDate() + " " + months[d.getMonth()];
   return d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear();
 }
-
-// ======================================================
-// 40. ТАЙМЛАЙН-СКРАББЕР
-// ======================================================
-
-function buildChatTimeline() {
-  const box = document.getElementById("messages");
-  const tl = document.getElementById("chat-timeline");
-  if (!box || !tl) return;
-
-  const all = [...box.querySelectorAll(".msg, .msg-system")];
-  if (all.length < 3) { tl.classList.add("hidden"); return; }
-
-  const dayFirst = new Map();
-  all.forEach((el) => {
-    const m = msgCache.get(el.dataset.id);
-    if (!m) return;
-    const d = new Date(m.created_at);
-    const key = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
-    if (!dayFirst.has(key)) dayFirst.set(key, el.dataset.id);
-  });
-
-  const keys = [...dayFirst.keys()];
-  tl.innerHTML = keys.map((k) =>
-    `<div class="timeline-dot" data-day-key="${k}" data-first-id="${dayFirst.get(k)}" title="${formatDateHeader(new Date(k))}"></div>`
-  ).join("");
-  tl.classList.remove("hidden");
-
-  tl.querySelectorAll(".timeline-dot").forEach((dot) => {
-    dot.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const id = dot.dataset.firstId;
-      const target = box.querySelector(`[data-id="${id}"]`);
-      
-      if (target) {
-        // 🔴 ВАЖНО: Отключаем прилипание к низу и программный скролл, 
-        // чтобы анимация не сбивала расчёт высоты
-        stickToBottom = false;
-        programmaticScroll = true;
-
-        // Считаем позицию вручную (как в jumpToMessage), чтобы не сломать flex-разметку
-        const boxRect = box.getBoundingClientRect();
-        const targetRect = target.getBoundingClientRect();
-        const delta = targetRect.top - boxRect.top;
-        
-        // Прокручиваем так, чтобы сообщение было чуть ниже верхней шапки (на 20px)
-        const newTop = box.scrollTop + delta - 20; 
-        
-        box.scrollTo({ top: Math.max(0, newTop), behavior: "smooth" });
-
-        // Возвращаем флаг через 800 мс (длительность анимации)
-        setTimeout(() => { programmaticScroll = false; }, 800);
-        
-        // Подсвечиваем сообщение, к которому прыгнули
-        const prev = target.style.background;
-        target.style.transition = "background 0.4s";
-        target.style.background = "rgba(255,140,66,0.3)";
-        setTimeout(() => { target.style.background = prev; }, 700);
-      }
-    });
-  });
-
-  updateTimelineMarker();
-}
-
-function updateTimelineMarker() {
-  const box = document.getElementById("messages");
-  const tl = document.getElementById("chat-timeline");
-  if (!box || !tl || tl.classList.contains("hidden")) return;
-
-  const boxRect = box.getBoundingClientRect();
-  let currentId = null;
-  const all = box.querySelectorAll(".msg, .msg-system");
-  for (const el of all) {
-    const r = el.getBoundingClientRect();
-    if (r.top - boxRect.top <= 40) currentId = el.dataset.id;
-    else break;
-  }
-  const dots = tl.querySelectorAll(".timeline-dot");
-  dots.forEach((d) => d.classList.remove("timeline-current"));
-  if (!currentId) return;
-
-  const m = msgCache.get(currentId);
-  if (!m) return;
-  const d = new Date(m.created_at);
-  const key = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
-  const dot = tl.querySelector(`.timeline-dot[data-day-key="${key}"]`);
-  if (dot) dot.classList.add("timeline-current");
-}
-
-// Навешиваем обновление маркера на скролл
-(function attachTimelineScroll() {
-  const box = document.getElementById("messages");
-  if (!box) return;
-  box.addEventListener("scroll", () => updateTimelineMarker(), { passive: true });
-})();
 
 // ======================================================
 // 41. КОМАНДНАЯ ПАЛИТРА (Ctrl+K)
