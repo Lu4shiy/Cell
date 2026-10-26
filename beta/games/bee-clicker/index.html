@@ -87,6 +87,9 @@
       bee.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         score++;
+        if (score === 10) {
+          window.parent.postMessage({ type: "UNLOCK_ACHIEVEMENT", code: "score_10" }, "*");
+        }
         scoreEl.textContent = score;
         
         // Эффект

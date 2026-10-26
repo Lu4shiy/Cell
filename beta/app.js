@@ -19915,6 +19915,17 @@ function openGameEditor(game = null) {
   }
   document.getElementById("ga-reqs").value = reqsText;
 
+  // Загружаем достижения игры
+  document.getElementById("ga-achievements").value = "";
+  if (game) {
+    supabase.from("game_achievements").select("*").eq("game_id", game.id).then(({ data }) => {
+      if (data && data.length) {
+        const text = data.map(a => `${a.code || ""}: ${a.title}: ${a.description}`).join("\n");
+        document.getElementById("ga-achievements").value = text;
+      }
+    });
+  }
+
   // Статус
   const statusVal = game ? game.status : "available";
   document.getElementById("ga-status-val").value = statusVal;
@@ -19956,6 +19967,7 @@ async function saveGame() {
   const screenshotsRaw = document.getElementById("ga-screenshots").value.trim();
   const reqsRaw = document.getElementById("ga-reqs").value.trim();
   const status = document.getElementById("ga-status-val").value;
+  const achievementsRaw = document.getElementById("ga-achievements").value.trim();
 
   if (!title || !url) {
     await showAlertDialog("Ошибка", "Заполните название и ссылку на игру.");
@@ -20016,6 +20028,36 @@ async function saveGame() {
   if (error) {
     await showAlertDialog("Ошибка", error.message);
     return;
+  }
+
+  // Сохраняем достижения
+  let targetGameId = currentEditingGameId;
+  if (!targetGameId) {
+    // Если это новая игра, узнаем её ID
+    const { data: newGame } = await supabase.from("games").select("id").eq("slug", slug).single();
+    if (newGame) targetGameId = newGame.id;
+  }
+
+  if (targetGameId && achievementsRaw) {
+    // Удаляем старые достижения этой игры и создаем новые
+    await supabase.from("game_achievements").delete().eq("game_id", targetGameId);
+    
+    const lines = achievementsRaw.split("\n");
+    const newAchs = [];
+    lines.forEach(line => {
+      const parts = line.split(":");
+      if (parts.length >= 2) {
+        const code = parts[0].trim();
+        const title = parts[1].trim();
+        const desc = parts.slice(2).join(":").trim() || "Секретное достижение";
+        if (code && title) {
+          newAchs.push({ game_id: targetGameId, code, title, description: desc, icon: "🏆" });
+        }
+      }
+    });
+    if (newAchs.length) {
+      await supabase.from("game_achievements").insert(newAchs);
+    }
   }
 
   document.getElementById("gaming-add-overlay").classList.add("hidden");
@@ -20286,13 +20328,14 @@ function openGameDetail(gameId) {
   renderGamingMain();
 }
 
-function renderGamingDetail(main, gameId) {
+async function renderGamingDetail(main, gameId) {
   const game = gamingCatalog.find((g) => g.id === gameId || g.slug === gameId);
   if (!game) {
     gamingState.currentGameId = null;
     renderGamingMain();
     return;
   }
+  
   const isOwned = gamingOwnedSet.has(game.id);
   const isWished = gamingWishlistSet.has(game.id);
   const isAvailable = game.status === "available";
@@ -20353,23 +20396,33 @@ function renderGamingDetail(main, gameId) {
        </div>`
     : "";
 
-  // Достижения (заглушка для UI)
-  const achievements = []; // В будущем будем брать из БД
+  // 🔴 НОВОЕ: Достижения
   let achievementsHtml = "";
-  if (isOwned && achievements.length > 0) {
-     achievementsHtml = `
-       <div class="gaming-achievements">
-         <h3>Достижения</h3>
-         ${achievements.map((a) => `
-            <div class="gaming-achievement">
-              <div class="gaming-achievement-icon ${a.unlocked ? "unlocked" : ""}">${a.icon}</div>
-              <div class="gaming-achievement-info">
-                <div class="gaming-achievement-title">${escapeHtml(a.title)}</div>
-                <div class="gaming-achievement-desc">${escapeHtml(a.description)}</div>
+  if (isOwned) {
+    const { data: achs } = await supabase.from("game_achievements").select("*").eq("game_id", game.id);
+    if (achs && achs.length) {
+      const { data: userAchs } = await supabase.from("user_achievements")
+        .select("achievement_id").eq("user_id", currentUser.id).in("achievement_id", achs.map(a => a.id));
+      
+      const unlockedSet = new Set((userAchs || []).map(u => u.achievement_id));
+
+      achievementsHtml = `
+        <div class="gaming-achievements">
+          <h3 style="font-size:13px; font-weight:800; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.6px; color:var(--text);">Достижения (${unlockedSet.size} / ${achs.length})</h3>
+          ${achs.map((a) => {
+            const isUnlocked = unlockedSet.has(a.id);
+            return `
+              <div class="gaming-achievement">
+                <div class="gaming-achievement-icon ${isUnlocked ? "unlocked" : ""}">${a.icon}</div>
+                <div class="gaming-achievement-info">
+                  <div class="gaming-achievement-title" style="${!isUnlocked ? 'color:var(--text-dim);' : ''}">${escapeHtml(a.title)}</div>
+                  <div class="gaming-achievement-desc">${isUnlocked ? escapeHtml(a.description) : "Секретное достижение"}</div>
+                </div>
               </div>
-            </div>
-         `).join("")}
-       </div>`;
+            `;
+          }).join("")}
+        </div>`;
+    }
   }
 
   main.innerHTML = `
@@ -20439,7 +20492,6 @@ function renderGamingDetail(main, gameId) {
   const wishBtn = document.getElementById("gaming-detail-wish");
   if (wishBtn) wishBtn.addEventListener("click", () => { toggleGamingWishlist(game); });
 
-  // Клик по реальному скриншоту
   main.querySelectorAll(".gaming-detail-screenshot[data-screenshot-url]").forEach((el) => {
     el.addEventListener("click", () => {
       const url = el.dataset.screenshotUrl;
@@ -20479,18 +20531,22 @@ function openGamePlayer(game) {
     if (isClosing) return;
     isClosing = true;
     
-    // Считаем, сколько секунд провели в игре
     const elapsed = Math.floor((Date.now() - startTime) / 1000);
     if (elapsed > 0) {
-      // Сохраняем в БД
-      await supabase.rpc("gaming_save_playtime", { p_game_id: game.id, p_seconds: elapsed }).catch(() => {});
-      // Обновляем локальный кэш и перерисовываем UI (время появится в библиотеке)
+      // 🔴 ФИКС: используем try/catch вместо .catch()
+      try {
+        await supabase.rpc("gaming_save_playtime", { p_game_id: game.id, p_seconds: elapsed });
+      } catch (e) {
+        console.warn("Не удалось сохранить время игры:", e);
+      }
       await loadGamingData(true);
       renderGamingMain();
     }
     
     overlay.remove();
     document.removeEventListener("keydown", onKeyDown);
+    // Очищаем слушатель сообщений от игры
+    window.removeEventListener("message", handleGameMessage);
   };
 
   // Подтверждение выхода
@@ -20507,26 +20563,47 @@ function openGamePlayer(game) {
     }
   };
 
+  // 🔴 НОВОЕ: Обработка сообщений от игры (для достижений)
+  const handleGameMessage = async (e) => {
+    if (!e.data || e.data.type !== "UNLOCK_ACHIEVEMENT") return;
+    
+    // В целях безопасности можно проверить e.origin, если игра на другом домене,
+    // но для локальных игр это не критично.
+    const achCode = e.data.code;
+    if (!achCode) return;
+
+    // Ищем достижение в БД
+    const { data: ach } = await supabase.from("game_achievements")
+      .select("id, title")
+      .eq("game_id", game.id)
+      .eq("code", achCode)
+      .maybeSingle();
+
+    if (!ach) return; // Такого достижения нет
+
+    // Пытаемся выдать
+    const { error } = await supabase.from("user_achievements").insert({
+      user_id: currentUser.id,
+      achievement_id: ach.id
+    });
+
+    if (!error) {
+      // Показываем красивый тост о получении ачивки
+      showInAppToast({
+        profile: { display_name: "Достижение!", avatar_url: game.icon, id: "ach" },
+        title: "Получено достижение!",
+        body: ach.title,
+        tag: "achievement-" + ach.id
+      });
+    }
+  };
+
   // Обработчик крестика
   const closeBtn = document.getElementById("gaming-player-close");
   closeBtn.addEventListener("click", requestExit);
   
   document.addEventListener("keydown", onKeyDown);
-
-  // 🔴 На случай закрытия вкладки — сохраняем время через onbeforeunload (насколько это возможно)
-  window.onbeforeunload = () => {
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    if (elapsed > 2) {
-       // Используем sendBeacon для надёжности при закрытии
-       const url = `${SUPABASE_URL}/rest/v1/rpc/gaming_save_playtime`;
-       const headers = {
-           'apikey': SUPABASE_ANON_KEY,
-           'Authorization': `Bearer ${supabase.auth.session()?.access_token || ''}`,
-           'Content-Type': 'application/json'
-       };
-       navigator.sendBeacon(url, new Blob([JSON.stringify({ p_game_id: game.id, p_seconds: elapsed })], { type: 'application/json' }));
-    }
-  };
+  window.addEventListener("message", handleGameMessage);
 }
 
 // Заглушка-скриншот: SVG с градиентом и иконкой игры.
