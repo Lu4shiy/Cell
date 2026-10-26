@@ -165,7 +165,6 @@
       color: #8a7a6d;
       text-align: center;
     }
-    /* Профиль */
     .profile-overlay {
       position: fixed;
       inset: 0;
@@ -191,16 +190,8 @@
       width: 80vw;
       max-width: 300px;
     }
-    .profile-modal h2 {
-      margin: 0 0 20px;
-      color: #f5a623;
-    }
-    .profile-stat {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 12px;
-      font-size: 16px;
-    }
+    .profile-modal h2 { margin: 0 0 20px; color: #f5a623; }
+    .profile-stat { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 16px; }
     .profile-stat span:first-child { color: #8a7a6d; }
     .profile-stat span:last-child { font-weight: 800; }
   </style>
@@ -220,16 +211,24 @@
 
   <div class="game-container">
     <div class="grid" id="grid"></div>
+    
+    <!-- 🔴 СТАРТОВЫЙ ЭКРАН -->
+    <div class="overlay active" id="start-overlay">
+      <div class="overlay-title">2048</div>
+      <button class="btn" id="btn-start-new">Начать новую игру</button>
+      <button class="btn secondary hidden" id="btn-start-continue">Продолжить</button>
+      <button class="btn secondary" onclick="document.getElementById('profile-overlay').classList.add('active')">Профиль</button>
+    </div>
+    <!-- ================== -->
+
     <div class="overlay" id="overlay">
       <div class="overlay-title" id="overlay-title">Игра окончена!</div>
       <button class="btn" id="restart-btn">Начать заново</button>
-      <button class="btn secondary" id="continue-btn">Продолжить (отменить)</button>
     </div>
   </div>
 
   <div class="hint">Свайпай или используй стрелки</div>
 
-  <!-- Профиль -->
   <div class="profile-overlay" id="profile-overlay">
     <div class="profile-modal">
       <h2>Профиль</h2>
@@ -241,18 +240,15 @@
   </div>
 
   <script>
-    // ================= СОСТОЯНИЕ =================
     let board = [[0,0,0,0], [0,0,0,0], [0,0,0,0], [0,0,0,0]];
     let score = 0;
     let moves = 0;
     let gameOver = false;
     
-    // Статистика
     let bestScore = parseInt(localStorage.getItem("cell_2048_best") || "0", 10);
     let gamesPlayed = parseInt(localStorage.getItem("cell_2048_games") || "0", 10);
     let totalMoves = parseInt(localStorage.getItem("cell_2048_total_moves") || "0", 10);
 
-    // Флаги достижений
     let achMoves10 = false;
     let achLoss = false;
     let ach2048 = false;
@@ -262,7 +258,6 @@
     const overlay = document.getElementById("overlay");
     const overlayTitle = document.getElementById("overlay-title");
 
-    // Инициализация сетки
     if (gridEl.children.length === 0) {
       for (let i = 0; i < 16; i++) {
         const cell = document.createElement("div");
@@ -272,7 +267,6 @@
       }
     }
 
-    // ================= СИСТЕМА СОХРАНЕНИЯ =================
     function saveProgress() {
       localStorage.setItem("cell_2048_save", JSON.stringify({
         board, score, moves, gameOver, achMoves10, achLoss, ach2048
@@ -310,7 +304,6 @@
       window.parent.postMessage({ type: "UNLOCK_ACHIEVEMENT", code: code }, "*");
     }
 
-    // ================= ЛОГИКА ИГРЫ =================
     function updateUI() {
       for (let r = 0; r < 4; r++) {
         for (let c = 0; c < 4; c++) {
@@ -493,7 +486,6 @@
       saveProgress();
     }
 
-    // ================= УПРАВЛЕНИЕ =================
     document.addEventListener("keydown", (e) => {
       if (e.key === "ArrowLeft" || e.key === "a" || e.key === "ф") { e.preventDefault(); handleMove("left"); }
       else if (e.key === "ArrowRight" || e.key === "d" || e.key === "в") { e.preventDefault(); handleMove("right"); }
@@ -527,7 +519,6 @@
       touchStartY = 0;
     }, { passive: true });
 
-    // Профиль
     const profileOverlay = document.getElementById("profile-overlay");
     document.getElementById("open-profile").addEventListener("click", () => {
       document.getElementById("best-score").textContent = bestScore;
@@ -540,22 +531,31 @@
     });
 
     document.getElementById("restart-btn").addEventListener("click", restartGame);
-    document.getElementById("continue-btn").addEventListener("click", () => {
-      // Отмена проигрыша (оставляем поле как есть, но убираем оверлей)
-      // На самом деле в 2048 нельзя продолжить, если ходов нет, 
-      // но если пользователь нажал "Продолжить", просто убираем оверлей,
-      // чтобы он мог посмотреть на поле (или перезапустить через кнопку).
-      // Для честности лучше оставить оверлей, но убрать кнопку "Продолжить".
-      // Но мы дадим ему шанс, если он просто хочет посмотреть на финальное поле.
-      overlay.classList.remove("active");
-    });
 
-    // ================= СТАРТ =================
-    if (!loadProgress() || gameOver) {
-      restartGame();
+    const startOverlay = document.getElementById("start-overlay");
+    const btnContinue = document.getElementById("btn-start-continue");
+
+    if (loadProgress() && !gameOver) {
+      btnContinue.classList.remove("hidden");
+      updateUI(); 
     } else {
+      board = [[0,0,0,0], [0,0,0,0], [0,0,0,0], [0,0,0,0]];
+      score = 0;
+      moves = 0;
+      gameOver = false;
+      spawnTile();
+      spawnTile();
       updateUI();
     }
+
+    document.getElementById("btn-start-new").addEventListener("click", () => {
+      restartGame();
+      startOverlay.classList.remove("active");
+    });
+
+    btnContinue.addEventListener("click", () => {
+      startOverlay.classList.remove("active");
+    });
   </script>
 </body>
 </html>

@@ -20113,6 +20113,7 @@ function renderGamingMain() {
   else if (gamingState.tab === "library") renderGamingLibrary(main);
   else if (gamingState.tab === "wishlist") renderGamingWishlist(main);
   else if (gamingState.tab === "profile") renderGamingProfile(main);
+  else if (gamingState.tab === "leaderboard") renderGamingLeaderboard(main);
   else if (gamingState.tab === "admin") {
     if (!isAdmin) { gamingState.tab = "store"; renderGamingMain(); return; }
     main.innerHTML = `
@@ -20327,6 +20328,86 @@ function renderGamingProfile(main) {
     if (avEl) paintAvatar(avEl, myProfile);
     if (nmEl) nmEl.textContent = myProfile.display_name || "—";
     if (usEl) usEl.textContent = "@" + (myProfile.username || "");
+  }
+}
+
+async function renderGamingLeaderboard(main) {
+  main.innerHTML = `
+    <div class="gaming-section-title">Лидеры по очкам</div>
+    <div class="empty" style="padding:40px;">Загрузка...</div>
+  `;
+
+  try {
+    const { data: scores, error } = await supabase.from("game_scores")
+      .select("score, created_at, profiles(display_name, username, avatar_url, id), games(title, icon)")
+      .order("score", { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+
+    if (!scores || !scores.length) {
+      main.innerHTML = `
+        <div class="gaming-section-title">Лидеры по очкам</div>
+        <div class="gaming-empty">
+          <div class="gaming-empty-icon">🏆</div>
+          <div>Пока никто не установил рекорд.</div>
+        </div>
+      `;
+      return;
+    }
+
+    const uniqueScores = [];
+    const seen = new Set();
+    for (const s of scores) {
+      const key = s.profiles.id + "-" + s.games.title;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueScores.push(s);
+      }
+    }
+
+    const rowsHtml = uniqueScores.map((s, idx) => {
+      const p = s.profiles || {};
+      const g = s.games || {};
+      const date = new Date(s.created_at).toLocaleDateString(localeId());
+      
+      let placeIcon = `${idx + 1}`;
+      let placeStyle = "";
+      if (idx === 0) { placeIcon = "🥇"; placeStyle = "font-size:20px;"; }
+      else if (idx === 1) { placeIcon = "🥈"; placeStyle = "font-size:20px;"; }
+      else if (idx === 2) { placeIcon = "🥉"; placeStyle = "font-size:20px;"; }
+
+      return `
+        <div class="market-history-item" style="cursor:pointer;" onclick="openChatById('${p.id}')">
+          <div style="width:32px; text-align:center; font-weight:800; color:var(--text-dim); ${placeStyle}">${placeIcon}</div>
+          <div class="avatar" id="lb-avatar-${idx}" style="width:36px;height:36px;font-size:14px;"></div>
+          <div class="market-history-main">
+            <div class="market-history-title">${escapeHtml(p.display_name || "—")} <span style="font-size:11px;color:var(--text-dim);">@${escapeHtml(p.username || "")}</span></div>
+            <div class="market-history-sub">${g.icon || "🎮"} ${escapeHtml(g.title || "Игра")} · ${date}</div>
+          </div>
+          <div class="market-history-price" style="font-size:16px;">${s.score}</div>
+        </div>
+      `;
+    }).join("");
+
+    main.innerHTML = `
+      <div class="gaming-section-title">Топ-50 рекордов</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        ${rowsHtml}
+      </div>
+    `;
+
+    uniqueScores.forEach((s, idx) => {
+      const el = document.getElementById("lb-avatar-" + idx);
+      if (el && s.profiles) paintAvatar(el, s.profiles);
+    });
+
+  } catch (err) {
+    console.error("Leaderboard error:", err);
+    main.innerHTML = `
+      <div class="gaming-section-title">Лидеры по очкам</div>
+      <div class="empty" style="color:var(--danger);">Ошибка загрузки: ${escapeHtml(err.message)}</div>
+    `;
   }
 }
 
@@ -20655,10 +20736,12 @@ function openGamePlayer(game) {
   const closeBtn = document.getElementById("gaming-player-close");
   closeBtn.addEventListener("click", requestExit);
   
-  // 🔴 Внедряем слушатель ESC прямо в iframe (так как фокус находится там)
+  // 🔴 Внедряем слушатель ESC прямо в iframe и передаем фокус клавиатуре
   const iframe = document.getElementById("gaming-player-frame");
   iframe.onload = () => {
     try {
+      iframe.contentWindow.focus(); // Убирает баг "надо кликнуть, чтобы работали стрелки"
+      
       iframe.contentWindow.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
           e.preventDefault();
