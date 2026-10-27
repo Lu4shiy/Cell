@@ -353,18 +353,24 @@
       }
     });
 
-    // Оставляем ТОЛЬКО монетку и бафф. Никакой музыки и лишних звуков.
+    // Оставляем ТОЛЬКО монетку и бафф. 
     const SFX = {
       coin: "https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3",
       powerup: "https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3"
     };
 
+    // Атмосферная фоновая музыка (НЕ пиксельная)
+    const BGM_URL = "https://assets.mixkit.co/music/preview/mixkit-chill-and-relax-1108.mp3";
+
     class AudioEngine {
       constructor() {
+        this.bgm = new Audio(BGM_URL);
+        this.bgm.loop = true;
+        this.bgm.volume = 0.2; // Тихая фоновая музыка
+        
         this.sfxPools = {};
         this.sfxIndex = {};
         
-        // Создаем пулы по 3 аудио (чтобы при частом сборе монет они не обрывали друг друга)
         for (const [key, url] of Object.entries(SFX)) {
           this.sfxPools[key] = Array.from({ length: 3 }, () => {
             const audio = new Audio(url);
@@ -375,7 +381,9 @@
         }
       }
 
-      init() {}
+      init() {
+        this.bgm.load();
+      }
 
       playSfx(key) {
         if (!this.sfxPools[key]) return;
@@ -387,13 +395,13 @@
         this.sfxIndex[key] = (idx + 1) % pool.length;
       }
 
-      // ТОЛЬКО ЭТИ ДВА ЗВУКА РАБОТАЮТ
+      startMusic() { this.bgm.play().catch(() => {}); }
+      stopMusic() { this.bgm.pause(); }
+
       playCoin() { this.playSfx('coin'); }
       playPowerup() { this.playSfx('powerup'); }
 
-      // Всё остальное полностью выключено
-      startMusic() {}
-      stopMusic() {}
+      // Всё остальное выключено
       playJump() {}
       playExplosion() {}
       playBuy() {}
@@ -403,10 +411,9 @@
 
     const sound = new AudioEngine();
     
-    // Заглушка для музыки (чтобы старый код не выдавал ошибок)
     const music = {
-      start: () => {},
-      stop: () => {},
+      start: () => sound.startMusic(),
+      stop: () => sound.stopMusic(),
       setLevel: () => {} 
     };
 
@@ -732,12 +739,19 @@
 
     function spawnCoin() {
       if (coins.length >= 4) return;
-      for (let i = 0; i < 50; i++) {
-        let cx = Math.floor(Math.random() * GRID_SIZE), cy = Math.floor(Math.random() * GRID_SIZE);
-        if (!coins.some(c => c.x === cx && c.y === cy) && !blocks.some(b => b.x === cx && b.y === cy)) {
-          coins.push({ x: cx, y: cy, bounce: Math.random() * Math.PI });
-          return;
+      const emptyCells = [];
+      for (let x = 0; x < GRID_SIZE; x++) {
+        for (let y = 0; y < GRID_SIZE; y++) {
+          if (!blocks.some(b => b.x === x && b.y === y) &&
+              !coins.some(c => Math.round(c.x) === x && Math.round(c.y) === y) &&
+              !powerups.some(p => p.x === x && p.y === y)) {
+            emptyCells.push({x, y});
+          }
         }
+      }
+      if (emptyCells.length > 0) {
+        const cell = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+        coins.push({ x: cell.x, y: cell.y, bounce: Math.random() * Math.PI });
       }
     }
 
@@ -763,9 +777,19 @@
     function spawnPowerup() {
       if (powerups.length >= 1) return;
       if (Math.random() < 0.001) {
-        let px = Math.floor(Math.random() * GRID_SIZE), py = Math.floor(Math.random() * GRID_SIZE);
-        if (blocks.some(b => b.x === px && b.y === py)) return;
+        const emptyCells = [];
+        for (let x = 0; x < GRID_SIZE; x++) {
+          for (let y = 0; y < GRID_SIZE; y++) {
+            if (!blocks.some(b => b.x === x && b.y === y) &&
+                !coins.some(c => Math.round(c.x) === x && Math.round(c.y) === y) &&
+                !powerups.some(p => p.x === x && p.y === y)) {
+              emptyCells.push({x, y});
+            }
+          }
+        }
+        if (emptyCells.length === 0) return;
         
+        const cell = emptyCells[Math.floor(Math.random() * emptyCells.length)];
         let r = Math.random();
         let type = 'shield';
         if (r < 0.25) type = 'shield';
@@ -775,7 +799,7 @@
         else if (r < 0.85) type = 'dash';
         else type = 'gun';
         
-        powerups.push({ x: px, y: py, type, bounce: Math.random() * Math.PI });
+        powerups.push({ x: cell.x, y: cell.y, type, bounce: Math.random() * Math.PI });
       }
     }
 
@@ -791,10 +815,27 @@
       const spawnInterval = Math.max(28, 120 - Math.floor(difficultyTimer * 15));
       if (spawnTimer % spawnInterval === 0) {
         const typeRand = Math.random();
-        if (typeRand < 0.4) hazards.push({ type: 'tnt', x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE), timer: 60, maxTimer: 60, height: 250 });
-        else if (typeRand < 0.65) hazards.push({ type: 'spike', x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE), state: 'warning', timer: 45 });
-        else if (typeRand < 0.85) hazards.push({ type: 'laser', isRow: Math.random() > 0.5, index: Math.floor(Math.random() * GRID_SIZE), timer: 50, activeTimer: 25 });
-        else hazards.push({ type: 'boulder', x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE), timer: 35, height: 300 });
+        
+        // Собираем свободные клетки (без блоков, монет, баффов и других опасностей)
+        const emptyCells = [];
+        for (let x = 0; x < GRID_SIZE; x++) {
+          for (let y = 0; y < GRID_SIZE; y++) {
+            if (!blocks.some(b => b.x === x && b.y === y) &&
+                !coins.some(c => Math.round(c.x) === x && Math.round(c.y) === y) &&
+                !powerups.some(p => p.x === x && p.y === y) &&
+                !hazards.some(h => h.x === x && h.y === y)) {
+              emptyCells.push({x, y});
+            }
+          }
+        }
+        
+        if (emptyCells.length > 0) {
+          const cell = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+          if (typeRand < 0.4) hazards.push({ type: 'tnt', x: cell.x, y: cell.y, timer: 60, maxTimer: 60, height: 250 });
+          else if (typeRand < 0.65) hazards.push({ type: 'spike', x: cell.x, y: cell.y, state: 'warning', timer: 45 });
+          else if (typeRand < 0.85) hazards.push({ type: 'laser', isRow: Math.random() > 0.5, index: Math.floor(Math.random() * GRID_SIZE), timer: 50, activeTimer: 25 });
+          else hazards.push({ type: 'boulder', x: cell.x, y: cell.y, timer: 35, height: 300 });
+        }
       }
 
       if (!boss && monsters.length < Math.min(3, 1 + Math.floor(score / 500)) && Math.random() < 0.008) {
@@ -810,6 +851,7 @@
       
       gameTime += 1 / 60; survivalTicks++;
       if (survivalTicks % 60 === 0) score += 10;
+      if (survivalTicks % 90 === 0 && coins.length < 4) spawnCoin();
 
       if (score < 1000) music.setLevel(1);
       else if (score < 3000) music.setLevel(2);
