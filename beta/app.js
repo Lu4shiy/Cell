@@ -20789,25 +20789,21 @@ function openGamePlayer(game) {
 
     if (!ach) return; // Такого достижения нет
 
-    // Проверяем, есть ли уже такая ачивка у пользователя
-    const { data: existing } = await supabase.from("user_achievements")
-      .select("id").eq("user_id", currentUser.id).eq("achievement_id", ach.id).maybeSingle();
+    // Пытаемся выдать (сразу insert, без лишних проверок)
+    const { error } = await supabase.from("user_achievements").insert({
+      user_id: currentUser.id,
+      achievement_id: ach.id
+    });
 
-    if (!existing) {
-      const { error } = await supabase.from("user_achievements").insert({
-        user_id: currentUser.id,
-        achievement_id: ach.id
+    // Если ошибки нет — значит, только что выдали (показываем тост).
+    // Если ошибка есть (дубликат) — значит, уже было, ничего не делаем.
+    if (!error) {
+      showInAppToast({
+        profile: { display_name: "Достижение!", avatar_url: game.icon, id: "ach" },
+        title: "Получено достижение!",
+        body: ach.title,
+        tag: "achievement-" + ach.id
       });
-
-      if (!error) {
-        // Показываем красивый тост о получении ачивки
-        showInAppToast({
-          profile: { display_name: "Достижение!", avatar_url: game.icon, id: "ach" },
-          title: "Получено достижение!",
-          body: ach.title,
-          tag: "achievement-" + ach.id
-        });
-      }
     }
   };
 

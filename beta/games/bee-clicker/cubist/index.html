@@ -314,9 +314,6 @@
           renderLeaderboard();
         }
       }
-
-    window.addEventListener("message", (e) => {
-      if (!e.data) return;
       if (e.data.type === "BALANCE_UPDATE") {
         cellBalance = e.data.balance || 0;
         document.getElementById('hudCoins').innerText = cellBalance;
@@ -335,7 +332,7 @@
           if (gameActive) {
             const buff = SHOP_BUFFS.find(u => u.id === itemId);
             applyBuff(buff.type);
-            player.boughtBuff = null; // Сбрасываем, так как уже применили
+            player.boughtBuff = null;
             showToast('Бафф активирован!', true);
           }
         }
@@ -482,12 +479,12 @@
         } catch (e) { console.error(e); }
       }
       updateHUD();
-      postToParent({ type: "GET_GAME_DATA" }); // Запрашиваем данные с сервера
+      postToParent({ type: "GET_GAME_DATA" });
     }
     function savePlayerData() {
       localStorage.setItem('cube_survival_player', JSON.stringify(player));
       updateHUD();
-      postToParent({ type: "SAVE_GAME_DATA", data: player }); // Отправляем данные на сервер
+      postToParent({ type: "SAVE_GAME_DATA", data: player });
     }
 
     const DEFAULT_LEADERBOARD = [
@@ -569,7 +566,7 @@
         const nx = cube.targetX + lastMoveDir.dx * d;
         const ny = cube.targetY + lastMoveDir.dy * d;
         if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
-          if (blocks.some(b => b.x === nx && b.y === ny)) break; // Останавливаемся перед блоком
+          if (blocks.some(b => b.x === nx && b.y === ny)) break;
           finalX = nx;
           finalY = ny;
         }
@@ -675,7 +672,6 @@
       tryUnlock('score_5000', score >= 5000);
       tryUnlock('survive_180s', gameTime >= 180);
       tryUnlock('level_10', player.level >= 10);
-      tryUnlock('boss_kill', score >= 5000);
 
       document.getElementById('goScore').innerText = score;
       document.getElementById('goCoins').innerText = sessionCoins;
@@ -706,7 +702,6 @@
         shieldTimer = 0; dashInvincible = 30; comboCount = 0; comboTimer = 0; 
         sound.playExplosion(); cameraShake = 20;
         
-        // Уничтожаем угрозы в радиусе 5
         const r = 5;
         monsters = monsters.filter(m => Math.hypot(m.x - cube.targetX, m.y - cube.targetY) > r);
         hazards = hazards.filter(h => Math.hypot(h.x - cube.targetX, h.y - cube.targetY) > r);
@@ -715,7 +710,6 @@
           boss.hp -= 2; if (boss.hp <= 0) boss = null;
         }
         
-        // Визуальный взрыв
         for (let i = 0; i < 30; i++) {
           const pos = gridToScreen(cube.targetX + 0.5, cube.targetY + 0.5);
           particles.push({ x: pos.x, y: pos.y, vx: (Math.random() - 0.5) * 15, vy: (Math.random() - 0.5) * 15, size: Math.random() * 8 + 4, color: '#3b82f6', alpha: 1, gravity: 0 });
@@ -749,7 +743,7 @@
       if (boss) {
         if (Math.abs(boss.x - tntX) <= radius && Math.abs(boss.y - tntY) <= radius) {
           boss.hp -= 2;
-          if (boss.hp <= 0) { boss = null; score += 500; addFloatingText(canvas.width/2, canvas.height/2, 'БОСС УБИТ!', '#fbbf24'); }
+          if (boss.hp <= 0) { boss = null; score += 500; tryUnlock('boss_kill', true); addFloatingText(canvas.width/2, canvas.height/2, 'БОСС УБИТ!', '#fbbf24'); }
         }
       }
 
@@ -762,7 +756,7 @@
 
     function spawnCoin() {
       if (coins.length >= 4) return;
-      for (let i = 0; i < 50; i++) { // Пробуем найти место до 50 раз
+      for (let i = 0; i < 50; i++) {
         let cx = Math.floor(Math.random() * GRID_SIZE), cy = Math.floor(Math.random() * GRID_SIZE);
         if (!coins.some(c => c.x === cx && c.y === cy) && !blocks.some(b => b.x === cx && b.y === cy)) {
           coins.push({ x: cx, y: cy, bounce: Math.random() * Math.PI });
@@ -989,7 +983,6 @@
             let nx = Math.max(0, Math.min(GRID_SIZE - 1, m.x + dx));
             let ny = Math.max(0, Math.min(GRID_SIZE - 1, m.y + dy));
             
-            // Если путь заблокирован стеной, монстр пытается обойти её
             if (blocks.some(b => b.x === nx && b.y === ny)) {
               if (dx !== 0) {
                 dx = 0;
@@ -1001,7 +994,6 @@
               nx = Math.max(0, Math.min(GRID_SIZE - 1, m.x + dx));
               ny = Math.max(0, Math.min(GRID_SIZE - 1, m.y + dy));
               
-              // Если и там стена — стоим на месте
               if (blocks.some(b => b.x === nx && b.y === ny)) {
                 nx = m.x;
                 ny = m.y;
@@ -1468,7 +1460,7 @@
     });
 
     function renderLeaderboard() {
-      const lb = window.globalLeaderboard || getLeaderboard(); // Используем данные с сервера, если есть
+      const lb = window.globalLeaderboard || getLeaderboard();
       document.getElementById('leaderboardList').innerHTML = lb.map((entry, idx) => `
         <div class="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
           <div class="flex items-center gap-3">
@@ -1634,7 +1626,7 @@
     document.getElementById('btnLeaderboard').addEventListener('click', () => { 
       openModal('leaderboardModal'); 
       renderLeaderboard();
-      postToParent({ type: "GET_LEADERBOARD" }); // Запрашиваем актуальные данные с сервера
+      postToParent({ type: "GET_LEADERBOARD" });
     });
     document.getElementById('closeLeaderboard').addEventListener('click', () => closeModal('leaderboardModal'));
     document.getElementById('btnProfile').addEventListener('click', () => { openModal('profileModal'); renderProfile(); });
