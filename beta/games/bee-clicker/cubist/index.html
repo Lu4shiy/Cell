@@ -246,6 +246,19 @@
     </div>
   </div>
 
+  <!-- КАСТОМНЫЙ CONFIRM -->
+  <div id="customConfirmModal" class="fixed inset-0 z-[100] modal-backdrop hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm flex flex-col shadow-2xl overflow-hidden text-center p-6">
+      <div class="text-rose-500 text-3xl mb-4"><i class="fa-solid fa-triangle-exclamation"></i></div>
+      <h3 class="text-xl font-bold mb-2">Сбросить прогресс?</h3>
+      <p class="text-slate-400 text-sm mb-6">Весь прогресс, монеты и скины будут удалены навсегда.</p>
+      <div class="flex gap-3">
+        <button onclick="closeCustomConfirm(false)" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-sm transition-all">Отмена</button>
+        <button onclick="closeCustomConfirm(true)" class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 font-bold text-sm transition-all">Сбросить</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     function postToParent(payload) {
       try {
@@ -419,7 +432,7 @@
     ];
     
     const SHOP_BUFFS = [
-      { id: 'buff_shield', name: 'Стартовый щит', desc: 'Начинать игру со щитом', price: 50, icon: 'fa-shield', type: 'shield' },
+      { id: 'buff_shield', name: 'Стартовый щит', desc: 'Щит на 10 сек в начале', price: 50, icon: 'fa-shield', type: 'shield' },
       { id: 'buff_magnet', name: 'Стартовый магнит', desc: 'Магнит на 10 сек в начале', price: 100, icon: 'fa-magnet', type: 'magnet' },
       { id: 'buff_slow', name: 'Стартовое замедление', desc: 'Замедление на 10 сек в начале', price: 100, icon: 'fa-hourglass-half', type: 'slow' },
       { id: 'buff_gun', name: 'Стартовая пушка', desc: 'Пушка на 15 сек в начале', price: 200, icon: 'fa-gun', type: 'gun' }
@@ -475,6 +488,7 @@
     const ctx = canvas.getContext('2d');
 
     let gameActive = false, isPaused = false, score = 0, sessionCoins = 0;
+    let gameHasStarted = false, gameIsOver = false;
     let spawnTimer = 0, difficultyTimer = 0, cameraShake = 0, gameTime = 0, survivalTicks = 0;
     let rafId = null;
 
@@ -485,8 +499,7 @@
     let blocks = [], powerups = [], bullets = [], enemyBullets = [], boss = null;
     let bossSpawnScore = 5000;
     
-    let shieldActive = false;
-    let magnetTimer = 0, slowTimer = 0, gunTimer = 0, lightningTimer = 0;
+    let shieldTimer = 0, magnetTimer = 0, slowTimer = 0, gunTimer = 0, lightningTimer = 0, dashTimer = 0;
     let dashCooldown = 0, dashInvincible = 0;
     let comboCount = 0, comboTimer = 0;
     let lastMoveDir = { dx: 1, dy: 0 };
@@ -522,16 +535,27 @@
     }
 
     function doDash() {
-      if (!gameActive || isPaused || dashCooldown > 0) return;
+      if (!gameActive || isPaused || dashCooldown > 0 || dashTimer <= 0) return;
+      
+      let finalX = cube.targetX;
+      let finalY = cube.targetY;
       const dist = 2;
-      for (let d = dist; d > 0; d--) {
-        const nx = cube.targetX + lastMoveDir.dx * d, ny = cube.targetY + lastMoveDir.dy * d;
+      
+      for (let d = 1; d <= dist; d++) {
+        const nx = cube.targetX + lastMoveDir.dx * d;
+        const ny = cube.targetY + lastMoveDir.dy * d;
         if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
-          cube.x = cube.targetX; cube.y = cube.targetY;
-          cube.targetX = nx; cube.targetY = ny; cube.animProgress = 0;
-          dashCooldown = 180;
-          dashInvincible = 20; sound.playPowerup(); return;
+          if (blocks.some(b => b.x === nx && b.y === ny)) break; // Останавливаемся перед блоком
+          finalX = nx;
+          finalY = ny;
         }
+      }
+      
+      if (finalX !== cube.targetX || finalY !== cube.targetY) {
+        cube.x = cube.targetX; cube.y = cube.targetY;
+        cube.targetX = finalX; cube.targetY = finalY; cube.animProgress = 0;
+        dashCooldown = 180;
+        dashInvincible = 20; sound.playPowerup();
       }
     }
 
@@ -572,8 +596,7 @@
       scorchedEarth = { active: false, side: null, timer: 0, isBurning: false };
       blocks = []; powerups = []; bullets = []; enemyBullets = []; boss = null;
       
-      shieldActive = false;
-      magnetTimer = 0; slowTimer = 0; gunTimer = 0; lightningTimer = 0;
+      shieldTimer = 0; magnetTimer = 0; slowTimer = 0; gunTimer = 0; lightningTimer = 0; dashTimer = 0;
       dashCooldown = 0; dashInvincible = 0; fireCooldown = 0;
       comboCount = 0; comboTimer = 0;
       shootTarget = null;
@@ -581,7 +604,7 @@
       if (player.boughtBuff) {
         const buff = SHOP_BUFFS.find(b => b.id === player.boughtBuff);
         if (buff) {
-          if (buff.type === 'shield') shieldActive = true;
+          if (buff.type === 'shield') shieldTimer = 600;
           if (buff.type === 'magnet') magnetTimer += 600;
           if (buff.type === 'slow') slowTimer += 600;
           if (buff.type === 'gun') gunTimer += 900;
@@ -592,7 +615,7 @@
       
       sessionAchievements.clear(); initBlocks();
 
-      gameActive = true; isPaused = false;
+      gameActive = true; isPaused = false; gameHasStarted = true; gameIsOver = false;
 
       document.getElementById('startView').classList.add('hidden');
       document.getElementById('pauseView').classList.add('hidden');
@@ -607,7 +630,7 @@
 
     function gameOver() {
       if (!gameActive) return;
-      gameActive = false;
+      gameActive = false; gameIsOver = true;
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
       sound.playExplosion(); music.stop();
 
@@ -649,10 +672,26 @@
     }
 
     function takeDamage() {
-      if (shieldActive) {
-        shieldActive = false; dashInvincible = 30; comboCount = 0; comboTimer = 0; 
-        sound.playWarning();
-        addFloatingText(gridToScreen(cube.targetX + 0.5, cube.targetY).x, gridToScreen(cube.targetX, cube.targetY).y - 20, 'ЩИТ!', '#3b82f6');
+      if (shieldTimer > 0) {
+        shieldTimer = 0; dashInvincible = 30; comboCount = 0; comboTimer = 0; 
+        sound.playExplosion(); cameraShake = 20;
+        
+        // Уничтожаем угрозы в радиусе 5
+        const r = 5;
+        monsters = monsters.filter(m => Math.hypot(m.x - cube.targetX, m.y - cube.targetY) > r);
+        hazards = hazards.filter(h => Math.hypot(h.x - cube.targetX, h.y - cube.targetY) > r);
+        enemyBullets = enemyBullets.filter(eb => Math.hypot(eb.x - cube.targetX, eb.y - cube.targetY) > r);
+        if (boss && Math.hypot(boss.x - cube.targetX, boss.y - cube.targetY) <= r) {
+          boss.hp -= 2; if (boss.hp <= 0) boss = null;
+        }
+        
+        // Визуальный взрыв
+        for (let i = 0; i < 30; i++) {
+          const pos = gridToScreen(cube.targetX + 0.5, cube.targetY + 0.5);
+          particles.push({ x: pos.x, y: pos.y, vx: (Math.random() - 0.5) * 15, vy: (Math.random() - 0.5) * 15, size: Math.random() * 8 + 4, color: '#3b82f6', alpha: 1, gravity: 0 });
+        }
+        
+        addFloatingText(gridToScreen(cube.targetX + 0.5, cube.targetY).x, gridToScreen(cube.targetX, cube.targetY).y - 20, 'ЩИТ ВЗОРВАЛСЯ!', '#3b82f6');
         return;
       }
       if (dashInvincible > 0) return;
@@ -726,10 +765,11 @@
         
         let r = Math.random();
         let type = 'shield';
-        if (r < 0.35) type = 'shield';
-        else if (r < 0.6) type = 'magnet';
-        else if (r < 0.75) type = 'slow';
-        else if (r < 0.92) type = 'lightning';
+        if (r < 0.25) type = 'shield';
+        else if (r < 0.45) type = 'magnet';
+        else if (r < 0.6) type = 'slow';
+        else if (r < 0.75) type = 'lightning';
+        else if (r < 0.85) type = 'dash';
         else type = 'gun';
         
         powerups.push({ x: px, y: py, type, bounce: Math.random() * Math.PI });
@@ -777,6 +817,8 @@
       if (slowTimer > 0) slowTimer--;
       if (gunTimer > 0) gunTimer--;
       if (lightningTimer > 0) lightningTimer--;
+      if (dashTimer > 0) dashTimer--;
+      if (shieldTimer > 0) shieldTimer--;
       if (dashCooldown > 0) dashCooldown--;
       if (dashInvincible > 0) dashInvincible--;
       if (fireCooldown > 0) fireCooldown--;
@@ -851,10 +893,11 @@
         const pu = powerups[i]; pu.bounce += 0.1;
         if (Math.hypot(currCubeX - pu.x, currCubeY - pu.y) < 0.6) {
           sound.playPowerup();
-          if (pu.type === 'shield') shieldActive = true;
-          if (pu.type === 'magnet') magnetTimer += 300;
-          if (pu.type === 'slow') slowTimer += 300;
+          if (pu.type === 'shield') shieldTimer += 600;
+          if (pu.type === 'magnet') magnetTimer += 600;
+          if (pu.type === 'slow') slowTimer += 600;
           if (pu.type === 'lightning') { monsters = []; if (boss) boss.hp -= 1; lightningTimer += 120; }
+          if (pu.type === 'dash') { dashTimer += 300; }
           if (pu.type === 'gun') gunTimer += 600;
           addFloatingText(gridToScreen(pu.x + 0.5, pu.y + 0.5).x, gridToScreen(pu.x + 0.5, pu.y + 0.5).y - 15, 'БАФФ!', '#10b981');
           powerups.splice(i, 1);
@@ -1016,8 +1059,8 @@
       const cont = document.getElementById('hudBuffs');
       let html = '';
       
-      if (shieldActive) {
-        html += `<div class="relative w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-500 flex flex-col items-center justify-center text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.5)]" title="Щит"><i class="fa-solid fa-shield text-sm"></i><span class="text-[9px] font-bold mt-0.5">∞</span></div>`;
+      if (shieldTimer > 0) {
+        html += `<div class="relative w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-500 flex flex-col items-center justify-center text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.5)]" title="Щит"><i class="fa-solid fa-shield text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(shieldTimer/60)}s</span></div>`;
       }
       if (magnetTimer > 0) {
         html += `<div class="relative w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500 flex flex-col items-center justify-center text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.5)]" title="Магнит"><i class="fa-solid fa-magnet text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(magnetTimer/60)}s</span></div>`;
@@ -1030,6 +1073,9 @@
       }
       if (lightningTimer > 0) {
         html += `<div class="relative w-10 h-10 rounded-lg bg-yellow-500/20 border border-yellow-500 flex flex-col items-center justify-center text-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.5)]" title="Молния"><i class="fa-solid fa-bolt text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(lightningTimer/60)}s</span></div>`;
+      }
+      if (dashTimer > 0) {
+        html += `<div class="relative w-10 h-10 rounded-lg bg-purple-500/20 border border-purple-500 flex flex-col items-center justify-center text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.5)]" title="Рывок"><i class="fa-solid fa-bolt-lightning text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(dashTimer/60)}s</span></div>`;
       }
       
       cont.innerHTML = html;
@@ -1095,6 +1141,7 @@
         if (pu.type === 'magnet') glowColor = '#f59e0b';
         if (pu.type === 'slow') glowColor = '#06b6d4';
         if (pu.type === 'lightning') glowColor = '#eab308';
+        if (pu.type === 'dash') glowColor = '#a855f7';
         if (pu.type === 'gun') glowColor = '#f43f5e';
         
         ctx.shadowBlur = 15; ctx.shadowColor = glowColor;
@@ -1120,6 +1167,9 @@
           ctx.closePath(); ctx.fill();
         } else if (pu.type === 'lightning') {
           ctx.beginPath(); ctx.moveTo(4, -12); ctx.lineTo(-6, 2); ctx.lineTo(-1, 2); ctx.lineTo(-4, 12); ctx.lineTo(6, -2); ctx.lineTo(1, -2);
+          ctx.closePath(); ctx.fill();
+        } else if (pu.type === 'dash') {
+          ctx.beginPath(); ctx.moveTo(-4, -12); ctx.lineTo(8, 0); ctx.lineTo(-4, 12); ctx.lineTo(-4, 4); ctx.lineTo(-10, 4); ctx.lineTo(-10, -4); ctx.lineTo(-4, -4);
           ctx.closePath(); ctx.fill();
         } else if (pu.type === 'gun') {
           ctx.fillStyle = '#f43f5e';
@@ -1152,9 +1202,9 @@
       bullets.forEach(b => { const pos = gridToScreen(b.x, b.y); ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2); ctx.fill(); });
       enemyBullets.forEach(eb => { const pos = gridToScreen(eb.x, eb.y); ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2); ctx.fill(); });
 
-      if (dashInvincible > 0 || (shieldActive && Math.floor(Date.now()/100)%2===0)) {
+      if (dashInvincible > 0 || (shieldTimer > 0 && Math.floor(Date.now()/100)%2===0)) {
         const pos = gridToScreen(cube.targetX + 0.5, cube.targetY + 0.5);
-        ctx.strokeStyle = shieldActive ? '#3b82f6' : '#fff'; ctx.lineWidth = 3;
+        ctx.strokeStyle = shieldTimer > 0 ? '#3b82f6' : '#fff'; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(pos.x, pos.y, tileSize * 0.6, 0, Math.PI * 2); ctx.stroke();
       }
       drawCube(cube, activeSkinObj);
@@ -1346,6 +1396,22 @@
       postToParent({ type: "PURCHASE_ITEM", itemId: id, itemType: "upgrade", price: up.price, itemName: up.name });
     };
 
+    let confirmResolve = null;
+    window.closeCustomConfirm = (val) => {
+      document.getElementById('customConfirmModal').classList.add('hidden');
+      if (confirmResolve) confirmResolve(val);
+    };
+    document.getElementById('btnResetProgress').addEventListener('click', async () => {
+      document.getElementById('customConfirmModal').classList.remove('hidden');
+      const res = await new Promise(r => confirmResolve = r);
+      if (res) {
+        player = { ...DEFAULT_PLAYER };
+        localStorage.removeItem('cube_survival_player');
+        localStorage.removeItem('cube_survival_lb');
+        savePlayerData(); renderProfile(); renderShop();
+      }
+    });
+
     function renderLeaderboard() {
       const lb = getLeaderboard();
       document.getElementById('leaderboardList').innerHTML = lb.map((entry, idx) => `
@@ -1371,7 +1437,7 @@
     }
 
     function isAnyModalOpen() {
-      return ['shopModal', 'leaderboardModal', 'profileModal'].some(id => !document.getElementById(id).classList.contains('hidden'));
+      return ['shopModal', 'leaderboardModal', 'profileModal', 'customConfirmModal'].some(id => !document.getElementById(id).classList.contains('hidden'));
     }
     function showPauseView() {
       document.getElementById('startView').classList.add('hidden');
@@ -1401,7 +1467,13 @@
       document.getElementById(id).classList.add('hidden');
       if (!gameActive) {
         document.getElementById('pauseView').classList.add('hidden');
-        document.getElementById('gameOverView').classList.remove('hidden');
+        if (gameHasStarted) {
+          document.getElementById('gameOverView').classList.remove('hidden');
+          document.getElementById('startView').classList.add('hidden');
+        } else {
+          document.getElementById('gameOverView').classList.add('hidden');
+          document.getElementById('startView').classList.remove('hidden');
+        }
         document.getElementById('screenOverlay').classList.remove('opacity-0', 'pointer-events-none');
         return;
       }
@@ -1420,7 +1492,6 @@
       if (['ArrowRight', 'KeyD'].includes(e.code)) { e.preventDefault(); movePlayer(1, 0); }
     });
 
-    // Тап / Клик по канвасу
     let mouseStartX = 0, mouseStartY = 0, mouseStartTime = 0;
     let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
 
@@ -1473,11 +1544,9 @@
     function handleTap(clientX, clientY) {
       const now = Date.now();
       if (now - lastTap < 300) {
-        // Двойной тап
         doDash();
         shootTarget = null;
       } else {
-        // Одиночный тап
         if (gunTimer > 0) {
           const rect = canvas.getBoundingClientRect();
           const scaleX = canvas.width / rect.width;
@@ -1515,13 +1584,6 @@
     document.getElementById('btnSaveName').addEventListener('click', () => {
       const val = document.getElementById('inputPlayerName').value.trim();
       if (val) { player.name = val; savePlayerData(); renderProfile(); }
-    });
-    document.getElementById('btnResetProgress').addEventListener('click', () => {
-      if (!confirm('Сбросить весь прогресс (уровень, Chip, скины, рекорд)?')) return;
-      player = { ...DEFAULT_PLAYER };
-      localStorage.removeItem('cube_survival_player');
-      localStorage.removeItem('cube_survival_lb');
-      savePlayerData(); renderProfile(); renderShop();
     });
 
     const tabSkins = document.getElementById('tabSkins'), tabMaps = document.getElementById('tabMaps'), tabUpgrades = document.getElementById('tabUpgrades');
