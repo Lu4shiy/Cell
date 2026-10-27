@@ -20618,7 +20618,7 @@ function openGamePlayer(game) {
         <span class="cell-icon" data-icon="cancel"></span>
       </button>
     </div>
-    <iframe class="gaming-player-frame" id="gaming-player-frame" src="${escapeHtml(game.url)}" allowfullscreen sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+    <iframe class="gaming-player-frame" id="gaming-player-frame" src="${escapeHtml(game.url)}" allowfullscreen sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
   `;
   
   document.body.appendChild(overlay);
