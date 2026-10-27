@@ -40,13 +40,11 @@
 </head>
 <body class="w-full h-full overflow-hidden select-none flex flex-col font-sans bg-slate-950 text-white">
 
-  <!-- Уведомление о покупке -->
   <div id="shopToast" class="fixed top-20 left-1/2 bg-emerald-500 text-white px-6 py-2 rounded-full font-bold shadow-lg opacity-0 pointer-events-none z-50 flex items-center gap-2">
     <i class="fa-solid fa-check"></i>
     <span>Покупка успешна!</span>
   </div>
 
-  <!-- TOP HUD -->
   <header class="w-full max-w-5xl mx-auto p-3 sm:p-4 flex items-center justify-between z-10 shrink-0 relative">
     <div class="flex items-center gap-3">
       <button id="btnProfile" class="flex items-center gap-2 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 rounded-xl px-3 py-1.5 transition-all active:scale-95">
@@ -91,24 +89,9 @@
     </div>
   </header>
 
-  <!-- MAIN CANVAS CONTAINER -->
   <main class="relative flex-1 w-full mx-auto flex items-center justify-center p-2 min-h-0 overflow-hidden">
     <canvas id="gameCanvas" class="rounded-2xl shadow-2xl border border-slate-800/80 bg-slate-900"></canvas>
 
-    <!-- Кнопки мобильного управления -->
-    <div id="mobileControls" class="absolute inset-0 pointer-events-none hidden">
-      <button id="btnDash" class="absolute bottom-6 left-6 w-16 h-16 rounded-full bg-slate-800/80 border-2 border-purple-500 text-purple-400 flex flex-col items-center justify-center pointer-events-auto active:scale-90 transition-all opacity-50">
-        <i class="fa-solid fa-bolt text-xl"></i>
-        <span class="text-[10px] font-bold mt-1">РЫВОК</span>
-      </button>
-      
-      <button id="btnFire" class="absolute bottom-6 right-6 w-16 h-16 rounded-full bg-slate-800/80 border-2 border-rose-500 text-rose-400 flex flex-col items-center justify-center pointer-events-auto active:scale-90 transition-all hidden">
-        <i class="fa-solid fa-gun text-xl"></i>
-        <span class="text-[10px] font-bold mt-1">ОГОНЬ</span>
-      </button>
-    </div>
-
-    <!-- Overlays -->
     <div id="screenOverlay" class="absolute inset-0 m-2 rounded-2xl modal-backdrop flex flex-col items-center justify-center p-6 text-center z-20 transition-opacity duration-300">
       <div id="startView" class="space-y-6 max-w-sm w-full">
         <div class="inline-block p-4 rounded-2xl bg-gradient-to-tr from-purple-600/30 to-indigo-500/30 border border-purple-500/40 glow-purple mb-2">
@@ -177,9 +160,9 @@
         </button>
       </div>
       <div class="flex border-b border-slate-800 bg-slate-950/40 text-sm font-semibold overflow-x-auto">
-        <button id="tabSkins" class="flex-1 py-3 px-2 border-b-2 border-purple-500 text-purple-400 transition-all whitespace-nowrap">Скины Куба</button>
+        <button id="tabSkins" class="flex-1 py-3 px-2 border-b-2 border-purple-500 text-purple-400 transition-all whitespace-nowrap">Скины</button>
         <button id="tabMaps" class="flex-1 py-3 px-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition-all whitespace-nowrap">Локации</button>
-        <button id="tabUpgrades" class="flex-1 py-3 px-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition-all whitespace-nowrap">Улучшения</button>
+        <button id="tabUpgrades" class="flex-1 py-3 px-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition-all whitespace-nowrap">Стартовые баффы</button>
       </div>
       <div class="p-4 overflow-y-auto flex-1 space-y-4">
         <div id="shopSkinsList" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
@@ -318,8 +301,8 @@
         if (MAPS.some(m => m.id === itemId) && !player.unlockedMaps.includes(itemId)) {
           player.unlockedMaps.push(itemId); player.activeMap = itemId;
         }
-        if (UPGRADES.some(u => u.id === itemId) && !player.upgrades.includes(itemId)) {
-          player.upgrades.push(itemId);
+        if (SHOP_BUFFS.some(u => u.id === itemId)) {
+          player.boughtBuff = itemId;
         }
         sound.playBuy();
         savePlayerData();
@@ -434,18 +417,19 @@
       { id: 'map_dungeon', name: 'Тёмное Подземелье', gridBg: '#121214', tileBorder: '#27272a', tileFill: '#18181b', accent: '#64748b', price: 350 },
       { id: 'map_space', name: 'Глубокий Космос', gridBg: '#050515', tileBorder: '#1e1b4b', tileFill: '#09092b', accent: '#3b82f6', price: 500 }
     ];
-    const UPGRADES = [
-      { id: 'up_start_shield', name: 'Стартовый щит', desc: 'Начинать игру со щитом', price: 300, icon: 'fa-shield' },
-      { id: 'up_coin_magnet', name: 'Магнит', desc: '+10% к радиусу сбора', price: 500, icon: 'fa-magnet' },
-      { id: 'up_tnt_radius', name: 'Мега-взрыв', desc: '+1 к радиусу TNT', price: 800, icon: 'fa-bomb' },
-      { id: 'up_start_dash', name: 'Быстрый рывок', desc: 'Рывок заряжается быстрее', price: 400, icon: 'fa-bolt' }
+    
+    const SHOP_BUFFS = [
+      { id: 'buff_shield', name: 'Стартовый щит', desc: 'Начинать игру со щитом', price: 50, icon: 'fa-shield', type: 'shield' },
+      { id: 'buff_magnet', name: 'Стартовый магнит', desc: 'Магнит на 10 сек в начале', price: 100, icon: 'fa-magnet', type: 'magnet' },
+      { id: 'buff_slow', name: 'Стартовое замедление', desc: 'Замедление на 10 сек в начале', price: 100, icon: 'fa-hourglass-half', type: 'slow' },
+      { id: 'buff_gun', name: 'Стартовая пушка', desc: 'Пушка на 15 сек в начале', price: 200, icon: 'fa-gun', type: 'gun' }
     ];
 
     const DEFAULT_PLAYER = {
       name: 'Кубер', level: 1, xp: 0, totalCoins: 0, highScore: 0, gamesPlayed: 0,
       activeSkin: 'skin_purple', activeMap: 'map_cyber',
       unlockedSkins: ['skin_purple'], unlockedMaps: ['map_cyber'],
-      upgrades: [], achievements: []
+      boughtBuff: null, achievements: []
     };
 
     let player = { ...DEFAULT_PLAYER };
@@ -458,7 +442,7 @@
           player = { ...DEFAULT_PLAYER, ...parsed };
           if (!player.unlockedSkins.includes(player.activeSkin)) player.activeSkin = 'skin_purple';
           if (!player.unlockedMaps.includes(player.activeMap)) player.activeMap = 'map_cyber';
-          if (!player.upgrades) player.upgrades = [];
+          if (player.upgrades) delete player.upgrades;
           if (!player.achievements) player.achievements = [];
         } catch (e) { console.error(e); }
       }
@@ -499,16 +483,18 @@
     let scorchedEarth = { active: false, side: null, timer: 0, isBurning: false };
     
     let blocks = [], powerups = [], bullets = [], enemyBullets = [], boss = null;
-    let bossSpawnScore = 2000;
+    let bossSpawnScore = 5000;
     
     let shieldActive = false;
-    let magnetTimer = 0, slowTimer = 0, gunTimer = 0;
+    let magnetTimer = 0, slowTimer = 0, gunTimer = 0, lightningTimer = 0;
     let dashCooldown = 0, dashInvincible = 0;
     let comboCount = 0, comboTimer = 0;
     let lastMoveDir = { dx: 1, dy: 0 };
-    let fireCooldown = 0, isFiring = false;
+    let fireCooldown = 0;
+    let shootTarget = null;
 
     let tileSize = 40, originX = 0, originY = 0;
+    let lastTap = 0;
 
     function resizeCanvas() {
       const container = canvas.parentElement;
@@ -541,12 +527,9 @@
       for (let d = dist; d > 0; d--) {
         const nx = cube.targetX + lastMoveDir.dx * d, ny = cube.targetY + lastMoveDir.dy * d;
         if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
-          // 🔴 Рывок теперь ломает блоки!
-          blocks = blocks.filter(b => !(b.x === nx && b.y === ny));
-          
           cube.x = cube.targetX; cube.y = cube.targetY;
           cube.targetX = nx; cube.targetY = ny; cube.animProgress = 0;
-          dashCooldown = player.upgrades.includes('up_start_dash') ? 120 : 180;
+          dashCooldown = 180;
           dashInvincible = 20; sound.playPowerup(); return;
         }
       }
@@ -554,10 +537,19 @@
 
     function shoot() {
       if (gunTimer <= 0 || fireCooldown > 0) return;
-      const bx = cube.targetX + 0.5 + lastMoveDir.dx * 0.5;
-      const by = cube.targetY + 0.5 + lastMoveDir.dy * 0.5;
-      bullets.push({ x: bx, y: by, dx: lastMoveDir.dx, dy: lastMoveDir.dy, life: 20 });
-      fireCooldown = 15; sound.playShoot();
+      if (shootTarget) {
+        const bx = cube.targetX + 0.5;
+        const by = cube.targetY + 0.5;
+        const dx = shootTarget.x - bx;
+        const dy = shootTarget.y - by;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0) {
+          bullets.push({ x: bx, y: by, dx: dx / dist, dy: dy / dist, life: 30 });
+        }
+        shootTarget = null;
+        fireCooldown = 60;
+        sound.playShoot();
+      }
     }
 
     function initBlocks() {
@@ -574,16 +566,29 @@
       sound.init(); loadPlayerData(); requestBalance();
 
       score = 0; sessionCoins = 0; spawnTimer = 0; difficultyTimer = 0; gameTime = 0; survivalTicks = 0; cameraShake = 0;
-      bossSpawnScore = 2000;
+      bossSpawnScore = 5000;
       cube = { x: 4, y: 4, targetX: 4, targetY: 4, animProgress: 1 };
       coins = []; hazards = []; monsters = []; particles = []; floatingTexts = [];
       scorchedEarth = { active: false, side: null, timer: 0, isBurning: false };
       blocks = []; powerups = []; bullets = []; enemyBullets = []; boss = null;
       
-      shieldActive = player.upgrades.includes('up_start_shield');
-      magnetTimer = 0; slowTimer = 0; gunTimer = 0;
+      shieldActive = false;
+      magnetTimer = 0; slowTimer = 0; gunTimer = 0; lightningTimer = 0;
       dashCooldown = 0; dashInvincible = 0; fireCooldown = 0;
       comboCount = 0; comboTimer = 0;
+      shootTarget = null;
+      
+      if (player.boughtBuff) {
+        const buff = SHOP_BUFFS.find(b => b.id === player.boughtBuff);
+        if (buff) {
+          if (buff.type === 'shield') shieldActive = true;
+          if (buff.type === 'magnet') magnetTimer += 600;
+          if (buff.type === 'slow') slowTimer += 600;
+          if (buff.type === 'gun') gunTimer += 900;
+          player.boughtBuff = null;
+          savePlayerData();
+        }
+      }
       
       sessionAchievements.clear(); initBlocks();
 
@@ -593,7 +598,6 @@
       document.getElementById('pauseView').classList.add('hidden');
       document.getElementById('gameOverView').classList.add('hidden');
       document.getElementById('screenOverlay').classList.add('opacity-0', 'pointer-events-none');
-      document.getElementById('mobileControls').classList.remove('hidden');
       
       updateHUD(); updateBuffsUI();
       spawnCoin(); spawnCoin(); spawnCoin();
@@ -606,7 +610,6 @@
       gameActive = false;
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
       sound.playExplosion(); music.stop();
-      document.getElementById('mobileControls').classList.add('hidden');
 
       player.gamesPlayed++; player.totalCoins += sessionCoins;
       if (score > player.highScore) player.highScore = score;
@@ -619,7 +622,7 @@
       tryUnlock('score_5000', score >= 5000);
       tryUnlock('survive_180s', gameTime >= 180);
       tryUnlock('level_10', player.level >= 10);
-      tryUnlock('boss_kill', score >= 2000);
+      tryUnlock('boss_kill', score >= 5000);
 
       document.getElementById('goScore').innerText = score;
       document.getElementById('goCoins').innerText = sessionCoins;
@@ -658,7 +661,7 @@
 
     function triggerTNTExplosion(tntX, tntY) {
       sound.playExplosion(); cameraShake = 15;
-      const radius = player.upgrades.includes('up_tnt_radius') ? 2 : 1;
+      const radius = 1;
 
       for (let dx = -radius; dx <= radius; dx++) {
         for (let dy = -radius; dy <= radius; dy++) {
@@ -669,7 +672,6 @@
 
       coins = coins.filter(c => !(Math.abs(c.x - tntX) <= radius && Math.abs(c.y - tntY) <= radius));
       monsters = monsters.filter(m => !(Math.abs(m.x - tntX) <= radius && Math.abs(m.y - tntY) <= radius));
-      blocks = blocks.filter(b => !(Math.abs(b.x - tntX) <= radius && Math.abs(b.y - tntY) <= radius));
       hazards = hazards.filter(h => {
         if ((h.type === 'spike' || h.type === 'tnt' || h.type === 'boulder') && Math.abs(h.x - tntX) <= radius && Math.abs(h.y - tntY) <= radius) return false;
         return true;
@@ -716,10 +718,9 @@
       return false;
     }
 
-    // 🔴 Исправлен спавн баффов: только 1 на карте и реже
     function spawnPowerup() {
-      if (powerups.length >= 1) return; // Максимум 1 бафф на карте
-      if (Math.random() < 0.0015) { // ~1 раз в 10-15 секунд
+      if (powerups.length >= 1) return;
+      if (Math.random() < 0.001) {
         let px = Math.floor(Math.random() * GRID_SIZE), py = Math.floor(Math.random() * GRID_SIZE);
         if (blocks.some(b => b.x === px && b.y === py)) return;
         
@@ -741,7 +742,7 @@
 
       if (score >= bossSpawnScore && !boss) {
         boss = { x: 0, y: 0, targetX: 0, targetY: 0, hp: 4, animProgress: 1, moveCooldown: 30, shootCooldown: 60 };
-        bossSpawnScore += 3000; sound.playWarning();
+        bossSpawnScore += 5000; sound.playWarning();
       }
 
       const spawnInterval = Math.max(28, 120 - Math.floor(difficultyTimer * 15));
@@ -775,6 +776,7 @@
       if (magnetTimer > 0) magnetTimer--;
       if (slowTimer > 0) slowTimer--;
       if (gunTimer > 0) gunTimer--;
+      if (lightningTimer > 0) lightningTimer--;
       if (dashCooldown > 0) dashCooldown--;
       if (dashInvincible > 0) dashInvincible--;
       if (fireCooldown > 0) fireCooldown--;
@@ -815,12 +817,12 @@
         }
       }
 
-      if (gunTimer > 0 && (isFiring || Math.random() < 0.1)) shoot();
+      if (gunTimer > 0 && shootTarget) shoot();
 
       if (magnetTimer > 0) {
         coins.forEach(c => {
           const dist = Math.hypot(c.x - cube.targetX, c.y - cube.targetY);
-          if (dist < 6 && dist > 0.5) {
+          if (dist < 4 && dist > 0.5) {
             c.x += (cube.targetX - c.x) * 0.1;
             c.y += (cube.targetY - c.y) * 0.1;
           }
@@ -830,11 +832,11 @@
       for (let idx = coins.length - 1; idx >= 0; idx--) {
         const coin = coins[idx];
         coin.bounce += 0.1;
-        const pickRadius = player.upgrades.includes('up_coin_magnet') ? 0.8 : 0.6;
+        const pickRadius = 0.6;
         if (Math.hypot(currCubeX - coin.x, currCubeY - coin.y) < pickRadius) {
           sessionCoins += 5; comboCount++; comboTimer = 180;
           let mult = comboCount >= 15 ? 4 : comboCount >= 10 ? 3 : comboCount >= 5 ? 2 : 1;
-          score += 50 * mult;
+          score += 25 * mult;
           
           addFloatingText(gridToScreen(coin.x + 0.5, coin.y + 0.5).x, gridToScreen(coin.x + 0.5, coin.y + 0.5).y - 10, `+${5} Chip`, '#f59e0b');
           sound.playCoin(); coins.splice(idx, 1); spawnCoin();
@@ -850,10 +852,10 @@
         if (Math.hypot(currCubeX - pu.x, currCubeY - pu.y) < 0.6) {
           sound.playPowerup();
           if (pu.type === 'shield') shieldActive = true;
-          if (pu.type === 'magnet') magnetTimer = 300;
-          if (pu.type === 'slow') slowTimer = 300;
-          if (pu.type === 'lightning') { monsters = []; if (boss) boss.hp -= 1; }
-          if (pu.type === 'gun') { gunTimer = 600; document.getElementById('btnFire').classList.remove('hidden'); }
+          if (pu.type === 'magnet') magnetTimer += 300;
+          if (pu.type === 'slow') slowTimer += 300;
+          if (pu.type === 'lightning') { monsters = []; if (boss) boss.hp -= 1; lightningTimer += 120; }
+          if (pu.type === 'gun') gunTimer += 600;
           addFloatingText(gridToScreen(pu.x + 0.5, pu.y + 0.5).x, gridToScreen(pu.x + 0.5, pu.y + 0.5).y - 15, 'БАФФ!', '#10b981');
           powerups.splice(i, 1);
         }
@@ -931,7 +933,6 @@
           if (boss.moveCooldown <= 0) {
             boss.moveCooldown = 25;
             let dx = 0, dy = 0;
-            // 🔴 Босс двигается на 2 клетки за ход
             if (Math.abs(cube.targetX - boss.x) > Math.abs(cube.targetY - boss.y)) dx = Math.sign(cube.targetX - boss.x) * 2;
             else dy = Math.sign(cube.targetY - boss.y) * 2;
             
@@ -976,6 +977,14 @@
       for (let i = enemyBullets.length - 1; i >= 0; i--) {
         const eb = enemyBullets[i];
         eb.x += eb.dx * 0.15; eb.y += eb.dy * 0.15; eb.life--;
+        
+        const ebTileX = Math.floor(eb.x), ebTileY = Math.floor(eb.y);
+        if (blocks.some(bk => bk.x === ebTileX && bk.y === ebTileY)) {
+          blocks = blocks.filter(bk => !(bk.x === ebTileX && bk.y === ebTileY));
+          enemyBullets.splice(i, 1);
+          continue;
+        }
+
         if (Math.hypot(currCubeX - eb.x + 0.5, currCubeY - eb.y + 0.5) < 0.6) {
           takeDamage(); enemyBullets.splice(i, 1); continue;
         }
@@ -1007,18 +1016,23 @@
       const cont = document.getElementById('hudBuffs');
       let html = '';
       
-      if (shieldActive) html += `<div class="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500 flex items-center justify-center text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.5)]" title="Щит"><i class="fa-solid fa-shield"></i></div>`;
-      if (magnetTimer > 0) html += `<div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500 flex items-center justify-center text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.5)]" title="Магнит"><i class="fa-solid fa-magnet"></i></div>`;
-      if (gunTimer > 0) html += `<div class="w-8 h-8 rounded-lg bg-rose-500/20 border border-rose-500 flex items-center justify-center text-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.5)]" title="Пушка"><i class="fa-solid fa-gun"></i></div>`;
-      if (slowTimer > 0) html += `<div class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500 flex items-center justify-center text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.5)]" title="Замедление"><i class="fa-solid fa-hourglass-half"></i></div>`;
+      if (shieldActive) {
+        html += `<div class="relative w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-500 flex flex-col items-center justify-center text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.5)]" title="Щит"><i class="fa-solid fa-shield text-sm"></i><span class="text-[9px] font-bold mt-0.5">∞</span></div>`;
+      }
+      if (magnetTimer > 0) {
+        html += `<div class="relative w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500 flex flex-col items-center justify-center text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.5)]" title="Магнит"><i class="fa-solid fa-magnet text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(magnetTimer/60)}s</span></div>`;
+      }
+      if (gunTimer > 0) {
+        html += `<div class="relative w-10 h-10 rounded-lg bg-rose-500/20 border border-rose-500 flex flex-col items-center justify-center text-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.5)]" title="Пушка"><i class="fa-solid fa-gun text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(gunTimer/60)}s</span></div>`;
+      }
+      if (slowTimer > 0) {
+        html += `<div class="relative w-10 h-10 rounded-lg bg-cyan-500/20 border border-cyan-500 flex flex-col items-center justify-center text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.5)]" title="Замедление"><i class="fa-solid fa-hourglass-half text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(slowTimer/60)}s</span></div>`;
+      }
+      if (lightningTimer > 0) {
+        html += `<div class="relative w-10 h-10 rounded-lg bg-yellow-500/20 border border-yellow-500 flex flex-col items-center justify-center text-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.5)]" title="Молния"><i class="fa-solid fa-bolt text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(lightningTimer/60)}s</span></div>`;
+      }
       
       cont.innerHTML = html;
-
-      const btnDash = document.getElementById('btnDash');
-      if (dashCooldown > 0) btnDash.classList.add('opacity-30', 'grayscale'); else btnDash.classList.remove('opacity-30', 'grayscale');
-      
-      const btnFire = document.getElementById('btnFire');
-      if (gunTimer > 0) btnFire.classList.remove('hidden'); else btnFire.classList.add('hidden');
     }
 
     function render() {
@@ -1095,8 +1109,12 @@
           ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(10, -5); ctx.lineTo(10, 5); ctx.lineTo(0, 12); ctx.lineTo(-10, 5); ctx.lineTo(-10, -5);
           ctx.closePath(); ctx.fill();
         } else if (pu.type === 'magnet') {
-          ctx.beginPath(); ctx.arc(0, 2, 8, 0, Math.PI); ctx.stroke();
-          ctx.beginPath(); ctx.rect(-10, -8, 4, 10); ctx.rect(6, -8, 4, 10); ctx.fill();
+          ctx.lineWidth = 6;
+          ctx.strokeStyle = '#ef4444'; 
+          ctx.beginPath(); ctx.arc(0, 0, 8, Math.PI, 0, false); ctx.stroke();
+          
+          ctx.fillStyle = '#3b82f6'; ctx.fillRect(5, 0, 6, 8);
+          ctx.fillStyle = '#ef4444'; ctx.fillRect(-11, 0, 6, 8);
         } else if (pu.type === 'slow') {
           ctx.beginPath(); ctx.moveTo(-8, -10); ctx.lineTo(8, -10); ctx.lineTo(0, 0); ctx.lineTo(8, 10); ctx.lineTo(-8, 10); ctx.lineTo(0, 0);
           ctx.closePath(); ctx.fill();
@@ -1104,7 +1122,11 @@
           ctx.beginPath(); ctx.moveTo(4, -12); ctx.lineTo(-6, 2); ctx.lineTo(-1, 2); ctx.lineTo(-4, 12); ctx.lineTo(6, -2); ctx.lineTo(1, -2);
           ctx.closePath(); ctx.fill();
         } else if (pu.type === 'gun') {
-          ctx.fillRect(-10, -4, 20, 8); ctx.fillRect(-4, 4, 6, 8);
+          ctx.fillStyle = '#f43f5e';
+          ctx.fillRect(-10, -4, 20, 6); 
+          ctx.fillRect(-2, 2, 6, 8); 
+          ctx.fillStyle = '#fef08a';
+          ctx.fillRect(6, -3, 6, 4); 
         }
         ctx.restore();
       });
@@ -1181,7 +1203,7 @@
     }
     function drawTNTWarning3x3(h) {
       const pulseAlpha = 0.25 + 0.15 * Math.sin(Date.now() / 80);
-      const rad = player.upgrades.includes('up_tnt_radius') ? 2 : 1;
+      const rad = 1;
       for (let dx = -rad; dx <= rad; dx++) {
         for (let dy = -rad; dy <= rad; dy++) {
           const gx = h.x + dx, gy = h.y + dy;
@@ -1287,17 +1309,17 @@
           </div>`;
       }).join('');
 
-      document.getElementById('shopUpgradesList').innerHTML = UPGRADES.map(u => {
-        const isUnlocked = player.upgrades.includes(u.id);
+      document.getElementById('shopUpgradesList').innerHTML = SHOP_BUFFS.map(u => {
+        const isBought = player.boughtBuff === u.id;
         return `
-          <div class="bg-slate-950 p-3 rounded-xl border ${isUnlocked ? 'border-emerald-500/50' : 'border-slate-800'} flex items-center justify-between transition-all duration-300 hover:bg-slate-900">
+          <div class="bg-slate-950 p-3 rounded-xl border ${isBought ? 'border-emerald-500/50' : 'border-slate-800'} flex items-center justify-between transition-all duration-300 hover:bg-slate-900">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-slate-800 text-emerald-400 border border-slate-700">
                 <i class="fa-solid ${u.icon}"></i>
               </div>
-              <div><div class="font-bold text-sm text-slate-100">${u.name}</div><div class="text-[10px] text-slate-400">${u.desc}</div><div class="text-xs text-amber-400 font-semibold mt-1">${isUnlocked ? 'Куплено' : u.price + ' Chip'}</div></div>
+              <div><div class="font-bold text-sm text-slate-100">${u.name}</div><div class="text-[10px] text-slate-400">${u.desc}</div><div class="text-xs text-amber-400 font-semibold mt-1">${isBought ? 'Куплено' : u.price + ' Chip'}</div></div>
             </div>
-            ${isUnlocked ? `<span class="text-xs bg-emerald-600/30 text-emerald-400 px-3 py-1.5 rounded-lg font-bold border border-emerald-500/40">АКТИВНО</span>` :
+            ${isBought ? `<span class="text-xs bg-emerald-600/30 text-emerald-400 px-3 py-1.5 rounded-lg font-bold border border-emerald-500/40">АКТИВНО</span>` :
               `<button onclick="buyUpgrade('${u.id}')" class="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1.5 rounded-lg font-black transition-all active:scale-95">КУПИТЬ</button>`}
           </div>`;
       }).join('');
@@ -1318,9 +1340,9 @@
       postToParent({ type: "PURCHASE_ITEM", itemId: id, itemType: "map", price: mapObj.price, itemName: mapObj.name });
     };
     window.buyUpgrade = (id) => {
-      const up = UPGRADES.find(u => u.id === id);
+      const up = SHOP_BUFFS.find(u => u.id === id);
       if (!up) return;
-      if (player.upgrades.includes(id)) return;
+      if (player.boughtBuff === id) return;
       postToParent({ type: "PURCHASE_ITEM", itemId: id, itemType: "upgrade", price: up.price, itemName: up.name });
     };
 
@@ -1377,8 +1399,14 @@
     }
     function closeModal(id) {
       document.getElementById(id).classList.add('hidden');
+      if (!gameActive) {
+        document.getElementById('pauseView').classList.add('hidden');
+        document.getElementById('gameOverView').classList.remove('hidden');
+        document.getElementById('screenOverlay').classList.remove('opacity-0', 'pointer-events-none');
+        return;
+      }
       isPaused = pauseBeforeModal;
-      if (isPaused && gameActive) { document.getElementById('btnPause').classList.add('text-amber-400'); showPauseView(); }
+      if (isPaused) { document.getElementById('btnPause').classList.add('text-amber-400'); showPauseView(); }
       else { document.getElementById('btnPause').classList.remove('text-amber-400'); hidePauseView(); }
     }
 
@@ -1390,27 +1418,83 @@
       if (['ArrowDown', 'KeyS'].includes(e.code)) { e.preventDefault(); movePlayer(0, 1); }
       if (['ArrowLeft', 'KeyA'].includes(e.code)) { e.preventDefault(); movePlayer(-1, 0); }
       if (['ArrowRight', 'KeyD'].includes(e.code)) { e.preventDefault(); movePlayer(1, 0); }
-      if (e.code === 'Space') { e.preventDefault(); doDash(); }
-      if (e.code === 'KeyF') { e.preventDefault(); shoot(); }
     });
 
-    let touchStartX = 0, touchStartY = 0;
-    canvas.addEventListener('touchstart', (e) => {
-      touchStartX = e.changedTouches[0].screenX; touchStartY = e.changedTouches[0].screenY;
-    }, { passive: true });
-    canvas.addEventListener('touchend', (e) => {
+    // Тап / Клик по канвасу
+    let mouseStartX = 0, mouseStartY = 0, mouseStartTime = 0;
+    let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+
+    canvas.addEventListener('mousedown', (e) => {
       if (!gameActive || isPaused) return;
-      let dx = e.changedTouches[0].screenX - touchStartX, dy = e.changedTouches[0].screenY - touchStartY;
-      if (Math.abs(dx) < 30 && Math.abs(dy) < 30) return; 
-      if (Math.abs(dx) > Math.abs(dy)) movePlayer(dx > 0 ? 1 : -1, 0);
-      else movePlayer(0, dy > 0 ? 1 : -1);
+      mouseStartX = e.clientX;
+      mouseStartY = e.clientY;
+      mouseStartTime = Date.now();
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+      if (!gameActive || isPaused) return;
+      let dx = e.clientX - mouseStartX;
+      let dy = e.clientY - mouseStartY;
+      let dist = Math.hypot(dx, dy);
+      let dt = Date.now() - mouseStartTime;
+
+      if (dist > 30) {
+        if (Math.abs(dx) > Math.abs(dy)) movePlayer(dx > 0 ? 1 : -1, 0);
+        else movePlayer(0, dy > 0 ? 1 : -1);
+      } else if (dt < 300) {
+        handleTap(e.clientX, e.clientY);
+      }
+    });
+
+    canvas.addEventListener('touchstart', (e) => {
+      if (!gameActive || isPaused) return;
+      const t = e.changedTouches[0];
+      touchStartX = t.clientX;
+      touchStartY = t.clientY;
+      touchStartTime = Date.now();
     }, { passive: true });
 
-    document.getElementById('btnDash').addEventListener('click', doDash);
-    document.getElementById('btnFire').addEventListener('touchstart', (e) => { e.preventDefault(); isFiring = true; shoot(); });
-    document.getElementById('btnFire').addEventListener('touchend', (e) => { e.preventDefault(); isFiring = false; });
-    document.getElementById('btnFire').addEventListener('mousedown', () => { isFiring = true; shoot(); });
-    document.getElementById('btnFire').addEventListener('mouseup', () => { isFiring = false; });
+    canvas.addEventListener('touchend', (e) => {
+      if (!gameActive || isPaused) return;
+      const t = e.changedTouches[0];
+      let dx = t.clientX - touchStartX;
+      let dy = t.clientY - touchStartY;
+      let dist = Math.hypot(dx, dy);
+      let dt = Date.now() - touchStartTime;
+
+      if (dist > 30) {
+        if (Math.abs(dx) > Math.abs(dy)) movePlayer(dx > 0 ? 1 : -1, 0);
+        else movePlayer(0, dy > 0 ? 1 : -1);
+      } else if (dt < 300) {
+        handleTap(t.clientX, t.clientY);
+      }
+    }, { passive: true });
+
+    function handleTap(clientX, clientY) {
+      const now = Date.now();
+      if (now - lastTap < 300) {
+        // Двойной тап
+        doDash();
+        shootTarget = null;
+      } else {
+        // Одиночный тап
+        if (gunTimer > 0) {
+          const rect = canvas.getBoundingClientRect();
+          const scaleX = canvas.width / rect.width;
+          const scaleY = canvas.height / rect.height;
+          const canvasX = (clientX - rect.left) * scaleX;
+          const canvasY = (clientY - rect.top) * scaleY;
+          
+          const gx = (canvasX - originX) / tileSize;
+          const gy = (canvasY - originY) / tileSize;
+          
+          if (gx >= 0 && gx < GRID_SIZE && gy >= 0 && gy < GRID_SIZE) {
+            shootTarget = { x: gx, y: gy };
+          }
+        }
+      }
+      lastTap = now;
+    }
 
     document.getElementById('btnPlay').addEventListener('click', startGame);
     document.getElementById('btnRestart').addEventListener('click', startGame);
