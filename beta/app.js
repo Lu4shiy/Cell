@@ -20758,20 +20758,25 @@ function openGamePlayer(game) {
 
     if (!ach) return; // Такого достижения нет
 
-    // Пытаемся выдать (upsert предотвращает ошибку 409 при повторной отправке)
-    const { error } = await supabase.from("user_achievements").upsert({
-      user_id: currentUser.id,
-      achievement_id: ach.id
-    }, { onConflict: 'user_id,achievement_id', ignoreDuplicates: true });
+    // Проверяем, есть ли уже такая ачивка у пользователя
+    const { data: existing } = await supabase.from("user_achievements")
+      .select("id").eq("user_id", currentUser.id).eq("achievement_id", ach.id).maybeSingle();
 
-    if (!error) {
-      // Показываем красивый тост о получении ачивки
-      showInAppToast({
-        profile: { display_name: "Достижение!", avatar_url: game.icon, id: "ach" },
-        title: "Получено достижение!",
-        body: ach.title,
-        tag: "achievement-" + ach.id
+    if (!existing) {
+      const { error } = await supabase.from("user_achievements").insert({
+        user_id: currentUser.id,
+        achievement_id: ach.id
       });
+
+      if (!error) {
+        // Показываем красивый тост о получении ачивки
+        showInAppToast({
+          profile: { display_name: "Достижение!", avatar_url: game.icon, id: "ach" },
+          title: "Получено достижение!",
+          body: ach.title,
+          tag: "achievement-" + ach.id
+        });
+      }
     }
   };
 

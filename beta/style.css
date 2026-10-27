@@ -6914,16 +6914,11 @@ html[data-scroll-mode="classic"] .wheel-wrap .user-item .user-item-name { color:
   justify-content: space-between;
   padding: 12px 18px;
   padding-top: calc(12px + env(safe-area-inset-top, 0));
-  background: rgba(0, 0, 0, 0.8);
+  background: #000;
   color: #fff;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  flex-shrink: 0; /* Плашка занимает своё место, не наезжает */
   z-index: 10;
-  /* Плашка теперь всегда видна, но клики проходят сквозь неё в игру, кроме кнопки закрытия */
-  pointer-events: none;
 }
 .gaming-player-close {
   pointer-events: auto;

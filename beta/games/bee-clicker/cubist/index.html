@@ -270,8 +270,14 @@
 
     const sessionAchievements = new Set();
     function tryUnlock(code, condition) {
-      if (!condition || sessionAchievements.has(code)) return;
+      if (!condition) return;
+      if (player.achievements && player.achievements.includes(code)) return; // Уже есть навсегда
+      if (sessionAchievements.has(code)) return;
+      
       sessionAchievements.add(code);
+      player.achievements = player.achievements || [];
+      player.achievements.push(code);
+      savePlayerData(); // Сохраняем локально
       unlockAchievementInCell(code);
     }
 
@@ -358,7 +364,8 @@
     const DEFAULT_PLAYER = {
       name: 'Кубер', level: 1, xp: 0, totalCoins: 0, highScore: 0, gamesPlayed: 0,
       activeSkin: 'skin_purple', activeMap: 'map_cyber',
-      unlockedSkins: ['skin_purple'], unlockedMaps: ['map_cyber']
+      unlockedSkins: ['skin_purple'], unlockedMaps: ['map_cyber'],
+      achievements: []
     };
 
     let player = { ...DEFAULT_PLAYER };
@@ -557,7 +564,7 @@
       if (Math.random() < 0.003) {
         scorchedEarth.active = true;
         scorchedEarth.side = ['top', 'bottom', 'left', 'right'][Math.floor(Math.random() * 4)];
-        scorchedEarth.timer = 150; // 2.5 секунды (150 кадров)
+        scorchedEarth.timer = 180; // 3 секунды (180 кадров)
         scorchedEarth.isBurning = false;
         sound.playWarning();
       }
@@ -760,9 +767,19 @@
         if (scorchedEarth.side === 'right') { x = originX + 5 * tileSize; y = originY; w = 5 * tileSize; h = GRID_SIZE * tileSize; }
 
         if (!scorchedEarth.isBurning) {
-          const a = 0.2 + 0.2 * Math.sin(Date.now() / 100);
+          const a = 0.4 + 0.3 * Math.sin(Date.now() / 100); // Ярче мигает
           ctx.fillStyle = `rgba(239, 68, 68, ${a})`;
           ctx.fillRect(x, y, w, h);
+          // Добавляем заметную обводку и текст
+          ctx.strokeStyle = '#ef4444';
+          ctx.lineWidth = 6;
+          ctx.strokeRect(x, y, w, h);
+          
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '900 24px Outfit, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('ОПАСНО!', x + w / 2, y + h / 2);
         } else {
           ctx.fillStyle = 'rgba(239, 68, 68, 0.85)';
           ctx.fillRect(x, y, w, h);
