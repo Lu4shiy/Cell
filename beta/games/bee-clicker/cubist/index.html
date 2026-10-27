@@ -28,7 +28,6 @@
     .modal-backdrop { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); }
     .glow-purple { box-shadow: 0 0 25px rgba(139, 92, 246, 0.4); }
     
-    /* Анимация для уведомления о покупке */
     #shopToast {
       transform: translate(-50%, -20px);
       transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -79,7 +78,6 @@
     </div>
 
     <div class="flex items-center gap-2">
-      <!-- Индикаторы баффов -->
       <div id="hudBuffs" class="flex gap-1 mr-2"></div>
       <button id="btnLeaderboard" class="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 flex items-center justify-center text-amber-400 transition-all active:scale-95">
         <i class="fa-solid fa-trophy"></i>
@@ -266,9 +264,6 @@
   </div>
 
   <script>
-    /* =========================================================================
-       CELL INTEGRATION
-       ========================================================================= */
     function postToParent(payload) {
       try {
         if (window.parent && window.parent !== window) window.parent.postMessage(payload, "*");
@@ -343,9 +338,6 @@
       }
     });
 
-    /* =========================================================================
-       AUDIO & MUSIC ENGINE
-       ========================================================================= */
     class SoundEngine {
       constructor() { this.ctx = null; }
       init() {
@@ -427,9 +419,6 @@
     }
     const music = new MusicEngine(sound);
 
-    /* =========================================================================
-       DATA MODELS
-       ========================================================================= */
     const SKINS = [
       { id: 'skin_purple', name: 'Неоновый Фиолетовый', color: '#8b5cf6', topColor: '#a78bfa', price: 0 },
       { id: 'skin_emerald', name: 'Изумрудный Импульс', color: '#10b981', topColor: '#34d399', price: 50 },
@@ -497,9 +486,6 @@
       localStorage.setItem('cube_survival_lb', JSON.stringify(lb));
     }
 
-    /* =========================================================================
-       GAME ENGINE
-       ========================================================================= */
     const GRID_SIZE = 10;
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
@@ -555,12 +541,13 @@
       for (let d = dist; d > 0; d--) {
         const nx = cube.targetX + lastMoveDir.dx * d, ny = cube.targetY + lastMoveDir.dy * d;
         if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
-          if (!blocks.some(b => b.x === nx && b.y === ny)) {
-            cube.x = cube.targetX; cube.y = cube.targetY;
-            cube.targetX = nx; cube.targetY = ny; cube.animProgress = 0;
-            dashCooldown = player.upgrades.includes('up_start_dash') ? 120 : 180;
-            dashInvincible = 20; sound.playPowerup(); return;
-          }
+          // 🔴 Рывок теперь ломает блоки!
+          blocks = blocks.filter(b => !(b.x === nx && b.y === ny));
+          
+          cube.x = cube.targetX; cube.y = cube.targetY;
+          cube.targetX = nx; cube.targetY = ny; cube.animProgress = 0;
+          dashCooldown = player.upgrades.includes('up_start_dash') ? 120 : 180;
+          dashInvincible = 20; sound.playPowerup(); return;
         }
       }
     }
@@ -729,9 +716,10 @@
       return false;
     }
 
+    // 🔴 Исправлен спавн баффов: только 1 на карте и реже
     function spawnPowerup() {
-      if (powerups.length >= 2) return;
-      if (Math.random() < 0.005) {
+      if (powerups.length >= 1) return; // Максимум 1 бафф на карте
+      if (Math.random() < 0.0015) { // ~1 раз в 10-15 секунд
         let px = Math.floor(Math.random() * GRID_SIZE), py = Math.floor(Math.random() * GRID_SIZE);
         if (blocks.some(b => b.x === px && b.y === py)) return;
         
@@ -804,7 +792,6 @@
       const currCubeX = cube.x + (cube.targetX - cube.x) * cube.animProgress;
       const currCubeY = cube.y + (cube.targetY - cube.y) * cube.animProgress;
 
-      // Выжженное поле
       if (scorchedEarth.active) {
         scorchedEarth.timer--;
         if (scorchedEarth.timer === 60 && !scorchedEarth.isBurning) scorchedEarth.isBurning = true;
@@ -815,7 +802,6 @@
           }
           coins = coins.filter(c => !isInScorchedZone(c.x, c.y));
           monsters = monsters.filter(m => !isInScorchedZone(m.x, m.y));
-          // 🔴 Блоки больше не уничтожаются выжженным полем!
           hazards = hazards.filter(h => {
             if ((h.type === 'tnt' || h.type === 'boulder' || h.type === 'spike') && isInScorchedZone(h.x, h.y)) return false;
             return true;
@@ -925,7 +911,6 @@
             const nx = Math.max(0, Math.min(GRID_SIZE - 1, m.x + dx));
             const ny = Math.max(0, Math.min(GRID_SIZE - 1, m.y + dy));
             
-            // 🔴 Монстры ломают блоки, если идут сквозь них
             blocks = blocks.filter(b => !(b.x === nx && b.y === ny));
             
             m.targetX = nx; m.targetY = ny; m.animProgress = 0;
@@ -946,8 +931,10 @@
           if (boss.moveCooldown <= 0) {
             boss.moveCooldown = 25;
             let dx = 0, dy = 0;
-            if (Math.abs(cube.targetX - boss.x) > Math.abs(cube.targetY - boss.y)) dx = cube.targetX > boss.x ? 1 : -1;
-            else dy = cube.targetY > boss.y ? 1 : -1;
+            // 🔴 Босс двигается на 2 клетки за ход
+            if (Math.abs(cube.targetX - boss.x) > Math.abs(cube.targetY - boss.y)) dx = Math.sign(cube.targetX - boss.x) * 2;
+            else dy = Math.sign(cube.targetY - boss.y) * 2;
+            
             boss.targetX = Math.max(0, Math.min(GRID_SIZE - 1, boss.x + dx));
             boss.targetY = Math.max(0, Math.min(GRID_SIZE - 1, boss.y + dy));
             boss.animProgress = 0;
@@ -1020,7 +1007,6 @@
       const cont = document.getElementById('hudBuffs');
       let html = '';
       
-      // 🔴 Добавил цветные обводки и фоны для лучшей читаемости
       if (shieldActive) html += `<div class="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500 flex items-center justify-center text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.5)]" title="Щит"><i class="fa-solid fa-shield"></i></div>`;
       if (magnetTimer > 0) html += `<div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500 flex items-center justify-center text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.5)]" title="Магнит"><i class="fa-solid fa-magnet"></i></div>`;
       if (gunTimer > 0) html += `<div class="w-8 h-8 rounded-lg bg-rose-500/20 border border-rose-500 flex items-center justify-center text-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.5)]" title="Пушка"><i class="fa-solid fa-gun"></i></div>`;
@@ -1035,9 +1021,6 @@
       if (gunTimer > 0) btnFire.classList.remove('hidden'); else btnFire.classList.add('hidden');
     }
 
-    /* =========================================================================
-       RENDER
-       ========================================================================= */
     function render() {
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1046,7 +1029,6 @@
       const activeMapObj = MAPS.find(m => m.id === player.activeMap) || MAPS[0];
       const activeSkinObj = SKINS.find(s => s.id === player.activeSkin) || SKINS[0];
 
-      // Выжженное поле
       if (scorchedEarth.active) {
         let x = 0, y = 0, w = 0, h = 0;
         if (scorchedEarth.side === 'top') { x = originX; y = originY; w = GRID_SIZE * tileSize; h = 5 * tileSize; }
@@ -1073,7 +1055,6 @@
         for (let y = 0; y < GRID_SIZE; y++) drawTile(x, y, activeMapObj);
       }
 
-      // Блоки
       blocks.forEach(b => {
         const pos = gridToScreen(b.x, b.y);
         ctx.fillStyle = '#475569'; ctx.fillRect(pos.x + 2, pos.y + 2, tileSize - 4, tileSize - 4);
@@ -1088,7 +1069,6 @@
         else if (h.type === 'laser') drawLaserWarning(h, activeMapObj);
       });
 
-      // 🔴 Красивая отрисовка баффов вместо шрифтов
       powerups.forEach(pu => {
         const pos = gridToScreen(pu.x + 0.5, pu.y + 0.5);
         const py = pos.y + Math.sin(pu.bounce) * 5;
@@ -1096,7 +1076,6 @@
         ctx.save();
         ctx.translate(pos.x, py);
         
-        // Свечение позади
         let glowColor = '#fff';
         if (pu.type === 'shield') glowColor = '#3b82f6';
         if (pu.type === 'magnet') glowColor = '#f59e0b';
@@ -1104,53 +1083,29 @@
         if (pu.type === 'lightning') glowColor = '#eab308';
         if (pu.type === 'gun') glowColor = '#f43f5e';
         
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = glowColor;
-        
-        // Фон
-        ctx.beginPath();
-        ctx.arc(0, 0, tileSize * 0.35, 0, Math.PI * 2);
-        ctx.fillStyle = '#1e293b';
-        ctx.fill();
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = glowColor;
-        ctx.stroke();
+        ctx.shadowBlur = 15; ctx.shadowColor = glowColor;
+        ctx.beginPath(); ctx.arc(0, 0, tileSize * 0.35, 0, Math.PI * 2);
+        ctx.fillStyle = '#1e293b'; ctx.fill();
+        ctx.lineWidth = 3; ctx.strokeStyle = glowColor; ctx.stroke();
 
-        // Рисуем уникальные иконки
-        ctx.shadowBlur = 0; // отключаем тень для внутренней отрисовки
-        ctx.fillStyle = glowColor;
-        ctx.strokeStyle = glowColor;
-        ctx.lineWidth = 2;
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = glowColor; ctx.strokeStyle = glowColor; ctx.lineWidth = 2;
         
         if (pu.type === 'shield') {
-          ctx.beginPath();
-          ctx.moveTo(0, -10); ctx.lineTo(10, -5); ctx.lineTo(10, 5); ctx.lineTo(0, 12); ctx.lineTo(-10, 5); ctx.lineTo(-10, -5);
+          ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(10, -5); ctx.lineTo(10, 5); ctx.lineTo(0, 12); ctx.lineTo(-10, 5); ctx.lineTo(-10, -5);
           ctx.closePath(); ctx.fill();
-        } 
-        else if (pu.type === 'magnet') {
-          ctx.beginPath();
-          ctx.arc(0, 2, 8, 0, Math.PI);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.rect(-10, -8, 4, 10);
-          ctx.rect(6, -8, 4, 10);
-          ctx.fill();
-        }
-        else if (pu.type === 'slow') {
-          ctx.beginPath();
-          ctx.moveTo(-8, -10); ctx.lineTo(8, -10); ctx.lineTo(0, 0); ctx.lineTo(8, 10); ctx.lineTo(-8, 10); ctx.lineTo(0, 0);
+        } else if (pu.type === 'magnet') {
+          ctx.beginPath(); ctx.arc(0, 2, 8, 0, Math.PI); ctx.stroke();
+          ctx.beginPath(); ctx.rect(-10, -8, 4, 10); ctx.rect(6, -8, 4, 10); ctx.fill();
+        } else if (pu.type === 'slow') {
+          ctx.beginPath(); ctx.moveTo(-8, -10); ctx.lineTo(8, -10); ctx.lineTo(0, 0); ctx.lineTo(8, 10); ctx.lineTo(-8, 10); ctx.lineTo(0, 0);
           ctx.closePath(); ctx.fill();
-        }
-        else if (pu.type === 'lightning') {
-          ctx.beginPath();
-          ctx.moveTo(4, -12); ctx.lineTo(-6, 2); ctx.lineTo(-1, 2); ctx.lineTo(-4, 12); ctx.lineTo(6, -2); ctx.lineTo(1, -2);
+        } else if (pu.type === 'lightning') {
+          ctx.beginPath(); ctx.moveTo(4, -12); ctx.lineTo(-6, 2); ctx.lineTo(-1, 2); ctx.lineTo(-4, 12); ctx.lineTo(6, -2); ctx.lineTo(1, -2);
           ctx.closePath(); ctx.fill();
+        } else if (pu.type === 'gun') {
+          ctx.fillRect(-10, -4, 20, 8); ctx.fillRect(-4, 4, 6, 8);
         }
-        else if (pu.type === 'gun') {
-          ctx.fillRect(-10, -4, 20, 8);
-          ctx.fillRect(-4, 4, 6, 8);
-        }
-        
         ctx.restore();
       });
 
@@ -1290,9 +1245,6 @@
       rafId = requestAnimationFrame(gameLoop);
     }
 
-    /* =========================================================================
-       UI & SHOP
-       ========================================================================= */
     function updateHUD() {
       document.getElementById('hudLevelNum').innerText = player.level;
       document.getElementById('hudPlayerName').innerText = player.name;

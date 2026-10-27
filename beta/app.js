@@ -20701,7 +20701,6 @@ function openGamePlayer(game) {
         const bal = data ? data.imagi_tokens : 0;
         iframe.contentWindow.postMessage({ type: "BALANCE_UPDATE", balance: bal }, "*");
       } catch (err) {}
-      iframe.contentWindow.focus();
       return;
     }
 
@@ -20738,7 +20737,6 @@ function openGamePlayer(game) {
       
       iframe.contentWindow.postMessage({ type: "PURCHASE_SUCCESS", itemId }, "*");
       iframe.contentWindow.postMessage({ type: "BALANCE_UPDATE", balance: myProfile.imagi_tokens }, "*");
-      iframe.contentWindow.focus();
       return;
     }
 
