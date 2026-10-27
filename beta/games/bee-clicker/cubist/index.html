@@ -301,6 +301,22 @@
 
     window.addEventListener("message", (e) => {
       if (!e.data) return;
+      if (e.data.type === "GAME_DATA_LOADED") {
+        if (e.data.data) {
+          player = { ...player, ...e.data.data };
+          localStorage.setItem('cube_survival_player', JSON.stringify(player));
+          updateHUD(); renderShop(); render();
+        }
+      }
+      if (e.data.type === "LEADERBOARD_DATA") {
+        window.globalLeaderboard = e.data.data;
+        if (!document.getElementById('leaderboardModal').classList.contains('hidden')) {
+          renderLeaderboard();
+        }
+      }
+
+    window.addEventListener("message", (e) => {
+      if (!e.data) return;
       if (e.data.type === "BALANCE_UPDATE") {
         cellBalance = e.data.balance || 0;
         document.getElementById('hudCoins').innerText = cellBalance;
@@ -466,10 +482,12 @@
         } catch (e) { console.error(e); }
       }
       updateHUD();
+      postToParent({ type: "GET_GAME_DATA" }); // Запрашиваем данные с сервера
     }
     function savePlayerData() {
       localStorage.setItem('cube_survival_player', JSON.stringify(player));
       updateHUD();
+      postToParent({ type: "SAVE_GAME_DATA", data: player }); // Отправляем данные на сервер
     }
 
     const DEFAULT_LEADERBOARD = [
@@ -744,9 +762,12 @@
 
     function spawnCoin() {
       if (coins.length >= 4) return;
-      let cx = Math.floor(Math.random() * GRID_SIZE), cy = Math.floor(Math.random() * GRID_SIZE);
-      if (!coins.some(c => c.x === cx && c.y === cy) && !blocks.some(b => b.x === cx && b.y === cy)) {
-        coins.push({ x: cx, y: cy, bounce: Math.random() * Math.PI });
+      for (let i = 0; i < 50; i++) { // Пробуем найти место до 50 раз
+        let cx = Math.floor(Math.random() * GRID_SIZE), cy = Math.floor(Math.random() * GRID_SIZE);
+        if (!coins.some(c => c.x === cx && c.y === cy) && !blocks.some(b => b.x === cx && b.y === cy)) {
+          coins.push({ x: cx, y: cy, bounce: Math.random() * Math.PI });
+          return;
+        }
       }
     }
 
@@ -1042,7 +1063,7 @@
         }
         if (boss && Math.hypot(b.x - boss.x - 0.5, b.y - boss.y - 0.5) < 0.8) {
           boss.hp--; createExplosion(boss.x, boss.y, '#dc2626'); bullets.splice(i, 1);
-          if (boss.hp <= 0) { boss = null; score += 500; }
+          if (boss.hp <= 0) { boss = null; score += 500; tryUnlock('boss_kill', true); }
           continue;
         }
         if (b.life <= 0 || b.x < 0 || b.x >= GRID_SIZE || b.y < 0 || b.y >= GRID_SIZE) bullets.splice(i, 1);
@@ -1447,7 +1468,7 @@
     });
 
     function renderLeaderboard() {
-      const lb = getLeaderboard();
+      const lb = window.globalLeaderboard || getLeaderboard(); // Используем данные с сервера, если есть
       document.getElementById('leaderboardList').innerHTML = lb.map((entry, idx) => `
         <div class="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
           <div class="flex items-center gap-3">
@@ -1610,7 +1631,11 @@
 
     document.getElementById('btnShop').addEventListener('click', () => { openModal('shopModal'); renderShop(); requestBalance(); });
     document.getElementById('closeShop').addEventListener('click', () => closeModal('shopModal'));
-    document.getElementById('btnLeaderboard').addEventListener('click', () => { openModal('leaderboardModal'); renderLeaderboard(); });
+    document.getElementById('btnLeaderboard').addEventListener('click', () => { 
+      openModal('leaderboardModal'); 
+      renderLeaderboard();
+      postToParent({ type: "GET_LEADERBOARD" }); // Запрашиваем актуальные данные с сервера
+    });
     document.getElementById('closeLeaderboard').addEventListener('click', () => closeModal('leaderboardModal'));
     document.getElementById('btnProfile').addEventListener('click', () => { openModal('profileModal'); renderProfile(); });
     document.getElementById('closeProfile').addEventListener('click', () => closeModal('profileModal'));

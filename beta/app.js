@@ -20671,6 +20671,39 @@ function openGamePlayer(game) {
   const handleGameMessage = async (e) => {
     if (!e.data) return;
 
+    if (e.data.type === "GET_GAME_DATA") {
+      try {
+        const { data } = await supabase.from("profiles").select("game_data").eq("id", currentUser.id).single();
+        const gameData = data && data.game_data ? data.game_data[game.id] : null;
+        iframe.contentWindow.postMessage({ type: "GAME_DATA_LOADED", data: gameData }, "*");
+      } catch (err) {}
+      return;
+    }
+
+    if (e.data.type === "SAVE_GAME_DATA") {
+      const playerData = e.data.data;
+      try {
+        const { data } = await supabase.from("profiles").select("game_data").eq("id", currentUser.id).single();
+        const existing = (data && data.game_data) ? data.game_data : {};
+        existing[game.id] = playerData;
+        await supabase.from("profiles").update({ game_data: existing }).eq("id", currentUser.id);
+      } catch (err) {}
+      return;
+    }
+
+    if (e.data.type === "GET_LEADERBOARD") {
+      try {
+        const { data: scores } = await supabase.from("game_scores")
+          .select("score, profiles(display_name)")
+          .eq("game_id", game.id)
+          .order("score", { ascending: false })
+          .limit(10);
+        const lb = (scores || []).map(s => ({ name: s.profiles.display_name, score: s.score }));
+        iframe.contentWindow.postMessage({ type: "LEADERBOARD_DATA", data: lb }, "*");
+      } catch (err) {}
+      return;
+    }
+
     if (e.data.type === "SUBMIT_SCORE") {
       const newScore = parseInt(e.data.score, 10);
       if (isNaN(newScore) || newScore <= 0) return;
