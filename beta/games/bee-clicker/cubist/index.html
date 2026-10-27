@@ -45,8 +45,8 @@
     <span>Покупка успешна!</span>
   </div>
 
-  <header class="w-full max-w-5xl mx-auto p-3 sm:p-4 flex items-center justify-between z-10 shrink-0 relative">
-    <div class="flex items-center gap-3">
+  <header class="w-full max-w-5xl mx-auto p-2 sm:p-4 flex items-center justify-between z-10 shrink-0 relative">
+    <div class="flex items-center gap-1 sm:gap-3">
       <button id="btnProfile" class="flex items-center gap-2 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 rounded-xl px-3 py-1.5 transition-all active:scale-95">
         <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center font-bold text-sm shadow">
           <span id="hudLevelNum">1</span>
@@ -57,34 +57,34 @@
         </div>
       </button>
 
-      <div class="flex items-center gap-2 bg-slate-800/80 border border-amber-500/30 rounded-xl px-3 py-1.5 text-amber-400 font-bold shadow">
+      <div class="flex items-center gap-1 sm:gap-2 bg-slate-800/80 border border-amber-500/30 rounded-xl px-2 sm:px-3 py-1.5 text-amber-400 font-bold shadow text-xs sm:text-base">
         <i class="fa-solid fa-microchip text-amber-400 animate-pulse"></i>
         <span id="hudCoins">0</span>
       </div>
     </div>
 
-    <div class="flex items-center gap-6">
+    <div class="flex items-center gap-2 sm:gap-6">
       <div class="text-center">
-        <div class="text-[10px] sm:text-xs text-slate-400 font-semibold uppercase tracking-wider">Время</div>
-        <div class="text-xl sm:text-3xl font-black text-emerald-400 tracking-tight" id="hudTime">00:00</div>
+        <div class="text-[9px] sm:text-xs text-slate-400 font-semibold uppercase tracking-wider">Время</div>
+        <div class="text-lg sm:text-3xl font-black text-emerald-400 tracking-tight" id="hudTime">00:00</div>
       </div>
       <div class="text-center relative">
-        <div class="text-[10px] sm:text-xs text-slate-400 font-semibold uppercase tracking-wider">Счет</div>
-        <div class="text-xl sm:text-3xl font-black text-purple-400 tracking-tight" id="hudScore">0</div>
+        <div class="text-[9px] sm:text-xs text-slate-400 font-semibold uppercase tracking-wider">Счет</div>
+        <div class="text-lg sm:text-3xl font-black text-purple-400 tracking-tight" id="hudScore">0</div>
         <div id="hudCombo" class="absolute -top-4 -right-8 text-amber-400 font-black text-sm hidden animate-bounce">x2</div>
       </div>
     </div>
 
-    <div class="flex items-center gap-2">
-      <div id="hudBuffs" class="flex gap-1 mr-2"></div>
-      <button id="btnLeaderboard" class="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 flex items-center justify-center text-amber-400 transition-all active:scale-95">
-        <i class="fa-solid fa-trophy"></i>
+    <div class="flex items-center gap-1 sm:gap-2">
+      <div id="hudBuffs" class="flex gap-0.5 sm:gap-1 mr-1 sm:mr-2"></div>
+      <button id="btnLeaderboard" class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 flex items-center justify-center text-amber-400 transition-all active:scale-95">
+        <i class="fa-solid fa-trophy text-xs sm:text-base"></i>
       </button>
-      <button id="btnShop" class="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 flex items-center justify-center text-emerald-400 transition-all active:scale-95">
-        <i class="fa-solid fa-store"></i>
+      <button id="btnShop" class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 flex items-center justify-center text-emerald-400 transition-all active:scale-95">
+        <i class="fa-solid fa-store text-xs sm:text-base"></i>
       </button>
-      <button id="btnPause" class="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 flex items-center justify-center text-slate-300 transition-all active:scale-95">
-        <i class="fa-solid fa-pause"></i>
+      <button id="btnPause" class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 flex items-center justify-center text-slate-300 transition-all active:scale-95">
+        <i class="fa-solid fa-pause text-xs sm:text-base"></i>
       </button>
     </div>
   </header>
@@ -1089,24 +1089,27 @@
     function updateBuffsUI() {
       const cont = document.getElementById('hudBuffs');
       let html = '';
+      const cls = "relative w-7 h-7 sm:w-10 sm:h-10 rounded-lg flex flex-col items-center justify-center border shadow-[0_0_10px]";
+      const iconCls = "text-[10px] sm:text-sm";
+      const textCls = "text-[8px] sm:text-[9px] font-bold mt-0.5";
       
       if (shieldTimer > 0) {
-        html += `<div class="relative w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-500 flex flex-col items-center justify-center text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.5)]" title="Щит"><i class="fa-solid fa-shield text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(shieldTimer/60)}s</span></div>`;
+        html += `<div class="${cls} bg-blue-500/20 border-blue-500 text-blue-400 shadow-blue-500/50" title="Щит"><i class="fa-solid fa-shield ${iconCls}"></i><span class="${textCls}">${Math.ceil(shieldTimer/60)}s</span></div>`;
       }
       if (magnetTimer > 0) {
-        html += `<div class="relative w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500 flex flex-col items-center justify-center text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.5)]" title="Магнит"><i class="fa-solid fa-magnet text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(magnetTimer/60)}s</span></div>`;
+        html += `<div class="${cls} bg-amber-500/20 border-amber-500 text-amber-400 shadow-amber-500/50" title="Магнит"><i class="fa-solid fa-magnet ${iconCls}"></i><span class="${textCls}">${Math.ceil(magnetTimer/60)}s</span></div>`;
       }
       if (gunTimer > 0) {
-        html += `<div class="relative w-10 h-10 rounded-lg bg-rose-500/20 border border-rose-500 flex flex-col items-center justify-center text-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.5)]" title="Пушка"><i class="fa-solid fa-gun text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(gunTimer/60)}s</span></div>`;
+        html += `<div class="${cls} bg-rose-500/20 border-rose-500 text-rose-400 shadow-rose-500/50" title="Пушка"><i class="fa-solid fa-gun ${iconCls}"></i><span class="${textCls}">${Math.ceil(gunTimer/60)}s</span></div>`;
       }
       if (slowTimer > 0) {
-        html += `<div class="relative w-10 h-10 rounded-lg bg-cyan-500/20 border border-cyan-500 flex flex-col items-center justify-center text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.5)]" title="Замедление"><i class="fa-solid fa-hourglass-half text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(slowTimer/60)}s</span></div>`;
+        html += `<div class="${cls} bg-cyan-500/20 border-cyan-500 text-cyan-400 shadow-cyan-500/50" title="Замедление"><i class="fa-solid fa-hourglass-half ${iconCls}"></i><span class="${textCls}">${Math.ceil(slowTimer/60)}s</span></div>`;
       }
       if (lightningTimer > 0) {
-        html += `<div class="relative w-10 h-10 rounded-lg bg-yellow-500/20 border border-yellow-500 flex flex-col items-center justify-center text-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.5)]" title="Молния"><i class="fa-solid fa-bolt text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(lightningTimer/60)}s</span></div>`;
+        html += `<div class="${cls} bg-yellow-500/20 border-yellow-500 text-yellow-400 shadow-yellow-500/50" title="Молния"><i class="fa-solid fa-bolt ${iconCls}"></i><span class="${textCls}">${Math.ceil(lightningTimer/60)}s</span></div>`;
       }
       if (dashTimer > 0) {
-        html += `<div class="relative w-10 h-10 rounded-lg bg-purple-500/20 border border-purple-500 flex flex-col items-center justify-center text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.5)]" title="Рывок"><i class="fa-solid fa-bolt-lightning text-sm"></i><span class="text-[9px] font-bold mt-0.5">${Math.ceil(dashTimer/60)}s</span></div>`;
+        html += `<div class="${cls} bg-purple-500/20 border-purple-500 text-purple-400 shadow-purple-500/50" title="Рывок"><i class="fa-solid fa-bolt-lightning ${iconCls}"></i><span class="${textCls}">${Math.ceil(dashTimer/60)}s</span></div>`;
       }
       
       cont.innerHTML = html;
@@ -1540,7 +1543,7 @@
       let dist = Math.hypot(dx, dy);
       let dt = Date.now() - mouseStartTime;
 
-      if (dist > 30) {
+      if (dist > 18) {
         if (Math.abs(dx) > Math.abs(dy)) movePlayer(dx > 0 ? 1 : -1, 0);
         else movePlayer(0, dy > 0 ? 1 : -1);
       } else if (dt < 300) {
@@ -1564,7 +1567,7 @@
       let dist = Math.hypot(dx, dy);
       let dt = Date.now() - touchStartTime;
 
-      if (dist > 30) {
+      if (dist > 18) {
         if (Math.abs(dx) > Math.abs(dy)) movePlayer(dx > 0 ? 1 : -1, 0);
         else movePlayer(0, dy > 0 ? 1 : -1);
       } else if (dt < 300) {
