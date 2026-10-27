@@ -596,6 +596,7 @@
       if (type === 'magnet') magnetTimer += 600;
       if (type === 'slow') slowTimer += 600;
       if (type === 'gun') gunTimer += 900;
+      if (type === 'dash') dashTimer += 600;
       updateBuffsUI();
     }
 
@@ -908,7 +909,7 @@
           if (pu.type === 'magnet') magnetTimer += 600;
           if (pu.type === 'slow') slowTimer += 600;
           if (pu.type === 'lightning') { monsters = []; if (boss) boss.hp -= 1; lightningTimer += 120; }
-          if (pu.type === 'dash') { dashTimer += 300; }
+          if (pu.type === 'dash') { dashTimer += 600; }
           if (pu.type === 'gun') gunTimer += 600;
           addFloatingText(gridToScreen(pu.x + 0.5, pu.y + 0.5).x, gridToScreen(pu.x + 0.5, pu.y + 0.5).y - 15, 'БАФФ!', '#10b981');
           powerups.splice(i, 1);
@@ -964,12 +965,31 @@
             if (Math.abs(cube.targetX - m.x) > Math.abs(cube.targetY - m.y)) dx = cube.targetX > m.x ? 1 : -1;
             else dy = cube.targetY > m.y ? 1 : -1;
             
-            const nx = Math.max(0, Math.min(GRID_SIZE - 1, m.x + dx));
-            const ny = Math.max(0, Math.min(GRID_SIZE - 1, m.y + dy));
+            let nx = Math.max(0, Math.min(GRID_SIZE - 1, m.x + dx));
+            let ny = Math.max(0, Math.min(GRID_SIZE - 1, m.y + dy));
             
-            blocks = blocks.filter(b => !(b.x === nx && b.y === ny));
+            // Если путь заблокирован стеной, монстр пытается обойти её
+            if (blocks.some(b => b.x === nx && b.y === ny)) {
+              if (dx !== 0) {
+                dx = 0;
+                dy = cube.targetY > m.y ? 1 : -1;
+              } else {
+                dy = 0;
+                dx = cube.targetX > m.x ? 1 : -1;
+              }
+              nx = Math.max(0, Math.min(GRID_SIZE - 1, m.x + dx));
+              ny = Math.max(0, Math.min(GRID_SIZE - 1, m.y + dy));
+              
+              // Если и там стена — стоим на месте
+              if (blocks.some(b => b.x === nx && b.y === ny)) {
+                nx = m.x;
+                ny = m.y;
+              }
+            }
             
-            m.targetX = nx; m.targetY = ny; m.animProgress = 0;
+            if (nx !== m.x || ny !== m.y) {
+              m.targetX = nx; m.targetY = ny; m.animProgress = 0;
+            }
           }
         }
         const currMX = m.x + (m.targetX - m.x) * m.animProgress;
