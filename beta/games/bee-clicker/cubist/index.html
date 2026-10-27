@@ -316,6 +316,12 @@
         }
         if (SHOP_BUFFS.some(u => u.id === itemId)) {
           player.boughtBuff = itemId;
+          if (gameActive) {
+            const buff = SHOP_BUFFS.find(u => u.id === itemId);
+            applyBuff(buff.type);
+            player.boughtBuff = null; // Сбрасываем, так как уже применили
+            showToast('Бафф активирован!', true);
+          }
         }
         sound.playBuy();
         savePlayerData();
@@ -585,6 +591,14 @@
       }
     }
 
+    function applyBuff(type) {
+      if (type === 'shield') shieldTimer += 600;
+      if (type === 'magnet') magnetTimer += 600;
+      if (type === 'slow') slowTimer += 600;
+      if (type === 'gun') gunTimer += 900;
+      updateBuffsUI();
+    }
+
     function startGame() {
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
       sound.init(); loadPlayerData(); requestBalance();
@@ -604,10 +618,7 @@
       if (player.boughtBuff) {
         const buff = SHOP_BUFFS.find(b => b.id === player.boughtBuff);
         if (buff) {
-          if (buff.type === 'shield') shieldTimer = 600;
-          if (buff.type === 'magnet') magnetTimer += 600;
-          if (buff.type === 'slow') slowTimer += 600;
-          if (buff.type === 'gun') gunTimer += 900;
+          applyBuff(buff.type);
           player.boughtBuff = null;
           savePlayerData();
         }
